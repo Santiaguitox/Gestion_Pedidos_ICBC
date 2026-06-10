@@ -16,7 +16,7 @@ export default function Papelera() {
     setLoading(true)
     const { data } = await supabase
       .from('pedidos')
-      .select('*, profiles!pedidos_deleted_by_fkey(full_name)')
+      .select('*, deleted_by_profile:profiles!pedidos_deleted_by_fkey(full_name)')
       .not('deleted_at', 'is', null)
       .order('deleted_at', { ascending: false })
     setPedidos(data ?? [])
@@ -57,8 +57,7 @@ export default function Papelera() {
                 </div>
                 <span style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.asunto}</span>
                 <span style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>
-                  Eliminado {format(new Date(p.deleted_at), "d 'de' MMMM yyyy 'a las' HH:mm", { locale:es })}
-                  {p.profiles?.full_name ? ` por ${p.profiles.full_name}` : ''}
+                  Eliminado por <strong style={{ color:'var(--icbc-red)' }}>{p.deleted_by_profile?.full_name ?? 'usuario desconocido'}</strong> el {format(new Date(p.deleted_at), "d 'de' MMMM yyyy 'a las' HH:mm", { locale:es })}
                 </span>
               </div>
               <button onClick={() => handleRestaurar(p.id)}

@@ -13,6 +13,7 @@ import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
 import { ROLES } from '@/lib/constants'
 import '@/styles/global.css'
+import SetPassword from '@/pages/SetPassword'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
             </Route>
+            <Route path="/set-password" element={<SetPassword />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Routes>
         </BrowserRouter>
