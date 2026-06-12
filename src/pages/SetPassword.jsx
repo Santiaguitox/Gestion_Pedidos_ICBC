@@ -11,14 +11,16 @@ export default function SetPassword() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    // Supabase pone el token en el hash de la URL automáticamente
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        // Usuario llegó desde el link — ya está autenticado temporalmente
-      }
+    const [ready, setReady] = useState(false)
+
+    useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+        setReady(true)
+        }
     })
-  }, [])
+    return () => subscription.unsubscribe()
+    }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -30,7 +32,11 @@ export default function SetPassword() {
     if (error) { setError(error.message); setLoading(false); return }
     navigate('/app')
   }
-
+    if (!ready) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)' }}>
+        Verificando acceso…
+    </div>
+    )
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem', position:'relative', overflow:'hidden' }}>
       <div style={{ position:'absolute', top:'-200px', right:'-200px', width:'600px', height:'600px', borderRadius:'50%', background:'radial-gradient(circle, rgba(208,17,27,0.12) 0%, transparent 70%)', pointerEvents:'none' }} />
@@ -42,6 +48,7 @@ export default function SetPassword() {
         </div>
         <h1 style={{ fontFamily:'var(--font-display)', fontSize:'1.5rem', fontWeight:700, marginBottom:'0.25rem' }}>Crear contraseña</h1>
         <p style={{ fontSize:'0.875rem', color:'var(--text-secondary)', marginBottom:'2rem' }}>Elegí una contraseña para tu cuenta</p>
+        
         <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem' }}>
             <label style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)' }}>Contraseña</label>

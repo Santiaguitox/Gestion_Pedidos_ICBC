@@ -17,10 +17,23 @@ export default function Login() {
     setError('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    // Esperar a que el perfil cargue antes de navegar
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single()
+
+    if (!profile) {
+      setError('No se encontró el perfil del usuario.')
       setLoading(false)
       return
     }

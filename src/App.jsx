@@ -11,9 +11,10 @@ import Calendario from '@/pages/Calendario'
 import Notificaciones from '@/pages/Notificaciones'
 import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
+import Configuracion from '@/pages/Configuracion'
+import SetPassword from '@/pages/SetPassword'
 import { ROLES } from '@/lib/constants'
 import '@/styles/global.css'
-import SetPassword from '@/pages/SetPassword'
 
 export default function App() {
   return (
@@ -36,6 +37,11 @@ export default function App() {
               <Route path="papelera" element={
                 <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN]}>
                   <Papelera />
+                </ProtectedRoute>
+              } />
+              <Route path="configuracion" element={
+                <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+                  <Configuracion />
                 </ProtectedRoute>
               } />
             </Route>

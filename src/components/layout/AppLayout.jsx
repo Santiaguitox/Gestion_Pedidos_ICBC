@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2 } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 
 const S = {
@@ -79,6 +79,9 @@ export default function AppLayout() {
               <div style={S.divider} />
               <NavLink to="/app/usuarios" style={({ isActive }) => navItemStyle(isActive)} title={collapsed ? 'Usuarios' : undefined}>
                 <Users size={18} />{!collapsed && <span>Usuarios</span>}
+              </NavLink>
+              <NavLink to="/app/configuracion" style={({ isActive }) => navItemStyle(isActive)} title={collapsed ? 'Configuración' : undefined}>
+                <Settings size={18} />{!collapsed && <span>Configuración</span>}
               </NavLink>
             </>
           )}
