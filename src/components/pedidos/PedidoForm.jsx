@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { PRIORIDADES, TIPOS, ESTADOS } from '@/lib/constants'
+import { PRIORIDADES } from '@/lib/constants'
+import { useEstados } from '@/hooks/useEstados'
+import { useTipos } from '@/hooks/useTipos'
 import { X } from 'lucide-react'
 import { DatePicker } from '@/components/ui/DatePicker'
 
@@ -15,6 +17,8 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   const [usuarios, setUsuarios] = useState([])
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const { estados } = useEstados()
+  const { tipos } = useTipos()
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
             <div style={fieldStyle}>
               <label style={labelStyle}>Tipo</label>
               <select value={form.tipo} onChange={e => set('tipo', e.target.value)}>
-                {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {tipos.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div style={fieldStyle}>
@@ -74,7 +78,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
           <div style={fieldStyle}>
             <label style={labelStyle}>Estados activos</label>
             <div style={{ display:'flex', flexWrap:'wrap', gap:'0.5rem' }}>
-              {ESTADOS.map(e => {
+              {estados.map(e => {
                 const active = form.estados.includes(e.value)
                 return (
                   <button key={e.value} type="button" onClick={() => set('estados', active ? form.estados.filter(x => x !== e.value) : [...form.estados, e.value])}

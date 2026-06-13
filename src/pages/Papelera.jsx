@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
-import { PRIORIDADES, TIPOS } from '@/lib/constants'
+import { PRIORIDADES } from '@/lib/constants'
+import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
 import { Trash2, RotateCcw } from 'lucide-react'
 import { format } from 'date-fns'
@@ -10,6 +11,7 @@ import { es } from 'date-fns/locale'
 export default function Papelera() {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
+  const { tipos } = useTipos()
   const { restaurarPedido } = usePedidos()
 
   async function fetchEliminados() {
@@ -53,7 +55,7 @@ export default function Papelera() {
               <div style={{ flex:1, display:'flex', flexDirection:'column', gap:'0.25rem', overflow:'hidden' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
                   {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-                  <span style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>{TIPOS.find(t => t.value === p.tipo)?.label}</span>
+                  {(() => { const tipo = tipos.find(t => t.value === p.tipo); return tipo ? <span style={{ fontSize:'0.75rem', color: tipo.color, fontWeight:500 }}>{tipo.label}</span> : null })()}
                 </div>
                 <span style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.asunto}</span>
                 <span style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>

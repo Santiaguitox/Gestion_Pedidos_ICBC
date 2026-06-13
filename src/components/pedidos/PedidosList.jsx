@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
-import { PRIORIDADES, ESTADOS, ROLES } from '@/lib/constants'
+import { PRIORIDADES, ROLES } from '@/lib/constants'
+import { useEstados } from '@/hooks/useEstados'
 import { Badge } from '@/components/ui/Badge'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Plus, Search, Filter, Calendar, User, ExternalLink, Copy, Check, AlignJustify, LayoutList, ChevronDown, ChevronUp, X, Tag } from 'lucide-react'
@@ -22,10 +23,90 @@ function CopyBtn({ text }) {
   )
 }
 
+function CopyAllBtnInline({ entregables }) {
+  const [copied, setCopied] = useState(false)
+  function handleCopy(e) {
+    e.stopPropagation()
+    const texto = entregables
+      .filter(e => e.nombre_pieza)
+      .map(e => e.link_online ? `${e.nombre_pieza} || ${e.link_online}` : e.nombre_pieza)
+      .join('\n')
+    navigator.clipboard.writeText(texto)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button onClick={handleCopy}
+      style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', fontWeight:600, color: copied ? '#10B981' : 'var(--icomm-violet)', padding:'0.25rem 0.625rem', border:`1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(91,78,232,0.3)'}`, borderRadius:'var(--radius-sm)', background: copied ? 'rgba(16,185,129,0.06)' : 'rgba(91,78,232,0.08)', transition:'all 150ms', alignSelf:'flex-start' }}>
+      {copied ? <><Check size={11} />¡Copiado!</> : <><Copy size={11} />Copiar todo</>}
+    </button>
+  )
+}
+
+function EntregablesInline({ entregables }) {
+  const [expandido, setExpandido] = useState(false)
+  if (!entregables?.length) return null
+
+  const conNombre = entregables.filter(e => e.nombre_pieza)
+  if (!conNombre.length) return null
+
+  const visibles = expandido ? conNombre : conNombre.slice(0, 2)
+  const hayMas = conNombre.length > 2
+
+  return (
+    <div onClick={e => e.stopPropagation()}
+      style={{ border:'1px solid var(--badge-border)', borderRadius:'var(--radius-md)', overflow:'hidden', background:'var(--badge-bg)' }}>
+      <div
+        onClick={hayMas ? () => setExpandido(v => !v) : undefined}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', borderBottom:'1px solid var(--badge-border)', cursor: hayMas ? 'pointer' : 'default' }}>
+        <span style={{ fontSize:'0.75rem', fontWeight:600, color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:'0.375rem' }}>
+          Piezas
+          <span style={{ fontSize:'0.6875rem', fontWeight:600, background:'var(--bg-hover)', border:'1px solid var(--border)', color:'var(--text-muted)', padding:'0.05rem 0.4rem', borderRadius:'99px' }}>
+            {conNombre.length}
+          </span>
+        </span>
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          {conNombre.length > 1 && <CopyAllBtnInline entregables={conNombre} />}
+          {hayMas && (
+            <span style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
+              {expandido ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {expandido ? 'Ver menos' : `Ver ${conNombre.length - 2} más`}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column' }}>
+        {visibles.map((ent, i) => (
+          <div key={ent.id}
+            style={{ padding:'0.5rem 0.75rem', borderBottom: i < visibles.length - 1 ? '1px solid var(--badge-border)' : 'none', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+              {ent.aprobado && <span style={{ fontSize:'0.6rem', fontWeight:700, background:'rgba(16,185,129,0.12)', color:'#10B981', border:'1px solid rgba(16,185,129,0.3)', padding:'0.05rem 0.375rem', borderRadius:'99px', flexShrink:0 }}>✓</span>}
+              <span style={{ fontSize:'0.75rem', color:'var(--text-primary)', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.nombre_pieza}</span>
+              <CopyBtn text={ent.nombre_pieza} />
+            </div>
+            {ent.link_online && (
+              <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                <span style={{ fontSize:'0.75rem', color:'var(--accent-secondary)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.link_online}</span>
+                <CopyBtn text={ent.link_online} />
+                <a href={ent.link_online} target="_blank" rel="noopener" onClick={e => e.stopPropagation()}
+                  style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-hover)', color:'var(--accent-secondary)', flexShrink:0 }}>
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function PedidosList({ onNew }) {
   const navigate = useNavigate()
   const { role } = useAuth()
-  const [filters, setFilters] = useState({ prioridad:'', tipo:'', search:'' })
+  const [filters, setFilters] = useState({ prioridad:'', tipo:'' })
+  const [search, setSearch] = useState('')
+  const { estados } = useEstados()
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroTag, setFiltroTag] = useState('')
   const [fechaDesde, setFechaDesde] = useState('')
@@ -45,17 +126,26 @@ export default function PedidosList({ onNew }) {
   if (filtroTag) listaBase = listaBase.filter(p => p.tags?.includes(filtroTag))
   if (fechaDesde) listaBase = listaBase.filter(p => p.created_at.slice(0,10) >= fechaDesde)
   if (fechaHasta) listaBase = listaBase.filter(p => p.created_at.slice(0,10) <= fechaHasta)
+    if (search.trim()) {
+  const q = search.toLowerCase()
+  listaBase = listaBase.filter(p =>
+    p.asunto?.toLowerCase().includes(q) ||
+    (Array.isArray(p.entregable) ? p.entregable : p.entregable ? [p.entregable] : [])
+      .some(e => e.nombre_pieza?.toLowerCase().includes(q) || e.link_online?.toLowerCase().includes(q))
+  )
+}
 
   const mostrarTodoPorFiltro = filtroEstado === 'finalizado'
   const listaActivos = mostrarTodoPorFiltro ? listaBase : listaBase.filter(p => !p.estados?.includes('finalizado'))
   const listaFinalizados = mostrarTodoPorFiltro ? [] : listaBase.filter(p => p.estados?.includes('finalizado'))
   const lista = mostrarTodoPorFiltro ? listaBase : [...listaActivos, ...(mostrarFinalizados ? listaFinalizados : [])]
 
-  const hayFiltrosActivos = filters.search || filters.prioridad || filters.tipo || filtroEstado || filtroTag || fechaDesde || fechaHasta
+  const hayFiltrosActivos = search || filters.prioridad || filters.tipo || filtroEstado || filtroTag || fechaDesde || fechaHasta
   const selectStyle = { width:'auto', minWidth:'150px', fontSize:'0.8125rem' }
 
   function limpiarFiltros() {
-    setFilters({ prioridad:'', tipo:'', search:'' })
+    setFilters({ prioridad:'', tipo:'' })
+    setSearch('')
     setFiltroEstado('')
     setFiltroTag('')
     setFechaDesde('')
@@ -109,7 +199,7 @@ export default function PedidosList({ onNew }) {
             {/* Búsqueda */}
             <div style={{ position:'relative' }}>
               <Search size={15} style={{ position:'absolute', left:'0.75rem', top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)', pointerEvents:'none' }} />
-              <input placeholder="Buscar por asunto…" value={filters.search} onChange={e => setFilters(f => ({ ...f, search:e.target.value }))} style={{ paddingLeft:'2.25rem' }} />
+              <input placeholder="Buscar por asunto, pieza o link…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft:'2.25rem' }} />
             </div>
             {/* Selects */}
             <div style={{ display:'flex', gap:'0.625rem', flexWrap:'wrap' }}>
@@ -124,7 +214,7 @@ export default function PedidosList({ onNew }) {
               <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={selectStyle}>
                 <option value="">Todos los estados</option>
                 <option value="sin_estado">Sin estado</option>
-                {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+                {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
               </select>
               {tagsDisponibles.length > 0 && (
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
@@ -172,7 +262,7 @@ export default function PedidosList({ onNew }) {
       <div style={{ display:'flex', flexDirection:'column', gap: vista === 'compact' ? '0.375rem' : '0.625rem' }}>
         {lista.map(pedido => {
           const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-          const estados = ESTADOS.filter(e => (pedido.estados ?? []).includes(e.value))
+          const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
           const entregables = Array.isArray(pedido.entregable)
             ? pedido.entregable
             : pedido.entregable ? [pedido.entregable] : []
@@ -185,7 +275,7 @@ export default function PedidosList({ onNew }) {
                 {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
                 <span style={{ fontFamily:'var(--font-display)', fontSize:'0.875rem', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pedido.asunto}</span>
                 <div style={{ display:'flex', gap:'0.3rem', flexShrink:0 }}>
-                  {estados.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
                 </div>
                 {pedido.fecha_limite && (
                   <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0, display:'flex', alignItems:'center', gap:'0.25rem' }}>
@@ -206,33 +296,12 @@ export default function PedidosList({ onNew }) {
                   {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span style={{ fontSize:'0.75rem', color: tipo.color, fontWeight:500 }}>{tipo.label}</span> : null })()}
                 </div>
                 <div style={{ display:'flex', gap:'0.375rem', flexWrap:'wrap' }}>
-                  {estados.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
                 </div>
               </div>
               <h3 style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600 }}>{pedido.asunto}</h3>
 
-              {entregables.map(ent => ent?.nombre_pieza ? (
-                <div key={ent.id} onClick={e => e.stopPropagation()}
-                  style={{ display:'flex', flexDirection:'column', gap:'0.3rem', padding:'0.5rem 0.75rem', background: ent.aprobado ? 'rgba(16,185,129,0.05)' : 'var(--badge-bg)', border:`1px solid ${ent.aprobado ? 'rgba(16,185,129,0.25)' : 'var(--badge-border)'}`, borderRadius:'var(--radius-sm)' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                    {ent.aprobado && <span style={{ fontSize:'0.6rem', fontWeight:700, background:'rgba(16,185,129,0.12)', color:'#10B981', border:'1px solid rgba(16,185,129,0.3)', padding:'0.05rem 0.375rem', borderRadius:'99px', flexShrink:0 }}>✓</span>}
-                    <span style={{ fontSize:'0.75rem', color:'var(--text-secondary)', fontWeight:500, flexShrink:0 }}>Pieza:</span>
-                    <span style={{ fontSize:'0.75rem', color:'var(--text-primary)', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.nombre_pieza}</span>
-                    <CopyBtn text={ent.nombre_pieza} />
-                  </div>
-                  {ent.link_online && (
-                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                      <span style={{ fontSize:'0.75rem', color:'var(--text-secondary)', fontWeight:500, flexShrink:0 }}>Link:</span>
-                      <span style={{ fontSize:'0.75rem', color:'var(--accent-secondary)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.link_online}</span>
-                      <CopyBtn text={ent.link_online} />
-                      <a href={ent.link_online} target="_blank" rel="noopener" onClick={e => e.stopPropagation()}
-                        style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-hover)', color:'var(--accent-secondary)', flexShrink:0 }}>
-                        <ExternalLink size={11} />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              ) : null)}
+              <EntregablesInline entregables={entregables} />
 
               {pedido.descripcion && (
                 <p style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{pedido.descripcion}</p>

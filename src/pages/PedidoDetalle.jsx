@@ -4,7 +4,9 @@ import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
 import { labelActividad, registrarActividad } from '@/hooks/useActividad'
-import { PRIORIDADES, TIPOS, ESTADOS, ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
+import { PRIORIDADES, ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
+import { useEstados } from '@/hooks/useEstados'
+import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
 import PedidoForm from '@/components/pedidos/PedidoForm'
 import { ArrowLeft, ExternalLink, Plus, Trash2, Edit, ChevronDown, ChevronUp, Copy, Check, Clock, Lock, Unlock, User } from 'lucide-react'
@@ -56,7 +58,7 @@ function Section({ title, icon, defaultOpen = true, badge, children }) {
 
 // ─── Estado popover ───────────────────────────────────────────────────────────
 
-function EstadoPopover({ pedido, id, role, user, onUpdate }) {
+function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const estadosActivos = pedido.estados ?? []
@@ -95,7 +97,7 @@ function EstadoPopover({ pedido, id, role, user, onUpdate }) {
       {open && (
         <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:300, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', boxShadow:'var(--shadow-lg)', padding:'0.625rem', minWidth:'220px', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
           <p style={{ fontSize:'0.6875rem', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', padding:'0.25rem 0.5rem 0.5rem' }}>Togglear estados</p>
-          {ESTADOS.map(e => {
+          {estados.map(e => {
             const active = estadosActivos.includes(e.value)
             return (
               <button key={e.value} onClick={() => toggle(e.value)}
@@ -441,6 +443,8 @@ export default function PedidoDetalle() {
   const [loading, setLoading] = useState(true)
   const [editando, setEditando] = useState(false)
   const [usuarios, setUsuarios] = useState([])
+  const { estados } = useEstados()
+  const { tipos } = useTipos()
 
   useEffect(() => {
     supabase.from('profiles').select('id, full_name').order('full_name').then(({ data }) => setUsuarios(data ?? []))
@@ -477,8 +481,8 @@ export default function PedidoDetalle() {
   if (!pedido)  return <div style={{ padding:'3rem', color:'var(--text-muted)' }}>Pedido no encontrado.</div>
 
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-  const tipo = TIPOS.find(t => t.value === pedido.tipo)
-  const estadosActivos = ESTADOS.filter(e => (pedido.estados ?? []).includes(e.value))
+  const tipo = tipos.find(t => t.value === pedido.tipo)
+  const estadosActivos = estados.filter(e => (pedido.estados ?? []).includes(e.value))
   const entregables = Array.isArray(pedido.entregable) ? pedido.entregable : pedido.entregable ? [pedido.entregable] : []
   const subtareas = pedido.subtareas ?? []
   const canEdit = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
@@ -540,7 +544,7 @@ export default function PedidoDetalle() {
             ? <span style={{ fontSize:'0.8125rem', color:'var(--text-muted)', fontStyle:'italic' }}>Sin estado asignado</span>
             : estadosActivos.map(e => <Badge key={e.value} label={e.label} color={e.color} />)
           }
-          <EstadoPopover pedido={pedido} id={id} role={role} user={user} onUpdate={fetchPedido} />
+          <EstadoPopover pedido={pedido} id={id} role={role} user={user} onUpdate={fetchPedido} estados={estados} />
         </div>
       </div>
 

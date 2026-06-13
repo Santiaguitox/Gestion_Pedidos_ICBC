@@ -3,7 +3,8 @@ import { TagSearch } from '@/components/ui/TagSearch'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { PRIORIDADES, ESTADOS } from '@/lib/constants'
+import { PRIORIDADES } from '@/lib/constants'
+import { useEstados } from '@/hooks/useEstados'
 import { Badge } from '@/components/ui/Badge'
 import { DatePicker } from '@/components/ui/DatePicker'
 import {
@@ -46,40 +47,88 @@ function StatCard({ icon, label, value, color }) {
   )
 }
 
-function EntregablesCard({ entregables }) {
-  if (!entregables?.length) return null
+function CopyAllBtnInline({ entregables }) {
+  const [copied, setCopied] = useState(false)
+  function handleCopy(e) {
+    e.stopPropagation()
+    const texto = entregables
+      .filter(e => e.nombre_pieza)
+      .map(e => e.link_online ? `${e.nombre_pieza} || ${e.link_online}` : e.nombre_pieza)
+      .join('\n')
+    navigator.clipboard.writeText(texto)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
   return (
-    <>
-      {entregables.map(ent => ent?.nombre_pieza ? (
-        <div key={ent.id} onClick={e => e.stopPropagation()}
-          style={{ display:'flex', flexDirection:'column', gap:'0.3rem', padding:'0.5rem 0.75rem', background: ent.aprobado ? 'rgba(16,185,129,0.05)' : 'var(--badge-bg)', border:`1px solid ${ent.aprobado ? 'rgba(16,185,129,0.25)' : 'var(--badge-border)'}`, borderRadius:'var(--radius-sm)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-            {ent.aprobado && <span style={{ fontSize:'0.6rem', fontWeight:700, background:'rgba(16,185,129,0.12)', color:'#10B981', border:'1px solid rgba(16,185,129,0.3)', padding:'0.05rem 0.375rem', borderRadius:'99px', flexShrink:0 }}>✓</span>}
-            <span style={{ fontSize:'0.75rem', color:'var(--text-secondary)', fontWeight:500, flexShrink:0 }}>Pieza:</span>
-            <span style={{ fontSize:'0.75rem', color:'var(--text-primary)', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.nombre_pieza}</span>
-            <CopyBtn text={ent.nombre_pieza} />
-          </div>
-          {ent.link_online && (
-            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-              <span style={{ fontSize:'0.75rem', color:'var(--text-secondary)', fontWeight:500, flexShrink:0 }}>Link:</span>
-              <span style={{ fontSize:'0.75rem', color:'var(--accent-secondary)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.link_online}</span>
-              <CopyBtn text={ent.link_online} />
-              <a href={ent.link_online} target="_blank" rel="noopener" onClick={e => e.stopPropagation()}
-                style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-hover)', color:'var(--accent-secondary)', flexShrink:0 }}>
-                <ExternalLink size={11} />
-              </a>
-            </div>
-          )}
-        </div>
-      ) : null)}
-    </>
+    <button onClick={handleCopy}
+      style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', fontWeight:600, color: copied ? '#10B981' : 'var(--icomm-violet)', padding:'0.25rem 0.625rem', border:`1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(91,78,232,0.3)'}`, borderRadius:'var(--radius-sm)', background: copied ? 'rgba(16,185,129,0.06)' : 'rgba(91,78,232,0.08)', transition:'all 150ms', alignSelf:'flex-start' }}>
+      {copied ? <><Check size={11} />¡Copiado!</> : <><Copy size={11} />Copiar todo</>}
+    </button>
   )
 }
 
-function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [] }) {
+function EntregablesCard({ entregables }) {
+  const [expandido, setExpandido] = useState(false)
+  if (!entregables?.length) return null
+
+  const conNombre = entregables.filter(e => e.nombre_pieza)
+  if (!conNombre.length) return null
+
+  const visibles = expandido ? conNombre : conNombre.slice(0, 2)
+  const hayMas = conNombre.length > 2
+
+  return (
+    <div onClick={e => e.stopPropagation()}
+      style={{ border:'1px solid var(--badge-border)', borderRadius:'var(--radius-md)', overflow:'hidden', background:'var(--badge-bg)' }}>
+      <div
+        onClick={hayMas ? () => setExpandido(v => !v) : undefined}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', borderBottom:'1px solid var(--badge-border)', cursor: hayMas ? 'pointer' : 'default' }}>
+        <span style={{ fontSize:'0.75rem', fontWeight:600, color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:'0.375rem' }}>
+          Piezas
+          <span style={{ fontSize:'0.6875rem', fontWeight:600, background:'var(--bg-hover)', border:'1px solid var(--border)', color:'var(--text-muted)', padding:'0.05rem 0.4rem', borderRadius:'99px' }}>
+            {conNombre.length}
+          </span>
+        </span>
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          {conNombre.length > 1 && <CopyAllBtnInline entregables={conNombre} />}
+          {hayMas && (
+            <span style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
+              {expandido ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {expandido ? 'Ver menos' : `Ver ${conNombre.length - 2} más`}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column' }}>
+        {visibles.map((ent, i) => (
+          <div key={ent.id}
+            style={{ padding:'0.5rem 0.75rem', borderBottom: i < visibles.length - 1 ? '1px solid var(--badge-border)' : 'none', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+              {ent.aprobado && <span style={{ fontSize:'0.6rem', fontWeight:700, background:'rgba(16,185,129,0.12)', color:'#10B981', border:'1px solid rgba(16,185,129,0.3)', padding:'0.05rem 0.375rem', borderRadius:'99px', flexShrink:0 }}>✓</span>}
+              <span style={{ fontSize:'0.75rem', color:'var(--text-primary)', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.nombre_pieza}</span>
+              <CopyBtn text={ent.nombre_pieza} />
+            </div>
+            {ent.link_online && (
+              <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                <span style={{ fontSize:'0.75rem', color:'var(--accent-secondary)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.link_online}</span>
+                <CopyBtn text={ent.link_online} />
+                <a href={ent.link_online} target="_blank" rel="noopener" onClick={e => e.stopPropagation()}
+                  style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-hover)', color:'var(--accent-secondary)', flexShrink:0 }}>
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [] }) {
   const navigate = useNavigate()
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-  const estados = ESTADOS.filter(e => (pedido.estados ?? []).includes(e.value))
+  const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
   return (
     <div onClick={() => navigate(`/app/pedidos/${pedido.id}`)} role="button" tabIndex={0}
       onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
@@ -97,7 +146,7 @@ function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [] }) {
         </div>
       )}
       <div style={{ display:'flex', gap:'0.3rem', flexShrink:0 }}>
-        {estados.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+        {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
       </div>
       {pedido.fecha_limite && (
         <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0, display:'flex', alignItems:'center', gap:'0.25rem' }}>
@@ -108,10 +157,10 @@ function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [] }) {
   )
 }
 
-function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [] }) {
+function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [] }) {
   const navigate = useNavigate()
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-  const estados = ESTADOS.filter(e => (pedido.estados ?? []).includes(e.value))
+  const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
   const entregables = Array.isArray(pedido.entregable)
     ? pedido.entregable
     : pedido.entregable ? [pedido.entregable] : []
@@ -126,7 +175,7 @@ function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [] }) {
           {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span style={{ fontSize:'0.75rem', color: tipo.color, fontWeight:500 }}>{tipo.label}</span> : null })()}
         </div>
         <div style={{ display:'flex', gap:'0.375rem', flexWrap:'wrap' }}>
-          {estados.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+          {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
         </div>
       </div>
       <h3 style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600 }}>{pedido.asunto}</h3>
@@ -160,7 +209,7 @@ function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [] }) {
   )
 }
 
-function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, tipos }) {
+function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, tipos, estados }) {
   const [pagina, setPagina] = useState(0)
   const total = pedidos.length
   const finalizados = pedidos.filter(p => p.estados?.includes('finalizado')).length
@@ -185,8 +234,8 @@ function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, ti
       </div>
       <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', paddingLeft:'1.5rem' }}>
         {slice.map(p => vista === 'compact'
-          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} />
-          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} />
+          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
         )}
       </div>
       {totalPaginas > 1 && (
@@ -216,50 +265,78 @@ function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, ti
 function ProximosPaginado({ proximos, navigate, hoy }) {
   const [pagina, setPagina] = useState(0)
   const PAGE_SIZE = 10
-  const totalPaginas = Math.ceil(proximos.length / PAGE_SIZE)
-  const slice = proximos.slice(pagina * PAGE_SIZE, pagina * PAGE_SIZE + PAGE_SIZE)
+
+  const PRIO_ORDEN = { urgente: 0, alta: 1, media: 2, baja: 3 }
+  const activos = proximos
+    .filter(p => !p.estados?.includes('esperando_respuesta'))
+    .sort((a, b) => (PRIO_ORDEN[a.prioridad] ?? 99) - (PRIO_ORDEN[b.prioridad] ?? 99))
+  const hoy0 = activos.filter(p => differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy) <= 1)
+  const semana = activos.filter(p => differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy) > 1)
+
+  const totalPaginas = Math.ceil(activos.length / PAGE_SIZE)
+  const slice = activos.slice(pagina * PAGE_SIZE, pagina * PAGE_SIZE + PAGE_SIZE)
+
+  if (activos.length === 0) return (
+    <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', padding:'0.5rem 0' }}>
+      No hay pendientes activos — los pedidos en espera de respuesta no se muestran aquí.
+    </p>
+  )
+
+  function PedidoRow({ p }) {
+    const dias = differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy)
+    const prio = PRIORIDADES.find(x => x.value === p.prioridad)
+    const esHoyMañana = dias <= 1
+    return (
+      <div onClick={() => navigate(`/app/pedidos/${p.id}`)}
+        style={{ display:'flex', alignItems:'center', gap:'1rem', background:'var(--bg-surface)', border:`1px solid ${esHoyMañana ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`, borderRadius:'var(--radius-md)', padding:'0.75rem 1rem', cursor:'pointer', transition:'background 150ms' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}>
+        <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+          <span style={{ fontSize:'0.875rem', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.asunto}</span>
+          <span style={{ fontSize:'0.75rem', color: esHoyMañana ? '#EF4444' : 'var(--text-muted)', marginTop:'0.125rem' }}>
+            {dias === 0 ? 'Vence hoy' : dias === 1 ? 'Vence mañana' : `Vence en ${dias} días`}
+          </span>
+        </div>
+        {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
+      </div>
+    )
+  }
 
   return (
-    <>
-      <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
-        {slice.map(p => {
-          const dias = differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy)
-          const prio = PRIORIDADES.find(x => x.value === p.prioridad)
-          return (
-            <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`)}
-              style={{ display:'flex', alignItems:'center', gap:'1rem', background:'var(--bg-surface)', border:'1px solid rgba(208,17,27,0.15)', borderRadius:'var(--radius-md)', padding:'0.75rem 1rem', cursor:'pointer' }}>
-              <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
-                <span style={{ fontSize:'0.875rem', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.asunto}</span>
-                <span style={{ fontSize:'0.75rem', color:'var(--icbc-red)', marginTop:'0.125rem', opacity:0.8 }}>
-                  {dias === 0 ? 'Vence hoy' : dias === 1 ? 'Vence mañana' : `Vence en ${dias} días`}
-                </span>
-              </div>
-              {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-            </div>
-          )
-        })}
-      </div>
+    <div style={{ display:'flex', flexDirection:'column', gap:'1rem' }}>
+      {hoy0.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+          <span style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#EF4444' }}>Hoy y mañana</span>
+          {hoy0.map(p => <PedidoRow key={p.id} p={p} />)}
+        </div>
+      )}
+      {semana.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+          <span style={{ fontSize:'0.7rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)' }}>Esta semana</span>
+          {semana.map(p => <PedidoRow key={p.id} p={p} />)}
+        </div>
+      )}
       {totalPaginas > 1 && (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', marginTop:'1rem', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', flexWrap:'wrap' }}>
           <button disabled={pagina === 0} onClick={() => setPagina(p => p - 1)}
-            style={{ fontSize:'0.8125rem', padding:'0.3rem 0.75rem', borderRadius:'var(--radius-sm)', border:'1px solid rgba(208,17,27,0.2)', color:'var(--icbc-red)', opacity: pagina === 0 ? 0.4 : 1 }}>←</button>
+            style={{ fontSize:'0.8125rem', padding:'0.3rem 0.75rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', color:'var(--text-secondary)', opacity: pagina === 0 ? 0.4 : 1 }}>←</button>
           {totalPaginas > 3
             ? <select value={pagina} onChange={e => setPagina(Number(e.target.value))}
-                style={{ fontSize:'0.8125rem', padding:'0.3rem 0.5rem', borderRadius:'var(--radius-sm)', border:'1px solid rgba(208,17,27,0.2)', background:'var(--bg-elevated)', color:'var(--icbc-red)', width:'auto' }}>
+                style={{ fontSize:'0.8125rem', padding:'0.3rem 0.5rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-elevated)', color:'var(--text-primary)', width:'auto' }}>
                 {Array.from({ length: totalPaginas }, (_, i) => <option key={i} value={i}>Página {i + 1}</option>)}
               </select>
             : Array.from({ length: totalPaginas }, (_, i) => (
                 <button key={i} onClick={() => setPagina(i)}
-                  style={{ fontSize:'0.8125rem', padding:'0.3rem 0.625rem', borderRadius:'var(--radius-sm)', border:'1px solid rgba(208,17,27,0.2)', background: pagina === i ? 'var(--icbc-red)' : 'transparent', color: pagina === i ? '#fff' : 'var(--icbc-red)' }}>
+                  style={{ fontSize:'0.8125rem', padding:'0.3rem 0.625rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background: pagina === i ? 'var(--accent-primary)' : 'transparent', color: pagina === i ? '#fff' : 'var(--text-secondary)' }}>
                   {i + 1}
                 </button>
               ))
           }
           <button disabled={pagina >= totalPaginas - 1} onClick={() => setPagina(p => p + 1)}
-            style={{ fontSize:'0.8125rem', padding:'0.3rem 0.75rem', borderRadius:'var(--radius-sm)', border:'1px solid rgba(208,17,27,0.2)', color:'var(--icbc-red)', opacity: pagina >= totalPaginas - 1 ? 0.4 : 1 }}>→</button>
+            style={{ fontSize:'0.8125rem', padding:'0.3rem 0.75rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', color:'var(--text-secondary)', opacity: pagina >= totalPaginas - 1 ? 0.4 : 1 }}>→</button>
         </div>
       )}
-    </>
+    </div>
   )
 }
 
@@ -269,6 +346,7 @@ export default function Dashboard() {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const [usuarios, setUsuarios] = useState([])
+  const { estados } = useEstados()
 
   const hoyISO = toLocalDate(new Date().toISOString())
 
@@ -403,20 +481,24 @@ export default function Dashboard() {
       </div>
 
       {proximos.length > 0 && (
-        <div style={{ background:'rgba(208,17,27,0.03)', border:'1px solid rgba(208,17,27,0.15)', borderRadius:'var(--radius-lg)', overflow:'hidden' }}>
+        <div style={{ background:'linear-gradient(135deg, rgba(91,78,232,0.06) 0%, rgba(91,78,232,0.02) 100%)', border:'1px solid rgba(91,78,232,0.2)', borderRadius:'var(--radius-lg)', overflow:'hidden' }}>
           <div onClick={() => setProximosOpen(!proximosOpen)}
-            style={{ width:'100%', display:'flex', alignItems:'center', gap:'0.625rem', padding:'0.875rem 1.25rem', cursor:'pointer' }}>
-            <AlarmClock size={15} color="var(--icbc-red)" />
-            <span style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600, color:'var(--icbc-red)', flex:1, textAlign:'left' }}>
-              Vencen en los próximos 7 días
-            </span>
-            <span style={{ fontSize:'0.75rem', color:'var(--icbc-red)', opacity:0.7, marginRight:'0.5rem' }}>
-              {proximos.length} pedido{proximos.length !== 1 ? 's' : ''}
-            </span>
-            {proximosOpen ? <ChevronUp size={16} color="var(--icbc-red)" /> : <ChevronDown size={16} color="var(--icbc-red)" />}
+            style={{ width:'100%', display:'flex', alignItems:'center', gap:'0.75rem', padding:'1rem 1.25rem', cursor:'pointer' }}>
+            <div style={{ width:'32px', height:'32px', borderRadius:'var(--radius-md)', background:'rgba(91,78,232,0.12)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <AlarmClock size={16} color="var(--icomm-violet)" />
+            </div>
+            <div style={{ flex:1, textAlign:'left' }}>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:700, color:'var(--text-primary)' }}>
+                Agenda del día
+              </div>
+              <div style={{ fontSize:'0.75rem', color:'var(--icomm-violet)', marginTop:'0.125rem', fontWeight:500 }}>
+                {proximos.filter(p => !p.estados?.includes('esperando_respuesta')).length} pendiente{proximos.filter(p => !p.estados?.includes('esperando_respuesta')).length !== 1 ? 's' : ''} activo{proximos.filter(p => !p.estados?.includes('esperando_respuesta')).length !== 1 ? 's' : ''} para trabajar esta semana
+              </div>
+            </div>
+            {proximosOpen ? <ChevronUp size={16} color="var(--icomm-violet)" /> : <ChevronDown size={16} color="var(--icomm-violet)" />}
           </div>
           {proximosOpen && (
-            <div style={{ padding:'0 1.25rem 1rem', borderTop:'1px solid rgba(208,17,27,0.15)' }}>
+            <div style={{ padding:'0.75rem 1.25rem 1.25rem', borderTop:'1px solid rgba(91,78,232,0.15)' }}>
               <ProximosPaginado proximos={proximos} navigate={navigate} hoy={hoy} />
             </div>
           )}
@@ -459,7 +541,7 @@ export default function Dashboard() {
               <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={selectStyle}>
                 <option value="">Todos los estados</option>
                 <option value="sin_estado">Sin estado</option>
-                {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+                {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
               </select>
               <select value={filtroPrioridad} onChange={e => setFiltroPrioridad(e.target.value)} style={selectStyle}>
                 <option value="">Todas las prioridades</option>
@@ -524,7 +606,7 @@ export default function Dashboard() {
       )}
       <div style={{ display:'flex', flexDirection:'column', gap:'2rem' }}>
         {porDia.map(([fecha, pedidosDia]) => (
-          <DiaGroup key={fecha} fecha={fecha} pedidos={pedidosDia} vista={vista} paginaSize={paginaSize} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} />
+          <DiaGroup key={fecha} fecha={fecha} pedidos={pedidosDia} vista={vista} paginaSize={paginaSize} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} />
         ))}
       </div>
 
