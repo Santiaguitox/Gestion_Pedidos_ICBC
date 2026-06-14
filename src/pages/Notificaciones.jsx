@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useNotificaciones } from '@/hooks/useNotificaciones'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Bell, CheckCheck, ExternalLink } from 'lucide-react'

@@ -259,6 +259,15 @@ export default function PedidosList({ onNew }) {
         </div>
       )}
 
+      {!mostrarTodoPorFiltro && listaFinalizados.length > 0 && (
+        <button onClick={() => setMostrarFinalizados(v => !v)}
+          style={{ display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.8125rem', fontWeight:500, color:'var(--text-muted)', padding:'0.625rem 1rem', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', alignSelf:'flex-start', transition:'all 150ms', background:'transparent' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-secondary)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+          {mostrarFinalizados ? '▲ Ocultar finalizados' : `▼ Mostrar finalizados (${listaFinalizados.length})`}
+        </button>
+      )}
+
       <div style={{ display:'flex', flexDirection:'column', gap: vista === 'compact' ? '0.375rem' : '0.625rem' }}>
         {lista.map(pedido => {
           const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
@@ -333,14 +342,7 @@ export default function PedidosList({ onNew }) {
           )
         })}
       </div>
-      {!mostrarTodoPorFiltro && listaFinalizados.length > 0 && (
-        <button onClick={() => setMostrarFinalizados(v => !v)}
-          style={{ display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.8125rem', fontWeight:500, color:'var(--text-muted)', padding:'0.625rem 1rem', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', alignSelf:'flex-start', transition:'all 150ms', background:'transparent' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-secondary)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-          {mostrarFinalizados ? '▲ Ocultar finalizados' : `▼ Mostrar finalizados (${listaFinalizados.length})`}
-        </button>
-      )}
+      
     </div>
   )
 }

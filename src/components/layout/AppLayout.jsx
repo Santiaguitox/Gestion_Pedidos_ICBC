@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings } from 'lucide-react'
+import { useNotificaciones } from '@/context/NotificacionesContext'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 
 const S = {
@@ -30,10 +31,34 @@ function NavBtn({ children, onClick, title }) {
   )
 }
 
+function NotifToast({ toast, onDismiss, onNavigate }) {
+  if (!toast) return null
+  return (
+    <div style={{ position:'fixed', bottom:'1.5rem', right:'1.5rem', zIndex:1000, maxWidth:'360px', width:'100%', background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', boxShadow:'var(--shadow-lg)', padding:'1rem 1.25rem', display:'flex', gap:'0.75rem', alignItems:'flex-start', animation:'slideIn 200ms ease' }}>
+      <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'var(--icbc-red)', flexShrink:0, marginTop:'5px' }} />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', gap:'0.25rem' }}>
+        <p style={{ fontSize:'0.875rem', fontWeight:500, color:'var(--text-primary)' }}>{toast.mensaje}</p>
+        {toast.pedido_id && (
+          <button onClick={() => { onNavigate(toast.pedido_id); onDismiss() }}
+            style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', color:'var(--icomm-violet)', fontWeight:500, alignSelf:'flex-start' }}>
+            <ExternalLink size={11} />Ver pedido
+          </button>
+        )}
+      </div>
+      <button onClick={onDismiss} style={{ color:'var(--text-muted)', flexShrink:0, display:'flex', alignItems:'center' }}>
+        <X size={14} />
+      </button>
+      <style>{`@keyframes slideIn { from { transform: translateY(12px); opacity:0 } to { transform: translateY(0); opacity:1 } }`}</style>
+    </div>
+  )
+}
+
 export default function AppLayout() {
   const { profile, role, signOut } = useAuth()
   const { theme, toggle } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
+  const { unreadCount, toast, dismissToast } = useNotificaciones()
+  const navigate = useNavigate()
 
   const navItemStyle = (isActive) => ({
     display:'flex', alignItems:'center', gap:'0.625rem', padding:'0.55rem 0.75rem',
@@ -64,15 +89,27 @@ export default function AppLayout() {
 
         <nav style={S.nav}>
           {[
-            { to:'/app',                label:'Dashboard',      icon:LayoutGrid,  end:true },
-            { to:'/app/pedidos',        label:'Pedidos',        icon:ListTodo },
-            { to:'/app/calendario',     label:'Calendario',     icon:CalendarDays },
-            { to:'/app/notificaciones', label:'Notificaciones', icon:Bell },
+            { to:'/app',            label:'Dashboard',  icon:LayoutGrid,  end:true },
+            { to:'/app/pedidos',    label:'Pedidos',    icon:ListTodo },
+            { to:'/app/calendario', label:'Calendario', icon:CalendarDays },
           ].map(({ to, label, icon:Icon, end }) => (
             <NavLink key={to} to={to} end={end} style={({ isActive }) => navItemStyle(isActive)} title={collapsed ? label : undefined}>
               <Icon size={18} />{!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
+
+          {/* Notificaciones con badge */}
+          <NavLink to="/app/notificaciones" style={({ isActive }) => navItemStyle(isActive)} title={collapsed ? 'Notificaciones' : undefined}>
+            <div style={{ position:'relative', display:'flex', alignItems:'center', flexShrink:0 }}>
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span style={{ position:'absolute', top:'-6px', right:'-6px', background:'var(--icbc-red)', color:'#fff', fontSize:'0.5625rem', fontWeight:700, minWidth:'16px', height:'16px', borderRadius:'99px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px', lineHeight:1 }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
+            {!collapsed && <span>Notificaciones</span>}
+          </NavLink>
 
           {isAdminOrAbove && (
             <>
@@ -116,6 +153,12 @@ export default function AppLayout() {
       <div style={S.main}>
         <main style={S.content}><Outlet /></main>
       </div>
+
+      <NotifToast
+        toast={toast}
+        onDismiss={dismissToast}
+        onNavigate={(pedidoId) => navigate(`/app/pedidos/${pedidoId}`)}
+      />
     </div>
   )
 }

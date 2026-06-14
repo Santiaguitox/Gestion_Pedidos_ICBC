@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+
+const NotificacionesContext = createContext(null)
 
 function playNotifSound() {
   try {
@@ -18,15 +20,12 @@ function playNotifSound() {
   } catch {}
 }
 
-export function useNotificaciones() {
+export function NotificacionesProvider({ children }) {
   const { user } = useAuth()
   const [notificaciones, setNotificaciones] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [toast, setToast] = useState(null)
-  const isFirst = useRef(true)
-  const sonidoActivo = useRef(
-    localStorage.getItem('notif:sonido') !== 'false'
-  )
+  const sonidoActivo = useRef(localStorage.getItem('notif:sonido') !== 'false')
 
   async function fetchNotificaciones() {
     if (!user) return
@@ -42,21 +41,19 @@ export function useNotificaciones() {
 
   function handleNueva(payload) {
     fetchNotificaciones()
-    if (isFirst.current) { isFirst.current = false; return }
     const n = payload.new
     if (!n) return
-    // Toast
     setToast(n)
     setTimeout(() => setToast(null), 5000)
-    // Sonido solo si tab no tiene foco
     if (document.hidden && sonidoActivo.current) playNotifSound()
   }
 
   useEffect(() => {
-    fetchNotificaciones()
     if (!user) return
+    fetchNotificaciones()
+    const chName = 'notif-' + user.id + '-' + Date.now()
     const ch = supabase
-      .channel('notif-' + user.id)
+      .channel(chName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `user_id=eq.${user.id}` }, handleNueva)
       .subscribe()
     return () => supabase.removeChannel(ch)
@@ -81,5 +78,13 @@ export function useNotificaciones() {
     return sonidoActivo.current
   }
 
-  return { notificaciones, unreadCount, marcarLeida, marcarTodasLeidas, toast, dismissToast: () => setToast(null), toggleSonido, sonidoActivo: sonidoActivo.current }
+  return (
+    <NotificacionesContext.Provider value={{ notificaciones, unreadCount, toast, dismissToast: () => setToast(null), marcarLeida, marcarTodasLeidas, toggleSonido, sonidoActivo: sonidoActivo.current }}>
+      {children}
+    </NotificacionesContext.Provider>
+  )
+}
+
+export function useNotificaciones() {
+  return useContext(NotificacionesContext)
 }

@@ -44,6 +44,18 @@ export function usePedidos(filters = {}) {
     if (error) throw error
     if (asignados?.length) {
       await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: nuevo.id, user_id: uid })))
+      // Notificar a los asignados (excepto al que creó el pedido)
+      const aNotificar = asignados.filter(uid => uid !== user?.id)
+      if (aNotificar.length) {
+        await supabase.from('notificaciones').insert(
+          aNotificar.map(uid => ({
+            user_id: uid,
+            pedido_id: nuevo.id,
+            mensaje: `Te asignaron un nuevo pedido: ${nuevo.asunto}`,
+            leida: false
+          }))
+        )
+      }
     }
     await registrarActividad(nuevo.id, user?.id, TIPO_ACTIVIDAD.CREACION)
     await fetchPedidos()
@@ -53,7 +65,7 @@ export function usePedidos(filters = {}) {
   async function actualizarPedido(id, data) {
     const { asignados, ...rest } = data
     const { data: anterior } = await supabase
-      .from('pedidos').select('prioridad, estados, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
+      .from('pedidos').select('prioridad, estados, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
     const { error } = await supabase.from('pedidos').update(rest).eq('id', id)
     if (error) throw error
 
@@ -73,6 +85,19 @@ export function usePedidos(filters = {}) {
       await supabase.from('pedido_asignados').delete().eq('pedido_id', id)
       if (asignados.length) {
         await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: id, user_id: uid })))
+      }
+      // Notificar a los nuevos asignados (excepto al que hace el cambio)
+      const aNotificar = agregados.filter(uid => uid !== user?.id)
+      if (aNotificar.length) {
+        const asuntoActual = rest.asunto ?? anterior?.asunto
+        await supabase.from('notificaciones').insert(
+          aNotificar.map(uid => ({
+            user_id: uid,
+            pedido_id: id,
+            mensaje: `Te asignaron al pedido: ${asuntoActual}`,
+            leida: false
+          }))
+        )
       }
       if (agregados.length || removidos.length) {
         const { data: perfiles } = await supabase.from('profiles').select('id, full_name').in('id', [...agregados, ...removidos])

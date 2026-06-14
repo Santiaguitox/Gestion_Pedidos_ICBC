@@ -466,10 +466,20 @@ export default function PedidoDetalle() {
     if (!confirm('¿Eliminar este pedido? Podrá restaurarse desde la papelera.')) return
     await eliminarPedido(id); navigate('/app/pedidos')
   }
-  async function agregarSubtarea(descripcion, asignadoA) {
-    await supabase.from('subtareas').insert({ pedido_id:id, descripcion, asignado_a: asignadoA })
-    fetchPedido()
+async function agregarSubtarea(descripcion, asignadoA) {
+  console.log('agregarSubtarea', { descripcion, asignadoA, pedidoAsunto: pedido?.asunto, userId: user?.id })
+  await supabase.from('subtareas').insert({ pedido_id:id, descripcion, asignado_a: asignadoA })
+  if (asignadoA && asignadoA !== user?.id) {
+    const { error } = await supabase.from('notificaciones').insert({
+      user_id: asignadoA,
+      pedido_id: id,
+      mensaje: `Te asignaron una subtarea en "${pedido.asunto}": ${descripcion}`,
+      leida: false
+    })
+    console.log('notif result', error)
   }
+  fetchPedido()
+}
   async function toggleSubtarea(subId, completada) {
     await supabase.from('subtareas').update({ completada: !completada }).eq('id', subId); fetchPedido()
   }
