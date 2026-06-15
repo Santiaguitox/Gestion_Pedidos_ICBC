@@ -34,7 +34,7 @@ export function NotificacionesProvider({ children }) {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(200)
     setNotificaciones(data ?? [])
     setUnreadCount((data ?? []).filter(n => !n.leida).length)
   }
@@ -44,7 +44,7 @@ export function NotificacionesProvider({ children }) {
     const n = payload.new
     if (!n) return
     setToast(n)
-    setTimeout(() => setToast(null), 5000)
+    setTimeout(() => setToast(null), 10000)
     if (document.hidden && sonidoActivo.current) playNotifSound()
   }
 
@@ -65,10 +65,44 @@ export function NotificacionesProvider({ children }) {
     setUnreadCount(c => Math.max(0, c - 1))
   }
 
+  async function marcarNoLeida(id) {
+    await supabase.from('notificaciones').update({ leida: false }).eq('id', id)
+    setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: false } : n))
+    setUnreadCount(c => c + 1)
+  }
+
   async function marcarTodasLeidas() {
     if (!user) return
     await supabase.from('notificaciones').update({ leida: true }).eq('user_id', user.id).eq('leida', false)
     setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })))
+    setUnreadCount(0)
+  }
+
+  async function marcarTodasNoLeidas() {
+    if (!user) return
+    await supabase.from('notificaciones').update({ leida: false }).eq('user_id', user.id).eq('leida', true)
+    setNotificaciones(prev => prev.map(n => ({ ...n, leida: false })))
+    setUnreadCount(notificaciones.length)
+  }
+
+  async function eliminar(id) {
+    await supabase.from('notificaciones').delete().eq('id', id)
+    const eliminada = notificaciones.find(n => n.id === id)
+    setNotificaciones(prev => prev.filter(n => n.id !== id))
+    if (eliminada && !eliminada.leida) setUnreadCount(c => Math.max(0, c - 1))
+  }
+
+  async function eliminarVarias(ids) {
+    await supabase.from('notificaciones').delete().in('id', ids)
+    const noLeidas = notificaciones.filter(n => ids.includes(n.id) && !n.leida).length
+    setNotificaciones(prev => prev.filter(n => !ids.includes(n.id)))
+    setUnreadCount(c => Math.max(0, c - noLeidas))
+  }
+
+  async function eliminarTodas() {
+    if (!user) return
+    await supabase.from('notificaciones').delete().eq('user_id', user.id)
+    setNotificaciones([])
     setUnreadCount(0)
   }
 
@@ -79,7 +113,14 @@ export function NotificacionesProvider({ children }) {
   }
 
   return (
-    <NotificacionesContext.Provider value={{ notificaciones, unreadCount, toast, dismissToast: () => setToast(null), marcarLeida, marcarTodasLeidas, toggleSonido, sonidoActivo: sonidoActivo.current }}>
+    <NotificacionesContext.Provider value={{
+      notificaciones, unreadCount, toast,
+      dismissToast: () => setToast(null),
+      marcarLeida, marcarNoLeida,
+      marcarTodasLeidas, marcarTodasNoLeidas,
+      eliminar, eliminarVarias, eliminarTodas,
+      toggleSonido, sonidoActivo: sonidoActivo.current,
+    }}>
       {children}
     </NotificacionesContext.Provider>
   )

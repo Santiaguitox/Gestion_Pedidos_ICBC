@@ -15,9 +15,11 @@ import { es } from 'date-fns/locale'
 function CopyBtn({ text }) {
   const [copied, setCopied] = useState(false)
   return (
-    <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+    <button
+      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
       title="Copiar"
-      style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background: copied ? 'rgba(16,185,129,0.1)' : 'var(--bg-hover)', color: copied ? '#10B981' : 'var(--text-muted)', flexShrink:0, transition:'all 150ms ease' }}>
+      className={`copy-btn ${copied ? 'copy-btn-copied' : ''}`}
+    >
       {copied ? <Check size={11} /> : <Copy size={11} />}
     </button>
   )
@@ -36,8 +38,7 @@ function CopyAllBtnInline({ entregables }) {
     setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <button onClick={handleCopy}
-      style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', fontWeight:600, color: copied ? '#10B981' : 'var(--icomm-violet)', padding:'0.25rem 0.625rem', border:`1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(91,78,232,0.3)'}`, borderRadius:'var(--radius-sm)', background: copied ? 'rgba(16,185,129,0.06)' : 'rgba(91,78,232,0.08)', transition:'all 150ms', alignSelf:'flex-start' }}>
+    <button onClick={handleCopy} className={`copy-all-btn ${copied ? 'copy-all-btn-copied' : ''}`}>
       {copied ? <><Check size={11} />¡Copiado!</> : <><Copy size={11} />Copiar todo</>}
     </button>
   )
@@ -46,50 +47,46 @@ function CopyAllBtnInline({ entregables }) {
 function EntregablesInline({ entregables }) {
   const [expandido, setExpandido] = useState(false)
   if (!entregables?.length) return null
-
   const conNombre = entregables.filter(e => e.nombre_pieza)
   if (!conNombre.length) return null
-
   const visibles = expandido ? conNombre : conNombre.slice(0, 2)
   const hayMas = conNombre.length > 2
 
   return (
-    <div onClick={e => e.stopPropagation()}
-      style={{ border:'1px solid var(--badge-border)', borderRadius:'var(--radius-md)', overflow:'hidden', background:'var(--badge-bg)' }}>
+    <div onClick={e => e.stopPropagation()} className="entregables-card">
       <div
+        className="entregables-header"
         onClick={hayMas ? () => setExpandido(v => !v) : undefined}
-        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', borderBottom:'1px solid var(--badge-border)', cursor: hayMas ? 'pointer' : 'default' }}>
-        <span style={{ fontSize:'0.75rem', fontWeight:600, color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:'0.375rem' }}>
-          Piezas
-          <span style={{ fontSize:'0.6875rem', fontWeight:600, background:'var(--bg-hover)', border:'1px solid var(--border)', color:'var(--text-muted)', padding:'0.05rem 0.4rem', borderRadius:'99px' }}>
-            {conNombre.length}
-          </span>
+        style={{ cursor: hayMas ? 'pointer' : 'default' }}
+      >
+        <span className="entregables-header-left">
+          Piezas <span className="badge-count">{conNombre.length}</span>
         </span>
-        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+        <div className="entregables-header-right">
           {conNombre.length > 1 && <CopyAllBtnInline entregables={conNombre} />}
           {hayMas && (
-            <span style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
+            <span className="entregables-expand-hint">
               {expandido ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               {expandido ? 'Ver menos' : `Ver ${conNombre.length - 2} más`}
             </span>
           )}
         </div>
       </div>
-      <div style={{ display:'flex', flexDirection:'column' }}>
+      <div className="flex flex-col">
         {visibles.map((ent, i) => (
-          <div key={ent.id}
-            style={{ padding:'0.5rem 0.75rem', borderBottom: i < visibles.length - 1 ? '1px solid var(--badge-border)' : 'none', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-              {ent.aprobado && <span style={{ fontSize:'0.6rem', fontWeight:700, background:'rgba(16,185,129,0.12)', color:'#10B981', border:'1px solid rgba(16,185,129,0.3)', padding:'0.05rem 0.375rem', borderRadius:'99px', flexShrink:0 }}>✓</span>}
-              <span style={{ fontSize:'0.75rem', color:'var(--text-primary)', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.nombre_pieza}</span>
+          <div key={ent.id} className="entregable-row"
+            style={{ borderBottom: i < visibles.length - 1 ? '1px solid var(--badge-border)' : 'none' }}>
+            <div className="entregable-nombre">
+              {ent.aprobado && <span className="aprobado-badge">✓</span>}
+              <span className="entregable-nombre-text">{ent.nombre_pieza}</span>
               <CopyBtn text={ent.nombre_pieza} />
             </div>
             {ent.link_online && (
-              <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                <span style={{ fontSize:'0.75rem', color:'var(--accent-secondary)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ent.link_online}</span>
+              <div className="entregable-link-row">
+                <span className="entregable-link-text">{ent.link_online}</span>
                 <CopyBtn text={ent.link_online} />
-                <a href={ent.link_online} target="_blank" rel="noopener" onClick={e => e.stopPropagation()}
-                  style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'var(--bg-hover)', color:'var(--accent-secondary)', flexShrink:0 }}>
+                <a href={ent.link_online} target="_blank" rel="noopener"
+                  onClick={e => e.stopPropagation()} className="entregable-link-btn">
                   <ExternalLink size={11} />
                 </a>
               </div>
@@ -104,7 +101,7 @@ function EntregablesInline({ entregables }) {
 export default function PedidosList({ onNew }) {
   const navigate = useNavigate()
   const { role } = useAuth()
-  const [filters, setFilters] = useState({ prioridad:'', tipo:'' })
+  const [filters, setFilters] = useState({ prioridad: '', tipo: '' })
   const [search, setSearch] = useState('')
   const { estados } = useEstados()
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -117,23 +114,22 @@ export default function PedidosList({ onNew }) {
   const [mostrarFinalizados, setMostrarFinalizados] = useState(false)
   const { tipos } = useTipos()
 
-  // Todos los tags disponibles en los pedidos
   const tagsDisponibles = [...new Set(pedidos.flatMap(p => p.tags ?? []))].sort()
 
   let listaBase = [...pedidos]
   if (filtroEstado === 'sin_estado') listaBase = listaBase.filter(p => !p.estados?.length)
   else if (filtroEstado) listaBase = listaBase.filter(p => p.estados?.includes(filtroEstado))
   if (filtroTag) listaBase = listaBase.filter(p => p.tags?.includes(filtroTag))
-  if (fechaDesde) listaBase = listaBase.filter(p => p.created_at.slice(0,10) >= fechaDesde)
-  if (fechaHasta) listaBase = listaBase.filter(p => p.created_at.slice(0,10) <= fechaHasta)
-    if (search.trim()) {
-  const q = search.toLowerCase()
-  listaBase = listaBase.filter(p =>
-    p.asunto?.toLowerCase().includes(q) ||
-    (Array.isArray(p.entregable) ? p.entregable : p.entregable ? [p.entregable] : [])
-      .some(e => e.nombre_pieza?.toLowerCase().includes(q) || e.link_online?.toLowerCase().includes(q))
-  )
-}
+  if (fechaDesde) listaBase = listaBase.filter(p => p.created_at.slice(0, 10) >= fechaDesde)
+  if (fechaHasta) listaBase = listaBase.filter(p => p.created_at.slice(0, 10) <= fechaHasta)
+  if (search.trim()) {
+    const q = search.toLowerCase()
+    listaBase = listaBase.filter(p =>
+      p.asunto?.toLowerCase().includes(q) ||
+      (Array.isArray(p.entregable) ? p.entregable : p.entregable ? [p.entregable] : [])
+        .some(e => e.nombre_pieza?.toLowerCase().includes(q) || e.link_online?.toLowerCase().includes(q))
+    )
+  }
 
   const mostrarTodoPorFiltro = filtroEstado === 'finalizado'
   const listaActivos = mostrarTodoPorFiltro ? listaBase : listaBase.filter(p => !p.estados?.includes('finalizado'))
@@ -141,52 +137,44 @@ export default function PedidosList({ onNew }) {
   const lista = mostrarTodoPorFiltro ? listaBase : [...listaActivos, ...(mostrarFinalizados ? listaFinalizados : [])]
 
   const hayFiltrosActivos = search || filters.prioridad || filters.tipo || filtroEstado || filtroTag || fechaDesde || fechaHasta
-  const selectStyle = { width:'auto', minWidth:'150px', fontSize:'0.8125rem' }
 
   function limpiarFiltros() {
-    setFilters({ prioridad:'', tipo:'' })
-    setSearch('')
-    setFiltroEstado('')
-    setFiltroTag('')
-    setFechaDesde('')
-    setFechaHasta('')
+    setFilters({ prioridad: '', tipo: '' })
+    setSearch(''); setFiltroEstado(''); setFiltroTag(''); setFechaDesde(''); setFechaHasta('')
   }
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'1.5rem' }}>
+    <div className="page-root">
 
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'1rem' }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontFamily:'var(--font-display)', fontSize:'1.5rem', fontWeight:700 }}>Pedidos</h1>
-          <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginTop:'0.125rem' }}>{lista.length} pedido{lista.length !== 1 ? 's' : ''}</p>
+          <h1 className="page-title">Pedidos</h1>
+          <p className="page-subtitle">{lista.length} pedido{lista.length !== 1 ? 's' : ''}</p>
         </div>
         {role !== ROLES.VIEWER && (
-          <button onClick={onNew} style={{ display:'flex', alignItems:'center', gap:'0.375rem', background:'var(--accent-primary)', color:'#fff', fontFamily:'var(--font-display)', fontWeight:600, fontSize:'0.875rem', padding:'0.5rem 1rem', borderRadius:'var(--radius-md)', whiteSpace:'nowrap' }}>
+          <button onClick={onNew} className="btn-header-action">
             <Plus size={16} />Nuevo pedido
           </button>
         )}
       </div>
 
-      {/* Panel de filtros colapsable */}
-      <div style={{ background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)' }}>
-        <div onClick={() => setFiltrosOpen(v => !v)}
-          style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.75rem 1rem', cursor:'pointer', userSelect:'none' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.625rem' }}>
+      {/* Panel de filtros */}
+      <div className="panel">
+        <div className="panel-header" onClick={() => setFiltrosOpen(v => !v)}>
+          <div className="panel-header-left">
             <Filter size={15} color="var(--text-muted)" />
-            <span style={{ fontSize:'0.875rem', fontWeight:600, color:'var(--text-secondary)' }}>Filtros</span>
-            {hayFiltrosActivos && (
-              <span style={{ fontSize:'0.6875rem', fontWeight:600, background:'var(--accent-primary)', color:'#fff', padding:'0.1rem 0.5rem', borderRadius:'99px' }}>activos</span>
-            )}
+            <span className="panel-label">Filtros</span>
+            {hayFiltrosActivos && <span className="badge-active-pill">activos</span>}
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-            <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'0.25rem' }}>
+          <div className="panel-header-right">
+            <div className="vista-controls" onClick={e => e.stopPropagation()}>
               <button onClick={() => setVista('compact')} title="Vista compacta"
-                style={{ display:'flex', alignItems:'center', padding:'0.3rem 0.5rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background: vista === 'compact' ? 'var(--accent-primary)' : 'transparent', color: vista === 'compact' ? '#fff' : 'var(--text-muted)', transition:'all 150ms' }}>
+                className={`btn-toggle ${vista === 'compact' ? 'btn-toggle-active' : ''}`}>
                 <AlignJustify size={13} />
               </button>
               <button onClick={() => setVista('full')} title="Vista completa"
-                style={{ display:'flex', alignItems:'center', padding:'0.3rem 0.5rem', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background: vista === 'full' ? 'var(--accent-primary)' : 'transparent', color: vista === 'full' ? '#fff' : 'var(--text-muted)', transition:'all 150ms' }}>
+                className={`btn-toggle ${vista === 'full' ? 'btn-toggle-active' : ''}`}>
                 <LayoutList size={13} />
               </button>
             </div>
@@ -195,23 +183,29 @@ export default function PedidosList({ onNew }) {
         </div>
 
         {filtrosOpen && (
-          <div style={{ padding:'0.75rem 1rem 1rem', display:'flex', flexDirection:'column', gap:'0.75rem', borderTop:'1px solid var(--border)' }}>
+          <div className="panel-body">
             {/* Búsqueda */}
-            <div style={{ position:'relative' }}>
-              <Search size={15} style={{ position:'absolute', left:'0.75rem', top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)', pointerEvents:'none' }} />
-              <input placeholder="Buscar por asunto, pieza o link…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft:'2.25rem' }} />
+            <div className="search-wrapper">
+              <span className="search-icon"><Search size={15} /></span>
+              <input
+                placeholder="Buscar por asunto, pieza o link…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="input-icon-left"
+              />
             </div>
+
             {/* Selects */}
-            <div style={{ display:'flex', gap:'0.625rem', flexWrap:'wrap' }}>
-              <select value={filters.prioridad} onChange={e => setFilters(f => ({ ...f, prioridad:e.target.value }))} style={selectStyle}>
+            <div className="filters-row">
+              <select value={filters.prioridad} onChange={e => setFilters(f => ({ ...f, prioridad: e.target.value }))} className="select-auto">
                 <option value="">Todas las prioridades</option>
                 {PRIORIDADES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
-              <select value={filters.tipo} onChange={e => setFilters(f => ({ ...f, tipo:e.target.value }))} style={selectStyle}>
+              <select value={filters.tipo} onChange={e => setFilters(f => ({ ...f, tipo: e.target.value }))} className="select-auto">
                 <option value="">Todos los tipos</option>
                 {tipos.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
-              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={selectStyle}>
+              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="select-auto">
                 <option value="">Todos los estados</option>
                 <option value="sin_estado">Sin estado</option>
                 {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
@@ -220,29 +214,30 @@ export default function PedidosList({ onNew }) {
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
               )}
             </div>
-            {/* Tag activo como chip */}
+
+            {/* Tag activo */}
             {filtroTag && (
-              <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                <span style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>Tag:</span>
-                <span style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.75rem', fontWeight:600, background:'rgba(91,78,232,0.1)', color:'var(--icomm-violet)', border:'1px solid rgba(91,78,232,0.25)', padding:'0.15rem 0.5rem', borderRadius:'99px' }}>
+              <div className="tag-filter-row">
+                <span className="tag-filter-label">Tag:</span>
+                <span className="tag-chip-filter">
                   <Tag size={10} />{filtroTag}
-                  <button onClick={() => setFiltroTag('')} style={{ display:'flex', alignItems:'center', color:'var(--icomm-violet)', marginLeft:'0.125rem' }}><X size={10} /></button>
+                  <button onClick={() => setFiltroTag('')} className="flex items-center ml-0.5"><X size={10} /></button>
                 </span>
               </div>
             )}
-            {/* Fechas + limpiar */}
-            <div style={{ display:'flex', gap:'0.625rem', flexWrap:'wrap', alignItems:'flex-end' }}>
-              <div style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
-                <span style={{ fontSize:'0.7rem', color:'var(--text-muted)', fontWeight:500 }}>Desde</span>
+
+            {/* Fechas */}
+            <div className="filter-dates-row">
+              <div className="filter-date-col">
+                <span className="filter-date-label">Desde</span>
                 <DatePicker value={fechaDesde} onChange={setFechaDesde} placeholder="Fecha desde" />
               </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
-                <span style={{ fontSize:'0.7rem', color:'var(--text-muted)', fontWeight:500 }}>Hasta</span>
+              <div className="filter-date-col">
+                <span className="filter-date-label">Hasta</span>
                 <DatePicker value={fechaHasta} onChange={setFechaHasta} placeholder="Fecha hasta" />
               </div>
               {hayFiltrosActivos && (
-                <button onClick={limpiarFiltros}
-                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', fontSize:'0.8125rem', fontWeight:600, color:'var(--icbc-red)', padding:'0.5rem 0.875rem', border:'1px solid rgba(208,17,27,0.3)', borderRadius:'var(--radius-sm)', background:'rgba(208,17,27,0.06)', transition:'all 150ms' }}>
+                <button onClick={limpiarFiltros} className="btn-clear-filters">
                   <X size={13} />Limpiar filtros
                 </button>
               )}
@@ -251,24 +246,30 @@ export default function PedidosList({ onNew }) {
         )}
       </div>
 
-      {loading && <div style={{ padding:'3rem', color:'var(--text-muted)', textAlign:'center' }}>Cargando pedidos…</div>}
+      {loading && <div className="loading-text">Cargando pedidos…</div>}
+
       {!loading && lista.length === 0 && (
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.5rem', padding:'3rem', color:'var(--text-muted)', fontSize:'0.875rem', textAlign:'center' }}>
-          <Filter size={32} /><p>No hay pedidos.</p>
-          {role !== ROLES.VIEWER && <button onClick={onNew} style={{ background:'var(--accent-primary)', color:'#fff', fontSize:'0.875rem', fontWeight:600, padding:'0.5rem 1.25rem', borderRadius:'var(--radius-md)', marginTop:'0.75rem' }}>Crear el primero</button>}
+        <div className="empty-state">
+          <Filter size={32} />
+          <p>No hay pedidos.</p>
+          {role !== ROLES.VIEWER && (
+            <button onClick={onNew} className="btn-primary" style={{ width: 'auto', marginTop: '0.75rem', padding: '0.5rem 1.25rem' }}>
+              Crear el primero
+            </button>
+          )}
         </div>
       )}
 
       {!mostrarTodoPorFiltro && listaFinalizados.length > 0 && (
-        <button onClick={() => setMostrarFinalizados(v => !v)}
-          style={{ display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.8125rem', fontWeight:500, color:'var(--text-muted)', padding:'0.625rem 1rem', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', alignSelf:'flex-start', transition:'all 150ms', background:'transparent' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-secondary)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-          {mostrarFinalizados ? '▲ Ocultar finalizados' : `▼ Mostrar finalizados (${listaFinalizados.length})`}
+        <button onClick={() => setMostrarFinalizados(v => !v)} className="btn-ghost-muted">
+          {mostrarFinalizados
+            ? <><ChevronUp size={14} />Ocultar finalizados</>
+            : <><ChevronDown size={14} />Mostrar finalizados ({listaFinalizados.length})</>}
         </button>
       )}
 
-      <div style={{ display:'flex', flexDirection:'column', gap: vista === 'compact' ? '0.375rem' : '0.625rem' }}>
+      {/* Lista de pedidos */}
+      <div className="flex flex-col" style={{ gap: vista === 'compact' ? '0.375rem' : '0.625rem' }}>
         {lista.map(pedido => {
           const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
           const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
@@ -276,62 +277,67 @@ export default function PedidosList({ onNew }) {
             ? pedido.entregable
             : pedido.entregable ? [pedido.entregable] : []
 
-          if (vista === 'compact') {
-            return (
-              <div key={pedido.id} onClick={() => navigate(`/app/pedidos/${pedido.id}`)} role="button" tabIndex={0}
-                onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
-                style={{ background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', padding:'0.6rem 1rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-                <span style={{ fontFamily:'var(--font-display)', fontSize:'0.875rem', fontWeight:600, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pedido.asunto}</span>
-                <div style={{ display:'flex', gap:'0.3rem', flexShrink:0 }}>
-                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-                </div>
-                {pedido.fecha_limite && (
-                  <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0, display:'flex', alignItems:'center', gap:'0.25rem' }}>
-                    <Calendar size={12} />{format(new Date(pedido.fecha_limite + 'T00:00:00'), "d MMM", { locale:es })}
-                  </span>
-                )}
+          if (vista === 'compact') return (
+            <div key={pedido.id}
+              onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+              role="button" tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
+              className="pedido-card-compact"
+            >
+              {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
+              <span className="pedido-asunto-compact">{pedido.asunto}</span>
+              <div className="flex gap-[0.3rem] shrink-0">
+                {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
               </div>
-            )
-          }
+              {pedido.fecha_limite && (
+                <span className="pedido-meta-item">
+                  <Calendar size={12} />
+                  {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })}
+                </span>
+              )}
+            </div>
+          )
 
           return (
-            <div key={pedido.id} onClick={() => navigate(`/app/pedidos/${pedido.id}`)} role="button" tabIndex={0}
+            <div key={pedido.id}
+              onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+              role="button" tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
-              style={{ background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', padding:'1rem 1.25rem', cursor:'pointer', display:'flex', flexDirection:'column', gap:'0.5rem' }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', flexWrap:'wrap' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+              className="pedido-card-full"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
                   {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-                  {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span style={{ fontSize:'0.75rem', color: tipo.color, fontWeight:500 }}>{tipo.label}</span> : null })()}
+                  {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span className="tipo-label" style={{ color: tipo.color }}>{tipo.label}</span> : null })()}
                 </div>
-                <div style={{ display:'flex', gap:'0.375rem', flexWrap:'wrap' }}>
+                <div className="flex gap-[0.375rem] flex-wrap">
                   {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
                 </div>
               </div>
-              <h3 style={{ fontFamily:'var(--font-display)', fontSize:'0.9375rem', fontWeight:600 }}>{pedido.asunto}</h3>
 
+              <h3 className="pedido-title">{pedido.asunto}</h3>
               <EntregablesInline entregables={entregables} />
 
-              {pedido.descripcion && (
-                <p style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{pedido.descripcion}</p>
-              )}
+              {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
 
-              <div style={{ display:'flex', alignItems:'center', gap:'1rem', marginTop:'0.25rem', flexWrap:'wrap' }}>
+              <div className="pedido-meta">
                 {pedido.fecha_limite && (
-                  <span style={{ display:'flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
-                    <Calendar size={13} />{format(new Date(pedido.fecha_limite + 'T00:00:00'), "d MMM yyyy", { locale:es })}
+                  <span className="pedido-meta-item">
+                    <Calendar size={13} />
+                    {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
                   </span>
                 )}
                 {pedido.pedido_asignados?.length > 0 && (
-                  <span style={{ display:'flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
-                    <User size={13} />{pedido.pedido_asignados.length} asignado{pedido.pedido_asignados.length !== 1 ? 's' : ''}
+                  <span className="pedido-meta-item">
+                    <User size={13} />
+                    {pedido.pedido_asignados.length} asignado{pedido.pedido_asignados.length !== 1 ? 's' : ''}
                   </span>
                 )}
                 {pedido.tags?.length > 0 && (
-                  <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap' }} onClick={e => e.stopPropagation()}>
+                  <div className="flex gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
                     {pedido.tags.map(t => (
                       <button key={t} onClick={() => setFiltroTag(t)}
-                        style={{ fontSize:'0.7rem', fontWeight:500, background: filtroTag === t ? 'rgba(91,78,232,0.15)' : 'var(--badge-bg)', color: filtroTag === t ? 'var(--icomm-violet)' : 'var(--text-muted)', border:`1px solid ${filtroTag === t ? 'rgba(91,78,232,0.3)' : 'var(--badge-border)'}`, padding:'0.1rem 0.4rem', borderRadius:'99px', display:'flex', alignItems:'center', gap:'0.2rem', transition:'all 150ms' }}>
+                        className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
                         <Tag size={9} />{t}
                       </button>
                     ))}
@@ -342,7 +348,7 @@ export default function PedidosList({ onNew }) {
           )
         })}
       </div>
-      
+
     </div>
   )
 }

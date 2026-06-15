@@ -34,7 +34,7 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     <div ref={ref} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
       {/* Trigger */}
       <div onClick={() => setOpen(v => !v)}
-        style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.4rem 0.625rem', background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:'0.8125rem', color: value ? 'var(--icomm-violet)' : 'var(--text-secondary)', minHeight:'34px', userSelect:'none' }}>
+        style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.5rem 0.75rem', background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', cursor:'pointer', fontFamily:'var(--font-body)', fontSize:'0.875rem', fontWeight:400, color: value ? 'var(--icomm-violet)' : 'var(--text-muted)', minWidth:'150px', userSelect:'none', transition:'border-color 150ms ease, box-shadow 150ms ease' }}>
         <Tag size={13} style={{ flexShrink:0 }} />
         <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {value || 'Todos los tags'}

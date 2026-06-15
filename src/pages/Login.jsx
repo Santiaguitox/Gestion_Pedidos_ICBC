@@ -25,7 +25,6 @@ export default function Login() {
       return
     }
 
-    // Esperar a que el perfil cargue antes de navegar
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
@@ -42,69 +41,62 @@ export default function Login() {
   }
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem', position:'relative', overflow:'hidden' }}>
-      <div style={{ position:'absolute', top:'-200px', right:'-200px', width:'600px', height:'600px', borderRadius:'50%', background:'radial-gradient(circle, rgba(208,17,27,0.12) 0%, transparent 70%)', pointerEvents:'none' }} />
-      <div style={{ background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-xl)', padding:'2.5rem', width:'100%', maxWidth:'400px', boxShadow:'var(--shadow-lg)', position:'relative', zIndex:1 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'2rem', fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1.1rem' }}>
-          <span style={{ color:'var(--icbc-red)' }}>ICBC</span>
-          <span style={{ color:'var(--text-muted)', fontWeight:300 }}>×</span>
-          <span style={{ color:'var(--icomm-violet)' }}>icomm</span>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+
+      <div className="blob-red-tr" />
+
+      <div className="login-card">
+
+        <div className="login-logo">
+          <span className="text-[var(--icbc-red)]">ICBC</span>
+          <span className="font-light text-[var(--text-muted)]">×</span>
+          <span className="text-[var(--icomm-violet)]">icomm</span>
         </div>
 
-        <h1 style={{ fontFamily:'var(--font-display)', fontSize:'1.5rem', fontWeight:700, marginBottom:'0.25rem' }}>Gestión de pedidos</h1>
-        <p style={{ fontSize:'0.875rem', color:'var(--text-secondary)', marginBottom:'2rem' }}>Ingresá con tu cuenta de equipo</p>
+        <h1 className="text-2xl font-bold [font-family:var(--font-display)]">Gestión de pedidos</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Ingresá con tu cuenta de equipo</p>
 
-        <form onSubmit={handleSubmit} autoComplete="off" style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
-          <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem' }}>
-            <label style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)' }}>Email</label>
-            <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-              <Mail size={16} style={{ position:'absolute', left:'0.75rem', color:'var(--text-muted)', pointerEvents:'none' }} />
+        <form onSubmit={handleSubmit} autoComplete="off" className="login-form">
+
+          <div className="form-field">
+            <label className="form-label">Email</label>
+            <div className="input-wrapper">
+              <span className="input-icon"><Mail size={16} /></span>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="tu@icomm.com"
                 required
-                style={{ paddingLeft:'2.25rem' }}
+                className="input-icon-left"
               />
             </div>
           </div>
 
-          <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem' }}>
-            <label style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)' }}>Contraseña</label>
-            <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-              <Lock size={16} style={{ position:'absolute', left:'0.75rem', color:'var(--text-muted)', pointerEvents:'none' }} />
+          <div className="form-field">
+            <label className="form-label">Contraseña</label>
+            <div className="input-wrapper">
+              <span className="input-icon"><Lock size={16} /></span>
               <input
                 type={showPass ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                style={{ paddingLeft:'2.25rem' }}
+                className="input-icon-both"
               />
-              <button
-                type="button"
-                onClick={() => setShowPass(v => !v)}
-                style={{ position:'absolute', right:'0.75rem', color:'var(--text-muted)', display:'flex', alignItems:'center' }}
-              >
+              <button type="button" onClick={() => setShowPass(v => !v)} className="input-action">
                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
-          {error && (
-            <p style={{ fontSize:'0.8125rem', color:'var(--icbc-red)', background:'rgba(208,17,27,0.08)', border:'1px solid rgba(208,17,27,0.2)', padding:'0.5rem 0.75rem', borderRadius:'var(--radius-sm)' }}>
-              {error}
-            </p>
-          )}
+          {error && <p className="msg-error">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{ background:'var(--accent-primary)', color:'#fff', fontFamily:'var(--font-display)', fontWeight:600, fontSize:'0.9375rem', padding:'0.75rem', borderRadius:'var(--radius-md)', marginTop:'0.5rem', opacity: loading ? 0.6 : 1 }}
-          >
+          <button type="submit" disabled={loading} className="btn-primary">
             {loading ? 'Ingresando…' : 'Ingresar'}
           </button>
+
         </form>
       </div>
     </div>
