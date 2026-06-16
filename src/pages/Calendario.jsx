@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePedidos } from '@/hooks/usePedidos'
+import { useEstados } from '@/hooks/useEstados'
 import { PRIORIDADES } from '@/lib/constants'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isToday, isPast, isFuture } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from 'lucide-react'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 
 function useIsMobile() {
   return window.innerWidth <= 640
@@ -15,8 +17,9 @@ export default function Calendario() {
   const { pedidos } = usePedidos()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState(null)
+  const { estados } = useEstados()
   const isMobile = useIsMobile()
-  const [vistaDesktop, setVistaDesktop] = useState('grid') // 'grid' | 'timeline'
+  const [vistaDesktop, setVistaDesktop] = useLocalStorage('cal:vista', 'grid')
 
   const days = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) })
   const startPad = (getDay(startOfMonth(currentDate)) + 6) % 7
@@ -90,8 +93,8 @@ export default function Calendario() {
       {mostrarTimeline ? (
         <div className="flex flex-col gap-3">
 
-          {/* Panel pedidos del día — arriba en mobile */}
-          <div className="cal-panel">
+          {/* Panel pedidos del día — solo en mobile */}
+          {isMobile && <div className="cal-panel">
             <div className="cal-panel-header">
               <p className="cal-panel-title">
                 {selectedDay
@@ -108,7 +111,7 @@ export default function Calendario() {
               ) : pedidosDia.map((p, i) => {
                 const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                 return (
-                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`)}
+                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
                     className="cal-pedido-item"
                     style={{ borderBottom: i < pedidosDia.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <div className="flex items-center gap-2">
@@ -117,14 +120,26 @@ export default function Calendario() {
                     </div>
                     {p.estados?.length > 0 && (
                       <div className="cal-pedido-estados">
-                        {p.estados.map(est => <span key={est} className="cal-estado-chip">{est.replace(/_/g, ' ')}</span>)}
+                        {p.estados.map(est => {
+                          const e = estados.find(x => x.value === est)
+                          return (
+                            <span key={est} style={{
+                              fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
+                              background: e ? `${e.color}18` : 'var(--bg-hover)',
+                              color: e ? e.color : 'var(--text-muted)',
+                              border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
+                            }}>
+                              {e ? e.label : est.replace(/_/g, ' ')}
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
                 )
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Timeline */}
           {pedidosPorDia.length === 0 ? (
@@ -135,17 +150,16 @@ export default function Calendario() {
             return (
               <div key={day.toISOString()} className="flex gap-3">
                 {/* Fecha — clickeable para cargar en el panel */}
-                <div onClick={() => setSelectedDay(isSameDay(day, selectedDay ?? new Date(-1)) ? null : day)}
-                  style={{
+                <div style={{
                     flexShrink: 0, width: '48px', display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', paddingTop: '0.25rem', cursor: 'pointer',
+                    alignItems: 'center', paddingTop: '0.25rem',
                   }}>
                   <span style={{
                     width: '36px', height: '36px', borderRadius: '50%', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9375rem',
-                    background: selectedDay && isSameDay(day, selectedDay) ? 'var(--icomm-violet)' : esHoy ? 'var(--icbc-red)' : 'var(--bg-surface)',
-                    color: (selectedDay && isSameDay(day, selectedDay)) || esHoy ? '#fff' : esPasado ? 'var(--text-muted)' : 'var(--text-primary)',
-                    border: selectedDay && isSameDay(day, selectedDay) ? 'none' : esHoy ? 'none' : '1px solid var(--border)',
+                    background: esHoy ? 'var(--icbc-red)' : 'var(--bg-surface)',
+                    color: esHoy ? '#fff' : esPasado ? 'var(--text-muted)' : 'var(--text-primary)',
+                    border: esHoy ? 'none' : '1px solid var(--border)',
                     transition: 'all 150ms',
                   }}>
                     {format(day, 'd')}
@@ -159,7 +173,7 @@ export default function Calendario() {
                   {dp.map(p => {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                     return (
-                      <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`)}
+                      <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
                         className="pedido-card-full" style={{ cursor: 'pointer' }}>
                         <div className="flex items-center gap-2">
                           {prio && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: prio.color, flexShrink: 0 }} />}
@@ -167,9 +181,19 @@ export default function Calendario() {
                         </div>
                         {p.estados?.length > 0 && (
                           <div className="flex gap-1 flex-wrap">
-                            {p.estados.map(est => (
-                              <span key={est} className="cal-estado-chip">{est.replace(/_/g, ' ')}</span>
-                            ))}
+                            {p.estados.map(est => {
+                              const e = estados.find(x => x.value === est)
+                              return (
+                                <span key={est} style={{
+                                  fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
+                                  background: e ? `${e.color}18` : 'var(--bg-hover)',
+                                  color: e ? e.color : 'var(--text-muted)',
+                                  border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
+                                }}>
+                                  {e ? e.label : est.replace(/_/g, ' ')}
+                                </span>
+                              )
+                            })}
                           </div>
                         )}
                       </div>
@@ -207,7 +231,7 @@ export default function Calendario() {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                     return (
                       <div key={p.id}
-                        onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${p.id}`) }}
+                        onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } }) }}
                         className="cal-event"
                         style={{ borderLeft: `3px solid ${prio?.color ?? '#6B7280'}` }}>
                         <span className="cal-event-text">{p.asunto}</span>
@@ -235,7 +259,7 @@ export default function Calendario() {
               ) : pedidosDia.map((p, i) => {
                 const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                 return (
-                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`)}
+                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
                     className="cal-pedido-item"
                     style={{ borderBottom: i < pedidosDia.length - 1 ? '1px solid var(--border)' : 'none', opacity: p.estados?.includes('finalizado') ? 0.6 : 1 }}>
                     <div className="flex items-center gap-2">
@@ -244,7 +268,19 @@ export default function Calendario() {
                     </div>
                     {p.estados?.length > 0 && (
                       <div className="cal-pedido-estados">
-                        {p.estados.map(est => <span key={est} className="cal-estado-chip">{est.replace(/_/g, ' ')}</span>)}
+                        {p.estados.map(est => {
+                          const e = estados.find(x => x.value === est)
+                          return (
+                            <span key={est} style={{
+                              fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
+                              background: e ? `${e.color}18` : 'var(--bg-hover)',
+                              color: e ? e.color : 'var(--text-muted)',
+                              border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
+                            }}>
+                              {e ? e.label : est.replace(/_/g, ' ')}
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

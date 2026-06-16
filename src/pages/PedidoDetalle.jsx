@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
@@ -10,6 +10,7 @@ import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
 import PedidoForm from '@/components/pedidos/PedidoForm'
 import { ArrowLeft, ExternalLink, Plus, Trash2, Edit, ChevronDown, ChevronUp, Copy, Check, Clock, Lock, Unlock, User } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -233,6 +234,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar }) {
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [confirm, setConfirm] = useState(null) // { title, message, onConfirm }
   const bloqueado = ent.aprobado && !isSuperAdmin
 
   async function guardar() {
@@ -346,9 +348,12 @@ function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onU
     setForm({ nombre_pieza: '', link_online: '' }); setShowForm(false); setSaving(false); onUpdate()
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar esta pieza?')) return
-    await supabase.from('entregable').delete().eq('id', id); onUpdate()
+  function eliminar(id) {
+    setConfirm({
+      title: 'Eliminar pieza',
+      message: '¿Querés eliminar esta pieza? Esta acción no se puede deshacer.',
+      onConfirm: async () => { setConfirm(null); await supabase.from('entregable').delete().eq('id', id); onUpdate() }
+    })
   }
 
   return (
@@ -383,11 +388,15 @@ function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onU
 export default function PedidoDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { state } = useLocation()
+  const backTo = state?.from ?? '/app/pedidos'
+  const backLabel = backTo === '/app' ? 'Dashboard' : backTo === '/app/calendario' ? 'Calendario' : backTo === '/app/notificaciones' ? 'Notificaciones' : 'Pedidos'
   const { role, user } = useAuth()
   const { actualizarPedido, eliminarPedido } = usePedidos()
   const [pedido, setPedido] = useState(null)
   const [loading, setLoading] = useState(true)
   const [editando, setEditando] = useState(false)
+  const [confirm, setConfirm] = useState(null) // { title, message, onConfirm }
   const [usuarios, setUsuarios] = useState([])
   const { estados } = useEstados()
   const { tipos } = useTipos()
@@ -407,9 +416,12 @@ export default function PedidoDetalle() {
   useEffect(() => { fetchPedido() }, [id])
 
   async function handleEdit(data) { await actualizarPedido(id, data); setEditando(false); fetchPedido() }
-  async function handleDelete() {
-    if (!confirm('¿Eliminar este pedido? Podrá restaurarse desde la papelera.')) return
-    await eliminarPedido(id); navigate('/app/pedidos')
+  function handleDelete() {
+    setConfirm({
+      title: 'Eliminar pedido',
+      message: 'El pedido se moverá a la papelera y podrás restaurarlo desde ahí.',
+      onConfirm: async () => { setConfirm(null); await eliminarPedido(id); navigate(backTo) }
+    })
   }
 
   async function agregarSubtarea(descripcion, asignadoA) {
@@ -449,8 +461,8 @@ export default function PedidoDetalle() {
 
       {/* Topbar */}
       <div className="detalle-topbar">
-        <button onClick={() => navigate('/app/pedidos')} className="btn-back">
-          <ArrowLeft size={16} />Volver
+        <button onClick={() => navigate(backTo)} className="btn-back">
+          <ArrowLeft size={16} />Volver a {backLabel}
         </button>
         {canEdit && (
           <div className="detalle-topbar-actions">
@@ -532,6 +544,18 @@ export default function PedidoDetalle() {
       </Section>
 
       {editando && <PedidoForm pedido={pedido} onSave={handleEdit} onCancel={() => setEditando(false)} />}
+
+      {confirm && (
+        <ConfirmModal
+          open={true}
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel="Eliminar"
+          variant="danger"
+          onConfirm={confirm.onConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   )
 }

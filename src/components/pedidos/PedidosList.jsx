@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
 import { PRIORIDADES, ROLES } from '@/lib/constants'
@@ -104,12 +105,12 @@ export default function PedidosList({ onNew }) {
   const [filters, setFilters] = useState({ prioridad: '', tipo: '' })
   const [search, setSearch] = useState('')
   const { estados } = useEstados()
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroTag, setFiltroTag] = useState('')
+  const [filtroEstado, setFiltroEstado] = useLocalStorage('pedidos:filtroEstado', '')
+  const [filtroTag, setFiltroTag] = useLocalStorage('pedidos:filtroTag', '')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
-  const [vista, setVista] = useState('full')
-  const [filtrosOpen, setFiltrosOpen] = useState(true)
+  const [vista, setVista] = useLocalStorage('pedidos:vista', 'full')
+  const [filtrosOpen, setFiltrosOpen] = useLocalStorage('pedidos:filtrosOpen', true)
   const { pedidos, loading } = usePedidos(filters)
   const [mostrarFinalizados, setMostrarFinalizados] = useState(false)
   const { tipos } = useTipos()
@@ -279,9 +280,9 @@ export default function PedidosList({ onNew }) {
 
           if (vista === 'compact') return (
             <div key={pedido.id}
-              onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+              onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
               role="button" tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
+              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
               className="pedido-card-compact"
             >
               {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
@@ -300,9 +301,9 @@ export default function PedidosList({ onNew }) {
 
           return (
             <div key={pedido.id}
-              onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+              onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
               role="button" tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
+              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
               className="pedido-card-full"
             >
               <div className="flex items-center justify-between gap-2 flex-wrap">

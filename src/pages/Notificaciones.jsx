@@ -4,6 +4,8 @@ import { useNotificaciones } from '@/context/NotificacionesContext'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Bell, CheckCheck, Trash2, MailOpen, Mail, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter } from 'lucide-react'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 const PAGE_OPTIONS = [10, 20, 50]
 const FILTROS = [
@@ -21,11 +23,12 @@ export default function Notificaciones() {
     eliminar, eliminarVarias, eliminarTodas,
   } = useNotificaciones()
 
-  const [filtro, setFiltro] = useState('todas')
+  const [filtro, setFiltro] = useLocalStorage('notif:filtro', 'todas')
   const [seleccionadas, setSeleccionadas] = useState(new Set())
   const [pagina, setPagina] = useState(0)
-  const [panelOpen, setPanelOpen] = useState(true)
-  const [pageSize, setPageSize] = useState(10)
+  const [panelOpen, setPanelOpen] = useLocalStorage('notif:panelOpen', true)
+  const [pageSize, setPageSize] = useLocalStorage('notif:pageSize', 10)
+  const [confirmEliminarTodas, setConfirmEliminarTodas] = useState(false)
 
   const noLeidas = notificaciones.filter(n => !n.leida).length
 
@@ -88,7 +91,7 @@ export default function Notificaciones() {
 
   function handleClick(n) {
     if (!n.leida) marcarLeida(n.id)
-    if (n.pedido_id) navigate(`/app/pedidos/${n.pedido_id}`)
+    if (n.pedido_id) navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } })
   }
 
   return (
@@ -147,7 +150,7 @@ export default function Notificaciones() {
                 </button>
               )}
               {notificaciones.length > 0 && (
-                <button onClick={() => { if (confirm('¿Eliminar todas las notificaciones?')) eliminarTodas() }}
+                <button onClick={() => setConfirmEliminarTodas(true)}
                   className="btn-delete"
                   style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                   <Trash2 size={14} />Eliminar todas
@@ -260,7 +263,7 @@ export default function Notificaciones() {
 
                 <div className="notif-item-actions">
                   {n.pedido_id && (
-                    <button onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${n.pedido_id}`) }}
+                    <button onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } }) }}
                       className="notif-action-btn" title="Ver pedido">
                       <ExternalLink size={13} />
                     </button>
@@ -303,6 +306,16 @@ export default function Notificaciones() {
         </div>
       )}
 
+
+      <ConfirmModal
+        open={confirmEliminarTodas}
+        title="Eliminar todas las notificaciones"
+        message="Se eliminarán todas las notificaciones permanentemente. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar todas"
+        variant="danger"
+        onConfirm={() => { setConfirmEliminarTodas(false); eliminarTodas() }}
+        onCancel={() => setConfirmEliminarTodas(false)}
+      />
     </div>
   )
 }

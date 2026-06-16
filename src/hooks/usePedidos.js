@@ -4,6 +4,17 @@ import { useAuth } from '@/context/AuthContext'
 import { registrarActividad } from '@/hooks/useActividad'
 import { TIPO_ACTIVIDAD } from '@/lib/constants'
 
+function limpiarCampos(data) {
+  const limpio = { ...data }
+  if (limpio.cantidad_envios === '' || limpio.cantidad_envios === undefined) limpio.cantidad_envios = null
+  if (limpio.instancia === '') limpio.instancia = null
+  if (limpio.tipo_envio === '') limpio.tipo_envio = null
+  if (limpio.tipo_envio_otro === '') limpio.tipo_envio_otro = null
+  if (limpio.fecha_programacion === '') limpio.fecha_programacion = null
+  if (limpio.hora_programacion === '') limpio.hora_programacion = null
+  return limpio
+}
+
 export function usePedidos(filters = {}) {
   const { user } = useAuth()
   const [pedidos, setPedidos] = useState([])
@@ -39,12 +50,12 @@ export function usePedidos(filters = {}) {
 
   async function crearPedido(data) {
     const { asignados, ...rest } = data
+    const campos = limpiarCampos(rest)
     const { data: nuevo, error } = await supabase
-      .from('pedidos').insert({ ...rest, created_by: user?.id }).select().single()
+      .from('pedidos').insert({ ...campos, created_by: user?.id }).select().single()
     if (error) throw error
     if (asignados?.length) {
       await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: nuevo.id, user_id: uid })))
-      // Notificar a los asignados (excepto al que creó el pedido)
       const aNotificar = asignados.filter(uid => uid !== user?.id)
       if (aNotificar.length) {
         await supabase.from('notificaciones').insert(
@@ -64,18 +75,19 @@ export function usePedidos(filters = {}) {
 
   async function actualizarPedido(id, data) {
     const { asignados, ...rest } = data
+    const campos = limpiarCampos(rest)
     const { data: anterior } = await supabase
       .from('pedidos').select('prioridad, estados, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
-    const { error } = await supabase.from('pedidos').update(rest).eq('id', id)
+    const { error } = await supabase.from('pedidos').update(campos).eq('id', id)
     if (error) throw error
 
-    if (rest.prioridad && anterior?.prioridad !== rest.prioridad) {
-      await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_PRIORIDAD, { anterior: anterior.prioridad, nuevo: rest.prioridad })
+    if (campos.prioridad && anterior?.prioridad !== campos.prioridad) {
+      await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_PRIORIDAD, { anterior: anterior.prioridad, nuevo: campos.prioridad })
     }
-    if (rest.estados) {
+    if (campos.estados) {
       const anteriores = anterior?.estados ?? []
-      if (JSON.stringify([...anteriores].sort()) !== JSON.stringify([...rest.estados].sort())) {
-        await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos: rest.estados })
+      if (JSON.stringify([...anteriores].sort()) !== JSON.stringify([...campos.estados].sort())) {
+        await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos: campos.estados })
       }
     }
     if (asignados !== undefined) {
@@ -86,10 +98,9 @@ export function usePedidos(filters = {}) {
       if (asignados.length) {
         await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: id, user_id: uid })))
       }
-      // Notificar a los nuevos asignados (excepto al que hace el cambio)
       const aNotificar = agregados.filter(uid => uid !== user?.id)
       if (aNotificar.length) {
-        const asuntoActual = rest.asunto ?? anterior?.asunto
+        const asuntoActual = campos.asunto ?? anterior?.asunto
         await supabase.from('notificaciones').insert(
           aNotificar.map(uid => ({
             user_id: uid,
@@ -105,7 +116,7 @@ export function usePedidos(filters = {}) {
         await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.ASIGNACION, { agregados: agregados.map(nombre), removidos: removidos.map(nombre) })
       }
     }
-    const camposEditados = Object.keys(rest).filter(k => !['prioridad','estados'].includes(k))
+    const camposEditados = Object.keys(campos).filter(k => !['prioridad','estados'].includes(k))
     if (camposEditados.length > 0) {
       await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.EDICION)
     }

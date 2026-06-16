@@ -30,14 +30,14 @@ export default function SetPassword() {
     navigate('/app')
   }
 
-  if (!ready) return (
-    <div className="relative flex min-h-screen items-center justify-content overflow-hidden p-6 text-[var(--text-muted)]">
-      Verificando acceso…
-    </div>
-  )
+  // if (!ready) return (
+  //   <div className="relative flex min-h-screen items-center justify-content overflow-hidden p-6 text-[var(--text-muted)]">
+  //     Verificando acceso…
+  //   </div>
+  // )
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
       <div className="blob-red-tr" />
       <div className="login-card">
 

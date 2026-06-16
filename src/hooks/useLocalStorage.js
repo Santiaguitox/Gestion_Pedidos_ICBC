@@ -11,12 +11,14 @@ export function useLocalStorage(key, defaultValue) {
   })
 
   function set(newValue) {
-    console.log('useLocalStorage set:', key, newValue)
-    if (newValue === undefined) return
-    setValue(newValue)
-    try {
-      localStorage.setItem(key, JSON.stringify(newValue))
-    } catch {}
+    setValue(prev => {
+      const resolved = typeof newValue === 'function' ? newValue(prev) : newValue
+      if (resolved === undefined) return prev
+      try {
+        localStorage.setItem(key, JSON.stringify(resolved))
+      } catch {}
+      return resolved
+    })
   }
 
   return [value, set]

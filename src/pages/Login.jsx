@@ -41,7 +41,7 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
 
       <div className="blob-red-tr" />
 

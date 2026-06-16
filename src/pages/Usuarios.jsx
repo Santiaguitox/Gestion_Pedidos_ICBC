@@ -4,17 +4,21 @@ import { useAuth } from '@/context/AuthContext'
 import { ROLES, ROLE_COLORS } from '@/lib/constants'
 import { Badge } from '@/components/ui/Badge'
 import { Users, UserPlus, X, Trash2 } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+
+const AREAS_EQUIPO = ['PM', 'Diseño', 'Programación', 'Comercial', 'Otro']
 
 export default function Usuarios() {
   const { role: myRole, user: myUser } = useAuth()
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ email: '', full_name: '', role: 'colaborador' })
+  const [form, setForm] = useState({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
   const [inviting, setInviting] = useState(false)
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [deletingId, setDeletingId] = useState(null)
+  const [confirmEliminar, setConfirmEliminar] = useState(null)
 
   useEffect(() => { fetchUsuarios() }, [])
 
@@ -30,8 +34,15 @@ export default function Usuarios() {
     setUsuarios(u => u.map(x => x.id === id ? { ...x, role: newRole } : x))
   }
 
+  async function cambiarArea(id, area) {
+    await supabase.from('profiles').update({ area_equipo: area || null }).eq('id', id)
+    setUsuarios(u => u.map(x => x.id === id ? { ...x, area_equipo: area } : x))
+  }
+
+  function pedirEliminarUsuario(u) { setConfirmEliminar(u) }
+
   async function eliminarUsuario(u) {
-    if (!confirm(`¿Eliminar a ${u.full_name || u.email}? Esta acción no se puede deshacer.`)) return
+    setConfirmEliminar(null)
     setDeletingId(u.id)
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
@@ -61,7 +72,7 @@ export default function Usuarios() {
       setInviteError(result.error ?? 'Error al invitar usuario.')
     } else {
       setInviteSuccess(`Invitación enviada a ${form.email}`)
-      setForm({ email: '', full_name: '', role: 'colaborador' })
+      setForm({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
       fetchUsuarios()
     }
     setInviting(false)
@@ -83,7 +94,6 @@ export default function Usuarios() {
         </button>
       </div>
 
-      {/* Formulario de invitación */}
       {showForm && (
         <div className="panel">
           <div className="panel-body" style={{ padding: '1.25rem' }}>
@@ -104,11 +114,20 @@ export default function Usuarios() {
                   <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nombre Apellido" />
                 </div>
               </div>
-              <div className="field" style={{ maxWidth: '200px' }}>
-                <label className="field-label">Rol</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: 'auto' }}>
-                  {rolesDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+              <div className="field-grid-2">
+                <div className="field">
+                  <label className="field-label">Rol</label>
+                  <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                    {rolesDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field-label">Área / Equipo</label>
+                  <select value={form.area_equipo} onChange={e => setForm(f => ({ ...f, area_equipo: e.target.value }))}>
+                    <option value="">Sin área</option>
+                    {AREAS_EQUIPO.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
               </div>
               {inviteError && <p className="msg-error">{inviteError}</p>}
               {inviteSuccess && <p className="msg-success">{inviteSuccess}</p>}
@@ -135,15 +154,26 @@ export default function Usuarios() {
               <div className="usuario-info">
                 <p className="usuario-nombre">{u.full_name || u.email}</p>
                 <p className="usuario-email">{u.email}</p>
+                {u.area_equipo && (
+                  <span style={{ fontSize:'0.6875rem', fontWeight:600, background:'rgba(91,78,232,0.1)', color:'var(--icomm-violet)', border:'1px solid rgba(91,78,232,0.25)', padding:'0.1rem 0.4rem', borderRadius:'99px', display:'inline-block', marginTop:'0.125rem' }}>
+                    {u.area_equipo}
+                  </span>
+                )}
               </div>
             </div>
             <div className="usuario-actions">
               <Badge label={u.role} color={ROLE_COLORS[u.role] ?? '#6B7280'} />
-              <select value={u.role} onChange={e => cambiarRol(u.id, e.target.value)} style={{ width: 'auto', fontSize: '0.8125rem', padding: '0.3rem 1.5rem 0.3rem 0.625rem' }}>
+              <select value={u.role} onChange={e => cambiarRol(u.id, e.target.value)}
+                style={{ width: 'auto', fontSize: '0.8125rem', padding: '0.3rem 1.5rem 0.3rem 0.625rem' }}>
                 {rolesDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
+              <select value={u.area_equipo ?? ''} onChange={e => cambiarArea(u.id, e.target.value)}
+                style={{ width: 'auto', fontSize: '0.8125rem', padding: '0.3rem 1.5rem 0.3rem 0.625rem' }}>
+                <option value="">Sin área</option>
+                {AREAS_EQUIPO.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
               {myRole === ROLES.SUPER_ADMIN && u.id !== myUser?.id && (
-                <button onClick={() => eliminarUsuario(u)} disabled={deletingId === u.id}
+                <button onClick={() => pedirEliminarUsuario(u)} disabled={deletingId === u.id}
                   className="btn-delete-user" style={{ opacity: deletingId === u.id ? 0.5 : 1 }}>
                   <Trash2 size={15} />
                 </button>
@@ -153,6 +183,17 @@ export default function Usuarios() {
         ))}
       </div>
 
+      {confirmEliminar && (
+        <ConfirmModal
+          open={true}
+          title="Eliminar usuario"
+          message={`¿Eliminar a ${confirmEliminar.full_name || confirmEliminar.email}? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar usuario"
+          variant="danger"
+          onConfirm={() => eliminarUsuario(confirmEliminar)}
+          onCancel={() => setConfirmEliminar(null)}
+        />
+      )}
     </div>
   )
 }

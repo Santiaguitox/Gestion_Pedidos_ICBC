@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
+import { useInstancias } from '@/hooks/useInstancias'
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 const COLORES_SUGERIDOS = [
   '#8B5CF6','#3B82F6','#F59E0B','#EC4899','#10B981','#059669',
@@ -90,6 +92,7 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
   const [form, setForm] = useState({ value: '', label: '', color: defaultColor })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmEliminar, setConfirmEliminar] = useState(null)
 
   async function agregar() {
     setError('')
@@ -104,9 +107,12 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
     setShowForm(false); setSaving(false); refetch()
   }
 
-  async function eliminar(id) {
-    if (!confirm(`¿Eliminar este ${nombreItem.toLowerCase()}? Los pedidos que lo tengan asignado lo perderán.`)) return
-    await supabase.from(tabla).delete().eq('id', id); refetch()
+  function eliminar(id) { setConfirmEliminar(id) }
+
+  async function confirmarEliminar() {
+    await supabase.from(tabla).delete().eq('id', confirmEliminar)
+    setConfirmEliminar(null)
+    refetch()
   }
 
   function handleLabel(val) {
@@ -117,75 +123,87 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
   }
 
   return (
-    <div className="config-section">
-      <div className="config-section-header" onClick={() => setOpen(v => !v)}>
-        <div>
-          <h2 className="config-section-title">{titulo}</h2>
-          {descripcion && <p className="config-section-desc">{descripcion}</p>}
+    <>
+      <div className="config-section">
+        <div className="config-section-header" onClick={() => setOpen(v => !v)}>
+          <div>
+            <h2 className="config-section-title">{titulo}</h2>
+            {descripcion && <p className="config-section-desc">{descripcion}</p>}
+          </div>
+          <div className="flex items-center gap-[0.625rem]">
+            <span className="text-muted-sm">{items.length} {nombreItem.toLowerCase()}{items.length !== 1 ? 's' : ''}</span>
+            {open ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
+          </div>
         </div>
-        <div className="flex items-center gap-[0.625rem]">
-          <span className="text-muted-sm">{items.length} {nombreItem.toLowerCase()}{items.length !== 1 ? 's' : ''}</span>
-          {open ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
-        </div>
+
+        {open && (
+          <div className="config-section-body">
+            <div className="config-section-toolbar">
+              <button onClick={() => { setShowForm(v => !v); setError('') }} className="btn-header-action">
+                <Plus size={14} />Nuevo {nombreItem.toLowerCase()}
+              </button>
+            </div>
+
+            {showForm && (
+              <div className="config-add-form">
+                <div className="field-grid-2">
+                  <div className="field">
+                    <label className="field-label">Nombre <span style={{ color: 'var(--icbc-red)' }}>*</span></label>
+                    <input value={form.label} onChange={e => handleLabel(e.target.value)}
+                      placeholder={`Ej: Nuevo ${nombreItem.toLowerCase()}`} autoFocus />
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Clave interna <span style={{ color: 'var(--icbc-red)' }}>*</span></label>
+                    <input value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder="clave_interna" />
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="field-label">Color</label>
+                  <ColorPicker value={form.color} onChange={c => setForm(f => ({ ...f, color: c }))} />
+                </div>
+                {error && <p className="msg-error">{error}</p>}
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setShowForm(false); setError('') }} className="btn-secondary">Cancelar</button>
+                  <button onClick={agregar} disabled={saving} className="btn-primary"
+                    style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
+                    {saving ? 'Guardando…' : `Guardar ${nombreItem.toLowerCase()}`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loading && <p className="text-muted-sm">Cargando…</p>}
+            <div className="flex flex-col gap-2">
+              {items.map(item => (
+                <ItemRow key={item.id} item={item} tabla={tabla} onSave={refetch} onDelete={eliminar} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {open && (
-        <div className="config-section-body">
-          <div className="config-section-toolbar">
-            <button onClick={() => { setShowForm(v => !v); setError('') }} className="btn-header-action">
-              <Plus size={14} />Nuevo {nombreItem.toLowerCase()}
-            </button>
-          </div>
-
-          {showForm && (
-            <div className="config-add-form">
-              <div className="field-grid-2">
-                <div className="field">
-                  <label className="field-label">Nombre <span style={{ color: 'var(--icbc-red)' }}>*</span></label>
-                  <input value={form.label} onChange={e => handleLabel(e.target.value)}
-                    placeholder={`Ej: Nuevo ${nombreItem.toLowerCase()}`} autoFocus />
-                </div>
-                <div className="field">
-                  <label className="field-label">Clave interna <span style={{ color: 'var(--icbc-red)' }}>*</span></label>
-                  <input value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder="clave_interna" />
-                </div>
-              </div>
-              <div className="field">
-                <label className="field-label">Color</label>
-                <ColorPicker value={form.color} onChange={c => setForm(f => ({ ...f, color: c }))} />
-              </div>
-              {error && <p className="msg-error">{error}</p>}
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => { setShowForm(false); setError('') }} className="btn-secondary">Cancelar</button>
-                <button onClick={agregar} disabled={saving} className="btn-primary"
-                  style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
-                  {saving ? 'Guardando…' : `Guardar ${nombreItem.toLowerCase()}`}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {loading && <p className="text-muted-sm">Cargando…</p>}
-          <div className="flex flex-col gap-2">
-            {items.map(item => (
-              <ItemRow key={item.id} item={item} tabla={tabla} onSave={refetch} onDelete={eliminar} />
-            ))}
-          </div>
-        </div>
+      {confirmEliminar && (
+        <ConfirmModal
+          title={`¿Eliminar este ${nombreItem.toLowerCase()}?`}
+          message={`Los pedidos que lo tengan asignado lo perderán.`}
+          onConfirm={confirmarEliminar}
+          onCancel={() => setConfirmEliminar(null)}
+        />
       )}
-    </div>
+    </>
   )
 }
 
 export default function Configuracion() {
   const { estados, loading: loadingEstados, refetch: refetchEstados } = useEstados()
   const { tipos, loading: loadingTipos, refetch: refetchTipos } = useTipos()
+  const { instancias, loading: loadingInstancias, refetch: refetchInstancias } = useInstancias()
 
   return (
     <div className="page-root" style={{ maxWidth: '600px' }}>
       <div>
         <h1 className="page-title">Configuración</h1>
-        <p className="page-subtitle">Gestioná los estados y tipos disponibles para los pedidos</p>
+        <p className="page-subtitle">Gestioná los estados, tipos e instancias disponibles para los pedidos</p>
       </div>
       <SeccionConfig titulo="Estados de pedidos" descripcion="Estados que se pueden asignar a un pedido"
         items={estados} tabla="estados" loading={loadingEstados} refetch={refetchEstados}
@@ -193,6 +211,9 @@ export default function Configuracion() {
       <SeccionConfig titulo="Tipos de pedido" descripcion="Tipos disponibles al crear un pedido"
         items={tipos} tabla="tipos" loading={loadingTipos} refetch={refetchTipos}
         nombreItem="Tipo" defaultColor="#6B7280" />
+      <SeccionConfig titulo="Instancias" descripcion="Plataformas de envío disponibles"
+        items={instancias} tabla="instancias" loading={loadingInstancias} refetch={refetchInstancias}
+        nombreItem="Instancia" defaultColor="#6B7280" />
     </div>
   )
 }

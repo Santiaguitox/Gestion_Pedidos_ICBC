@@ -3,26 +3,40 @@ import { supabase } from '@/lib/supabase'
 import { PRIORIDADES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
+import { useInstancias } from '@/hooks/useInstancias'
 import { X, Check } from 'lucide-react'
 import { DatePicker } from '@/components/ui/DatePicker'
+
+const TIPOS_ENVIO = [
+  { value: 'test', label: 'Test' },
+  { value: 'real', label: 'Real' },
+  { value: 'otro', label: 'Otro' },
+]
 
 export default function PedidoForm({ pedido, onSave, onCancel }) {
   const isEdit = !!pedido
   const [form, setForm] = useState({
-    asunto:       pedido?.asunto ?? '',
-    descripcion:  pedido?.descripcion ?? '',
-    prioridad:    pedido?.prioridad ?? '',
-    tipo:         pedido?.tipo ?? '',
-    fecha_limite: pedido?.fecha_limite ?? '',
-    tags:         pedido?.tags ?? [],
-    estados:      pedido?.estados ?? [],
-    asignados:    pedido?.pedido_asignados?.map(a => a.user_id) ?? [],
+    asunto:            pedido?.asunto ?? '',
+    descripcion:       pedido?.descripcion ?? '',
+    prioridad:         pedido?.prioridad ?? '',
+    tipo:              pedido?.tipo ?? '',
+    fecha_limite:      pedido?.fecha_limite ?? '',
+    tags:              pedido?.tags ?? [],
+    estados:           pedido?.estados ?? [],
+    asignados:         pedido?.pedido_asignados?.map(a => a.user_id) ?? [],
+    instancia:         pedido?.instancia ?? '',
+    tipo_envio:        pedido?.tipo_envio ?? '',
+    tipo_envio_otro:   pedido?.tipo_envio_otro ?? '',
+    cantidad_envios:   pedido?.cantidad_envios ?? '',
+    fecha_programacion: pedido?.fecha_programacion ?? '',
+    hora_programacion:  pedido?.hora_programacion ?? '',
   })
   const [usuarios, setUsuarios] = useState([])
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const { estados } = useEstados()
   const { tipos } = useTipos()
+  const { instancias } = useInstancias()
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -45,13 +59,11 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     setTagInput('')
   }
 
-  // Inactivo: solo color de texto. Activo: fondo + borde coloreado
   function chipStyle(color, active) {
     if (active) return { color, borderColor: `${color}60`, background: `${color}20` }
     return { color }
   }
 
-  // Label con check cuando el campo tiene valor
   function FieldLabel({ children, done }) {
     return (
       <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -92,6 +104,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
           <div className="form-divider" />
 
+          {/* Tipo */}
           <div className="field">
             <FieldLabel done={!!form.tipo}>Tipo</FieldLabel>
             <div className="chip-group">
@@ -108,6 +121,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
           <div className="form-divider" />
 
+          {/* Prioridad */}
           <div className="field">
             <FieldLabel done={!!form.prioridad}>Prioridad</FieldLabel>
             <div className="chip-group">
@@ -124,6 +138,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
           <div className="form-divider" />
 
+          {/* Estado inicial */}
           <div className="field">
             <FieldLabel done={form.estados.length > 0}>Estado inicial</FieldLabel>
             <div className="chip-group">
@@ -142,6 +157,52 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
                 )
               })}
             </div>
+          </div>
+
+          <div className="form-divider" />
+
+          {/* Instancia */}
+          <div className="field">
+            <FieldLabel done={!!form.instancia}>
+              Instancia <span className="field-label-optional">opcional</span>
+            </FieldLabel>
+            <div className="chip-group">
+              {instancias.map(i => (
+                <button key={i.value} type="button"
+                  onClick={() => set('instancia', form.instancia === i.value ? '' : i.value)}
+                  className="chip"
+                  style={chipStyle(i.color, form.instancia === i.value)}>
+                  {i.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-divider" />
+
+          {/* Tipo de envío */}
+          <div className="field">
+            <FieldLabel done={!!form.tipo_envio}>
+              Tipo de envío <span className="field-label-optional">opcional</span>
+            </FieldLabel>
+            <div className="chip-group">
+              {TIPOS_ENVIO.map(t => (
+                <button key={t.value} type="button"
+                  onClick={() => set('tipo_envio', form.tipo_envio === t.value ? '' : t.value)}
+                  className="chip"
+                  style={form.tipo_envio === t.value ? { background:'rgba(91,78,232,0.1)', borderColor:'rgba(91,78,232,0.4)', color:'var(--icomm-violet)' } : {}}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {form.tipo_envio === 'otro' && (
+              <input
+                value={form.tipo_envio_otro}
+                onChange={e => set('tipo_envio_otro', e.target.value)}
+                placeholder="Especificá el tipo de envío…"
+                style={{ marginTop:'0.5rem' }}
+              />
+            )}
           </div>
 
           <div className="form-divider" />

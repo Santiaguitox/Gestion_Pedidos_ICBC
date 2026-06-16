@@ -144,10 +144,10 @@ function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados 
 
   return (
     <div
-      onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+      onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
+      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
       className="pedido-card-compact"
     >
       {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
@@ -191,10 +191,10 @@ function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [
 
   return (
     <div
-      onClick={() => navigate(`/app/pedidos/${pedido.id}`)}
+      onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`)}
+      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
       className="pedido-card-full"
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -351,7 +351,7 @@ function ProximosPaginado({ proximos, navigate, hoy }) {
     const esHoyMañana = dias <= 1
     return (
       <div
-        onClick={() => navigate(`/app/pedidos/${p.id}`)}
+        onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app' } })}
         className={`pedido-row ${esHoyMañana ? 'pedido-row-urgent' : ''}`}
       >
         <div className="pedido-row-info">
