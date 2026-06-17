@@ -99,6 +99,18 @@ function EntregablesInline({ entregables }) {
   )
 }
 
+function GrupoLabel({ texto }) {
+  return (
+    <div className="dia-group-header">
+      <div className="dia-group-line" />
+      <span className="dia-group-label dia-group-label-hoy">
+        <span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> {texto}
+      </span>
+      <div className="dia-group-line-flex" />
+    </div>
+  )
+}
+
 export default function PedidosList({ onNew }) {
   const navigate = useNavigate()
   const { role } = useAuth()
@@ -112,7 +124,7 @@ export default function PedidosList({ onNew }) {
   const [vista, setVista] = useLocalStorage('pedidos:vista', 'full')
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('pedidos:filtrosOpen', true)
   const { pedidos, loading } = usePedidos(filters)
-  const [mostrarFinalizados, setMostrarFinalizados] = useState(false)
+  const [mostrarFinalizados, setMostrarFinalizados] = useLocalStorage('pedidos:mostrarFinalizados', false)
   const { tipos } = useTipos()
 
   const tagsDisponibles = [...new Set(pedidos.flatMap(p => p.tags ?? []))].sort()
@@ -135,7 +147,6 @@ export default function PedidosList({ onNew }) {
   const mostrarTodoPorFiltro = filtroEstado === 'finalizado'
   const listaActivos = mostrarTodoPorFiltro ? listaBase : listaBase.filter(p => !p.estados?.includes('finalizado'))
   const listaFinalizados = mostrarTodoPorFiltro ? [] : listaBase.filter(p => p.estados?.includes('finalizado'))
-  const lista = mostrarTodoPorFiltro ? listaBase : [...listaActivos, ...(mostrarFinalizados ? listaFinalizados : [])]
 
   const hayFiltrosActivos = search || filters.prioridad || filters.tipo || filtroEstado || filtroTag || fechaDesde || fechaHasta
 
@@ -144,14 +155,90 @@ export default function PedidosList({ onNew }) {
     setSearch(''); setFiltroEstado(''); setFiltroTag(''); setFechaDesde(''); setFechaHasta('')
   }
 
+  function renderPedido(pedido) {
+    const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
+    const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
+    const entregables = Array.isArray(pedido.entregable)
+      ? pedido.entregable
+      : pedido.entregable ? [pedido.entregable] : []
+
+    if (vista === 'compact') return (
+      <div key={pedido.id}
+        onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
+        role="button" tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
+        className="pedido-card-compact"
+      >
+        {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
+        <span className="pedido-asunto-compact">{pedido.asunto}</span>
+        <div className="flex gap-[0.3rem] shrink-0">
+          {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+        </div>
+        {pedido.fecha_limite && (
+          <span className="pedido-meta-item">
+            <Calendar size={12} />
+            {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })}
+          </span>
+        )}
+      </div>
+    )
+
+    return (
+      <div key={pedido.id}
+        onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
+        role="button" tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
+        className="pedido-card-full"
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
+            {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span className="tipo-label" style={{ color: tipo.color }}>{tipo.label}</span> : null })()}
+          </div>
+          <div className="flex gap-[0.375rem] flex-wrap">
+            {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+          </div>
+        </div>
+        <h3 className="pedido-title">{pedido.asunto}</h3>
+        <EntregablesInline entregables={entregables} />
+        {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
+        <div className="pedido-meta">
+          {pedido.fecha_limite && (
+            <span className="pedido-meta-item">
+              <Calendar size={13} />
+              {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
+            </span>
+          )}
+          {pedido.pedido_asignados?.length > 0 && (
+            <span className="pedido-meta-item">
+              <User size={13} />
+              {pedido.pedido_asignados.length} asignado{pedido.pedido_asignados.length !== 1 ? 's' : ''}
+            </span>
+          )}
+          {pedido.tags?.length > 0 && (
+            <div className="flex gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
+              {pedido.tags.map(t => (
+                <button key={t} onClick={() => setFiltroTag(t)}
+                  className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
+                  <Tag size={9} />{t}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const totalVisible = listaActivos.length + (mostrarFinalizados ? listaFinalizados.length : 0)
+
   return (
     <div className="page-root">
 
-      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Pedidos</h1>
-          <p className="page-subtitle">{lista.length} pedido{lista.length !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">{totalVisible} pedido{totalVisible !== 1 ? 's' : ''}</p>
         </div>
         {role !== ROLES.VIEWER && (
           <button onClick={onNew} className="btn-header-action">
@@ -160,7 +247,6 @@ export default function PedidosList({ onNew }) {
         )}
       </div>
 
-      {/* Panel de filtros */}
       <div className="panel">
         <div className="panel-header" onClick={() => setFiltrosOpen(v => !v)}>
           <div className="panel-header-left">
@@ -185,7 +271,6 @@ export default function PedidosList({ onNew }) {
 
         {filtrosOpen && (
           <div className="panel-body">
-            {/* Búsqueda */}
             <div className="search-wrapper">
               <span className="search-icon"><Search size={15} /></span>
               <input
@@ -195,8 +280,6 @@ export default function PedidosList({ onNew }) {
                 className="input-icon-left"
               />
             </div>
-
-            {/* Selects */}
             <div className="filters-row">
               <select value={filters.prioridad} onChange={e => setFilters(f => ({ ...f, prioridad: e.target.value }))} className="select-auto">
                 <option value="">Todas las prioridades</option>
@@ -215,8 +298,6 @@ export default function PedidosList({ onNew }) {
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
               )}
             </div>
-
-            {/* Tag activo */}
             {filtroTag && (
               <div className="tag-filter-row">
                 <span className="tag-filter-label">Tag:</span>
@@ -226,8 +307,6 @@ export default function PedidosList({ onNew }) {
                 </span>
               </div>
             )}
-
-            {/* Fechas */}
             <div className="filter-dates-row">
               <div className="filter-date-col">
                 <span className="filter-date-label">Desde</span>
@@ -249,7 +328,7 @@ export default function PedidosList({ onNew }) {
 
       {loading && <div className="loading-text">Cargando pedidos…</div>}
 
-      {!loading && lista.length === 0 && (
+      {!loading && listaActivos.length === 0 && !mostrarFinalizados && (
         <div className="empty-state">
           <Filter size={32} />
           <p>No hay pedidos.</p>
@@ -269,85 +348,23 @@ export default function PedidosList({ onNew }) {
         </button>
       )}
 
-      {/* Lista de pedidos */}
       <div className="flex flex-col" style={{ gap: vista === 'compact' ? '0.375rem' : '0.625rem' }}>
-        {lista.map(pedido => {
-          const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-          const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
-          const entregables = Array.isArray(pedido.entregable)
-            ? pedido.entregable
-            : pedido.entregable ? [pedido.entregable] : []
+        {/* Activos */}
+        {!mostrarTodoPorFiltro && mostrarFinalizados && listaActivos.length > 0 && (
+          <GrupoLabel texto="Activos" />
+        )}
+        {mostrarTodoPorFiltro
+          ? listaBase.map(p => renderPedido(p))
+          : listaActivos.map(p => renderPedido(p))
+        }
 
-          if (vista === 'compact') return (
-            <div key={pedido.id}
-              onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
-              role="button" tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
-              className="pedido-card-compact"
-            >
-              {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-              <span className="pedido-asunto-compact">{pedido.asunto}</span>
-              <div className="flex gap-[0.3rem] shrink-0">
-                {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-              </div>
-              {pedido.fecha_limite && (
-                <span className="pedido-meta-item">
-                  <Calendar size={12} />
-                  {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })}
-                </span>
-              )}
-            </div>
-          )
-
-          return (
-            <div key={pedido.id}
-              onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
-              role="button" tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app/pedidos' } })}
-              className="pedido-card-full"
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-                  {(() => { const tipo = tipos.find(t => t.value === pedido.tipo); return tipo ? <span className="tipo-label" style={{ color: tipo.color }}>{tipo.label}</span> : null })()}
-                </div>
-                <div className="flex gap-[0.375rem] flex-wrap">
-                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-                </div>
-              </div>
-
-              <h3 className="pedido-title">{pedido.asunto}</h3>
-              <EntregablesInline entregables={entregables} />
-
-              {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
-
-              <div className="pedido-meta">
-                {pedido.fecha_limite && (
-                  <span className="pedido-meta-item">
-                    <Calendar size={13} />
-                    {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
-                  </span>
-                )}
-                {pedido.pedido_asignados?.length > 0 && (
-                  <span className="pedido-meta-item">
-                    <User size={13} />
-                    {pedido.pedido_asignados.length} asignado{pedido.pedido_asignados.length !== 1 ? 's' : ''}
-                  </span>
-                )}
-                {pedido.tags?.length > 0 && (
-                  <div className="flex gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
-                    {pedido.tags.map(t => (
-                      <button key={t} onClick={() => setFiltroTag(t)}
-                        className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
-                        <Tag size={9} />{t}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        {/* Finalizados */}
+        {!mostrarTodoPorFiltro && mostrarFinalizados && listaFinalizados.length > 0 && (
+          <>
+            <GrupoLabel texto="Finalizados" />
+            {listaFinalizados.map(p => renderPedido(p))}
+          </>
+        )}
       </div>
 
     </div>

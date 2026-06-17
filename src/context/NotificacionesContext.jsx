@@ -1,8 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 const NotificacionesContext = createContext(null)
+const LIMITE_NOTIFICACIONES = 50
+const FEEDBACK_DURATION = 4000
 
 function playNotifSound() {
   try {
@@ -25,7 +27,9 @@ export function NotificacionesProvider({ children }) {
   const [notificaciones, setNotificaciones] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [toast, setToast] = useState(null)
+  const [feedback, setFeedback] = useState(null) // { type: 'success'|'error'|'info', message: string }
   const sonidoActivo = useRef(localStorage.getItem('notif:sonido') !== 'false')
+  const feedbackTimer = useRef(null)
 
   async function fetchNotificaciones() {
     if (!user) return
@@ -34,9 +38,21 @@ export function NotificacionesProvider({ children }) {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(200)
-    setNotificaciones(data ?? [])
-    setUnreadCount((data ?? []).filter(n => !n.leida).length)
+      .limit(60)
+
+    const todas = data ?? []
+
+    if (todas.length > LIMITE_NOTIFICACIONES) {
+      const aEliminar = todas.slice(LIMITE_NOTIFICACIONES)
+      const ids = aEliminar.map(n => n.id)
+      await supabase.from('notificaciones').delete().in('id', ids)
+      const visibles = todas.slice(0, LIMITE_NOTIFICACIONES)
+      setNotificaciones(visibles)
+      setUnreadCount(visibles.filter(n => !n.leida).length)
+    } else {
+      setNotificaciones(todas)
+      setUnreadCount(todas.filter(n => !n.leida).length)
+    }
   }
 
   function handleNueva(payload) {
@@ -58,6 +74,24 @@ export function NotificacionesProvider({ children }) {
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [user?.id])
+
+  // ─── Feedback toasts (success / error / info) ─────────────────────────────
+
+  const showFeedback = useCallback((type, message) => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    setFeedback({ type, message })
+    feedbackTimer.current = setTimeout(() => setFeedback(null), FEEDBACK_DURATION)
+  }, [])
+
+  const showSuccess = useCallback((message) => showFeedback('success', message), [showFeedback])
+  const showError   = useCallback((message) => showFeedback('error',   message), [showFeedback])
+  const showInfo    = useCallback((message) => showFeedback('info',    message), [showFeedback])
+  const dismissFeedback = useCallback(() => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    setFeedback(null)
+  }, [])
+
+  // ─── Notificaciones ───────────────────────────────────────────────────────
 
   async function marcarLeida(id) {
     await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
@@ -120,6 +154,8 @@ export function NotificacionesProvider({ children }) {
       marcarTodasLeidas, marcarTodasNoLeidas,
       eliminar, eliminarVarias, eliminarTodas,
       toggleSonido, sonidoActivo: sonidoActivo.current,
+      // Feedback
+      feedback, showSuccess, showError, showInfo, dismissFeedback,
     }}>
       {children}
     </NotificacionesContext.Provider>

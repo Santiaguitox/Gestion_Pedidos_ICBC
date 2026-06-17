@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { PRIORIDADES } from '@/lib/constants'
 import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
@@ -13,6 +14,7 @@ export default function Papelera() {
   const [loading, setLoading] = useState(true)
   const { tipos } = useTipos()
   const { restaurarPedido } = usePedidos()
+  const { showSuccess, showError } = useNotificaciones()
 
   async function fetchEliminados() {
     setLoading(true)
@@ -28,8 +30,13 @@ export default function Papelera() {
   useEffect(() => { fetchEliminados() }, [])
 
   async function handleRestaurar(id) {
-    await restaurarPedido(id)
-    fetchEliminados()
+    try {
+      await restaurarPedido(id)
+      showSuccess('Pedido restaurado correctamente')
+      fetchEliminados()
+    } catch (err) {
+      showError(err.message || 'No se pudo restaurar el pedido')
+    }
   }
 
   return (

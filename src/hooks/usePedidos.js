@@ -15,6 +15,15 @@ function limpiarCampos(data) {
   return limpio
 }
 
+// Wrapper silencioso para registrarActividad — nunca rompe el flujo principal
+async function logActividad(...args) {
+  try {
+    await registrarActividad(...args)
+  } catch (err) {
+    console.warn('[actividad]', err)
+  }
+}
+
 export function usePedidos(filters = {}) {
   const { user } = useAuth()
   const [pedidos, setPedidos] = useState([])
@@ -68,7 +77,7 @@ export function usePedidos(filters = {}) {
         )
       }
     }
-    await registrarActividad(nuevo.id, user?.id, TIPO_ACTIVIDAD.CREACION)
+    await logActividad(nuevo.id, user?.id, TIPO_ACTIVIDAD.CREACION)
     await fetchPedidos()
     return nuevo
   }
@@ -82,12 +91,12 @@ export function usePedidos(filters = {}) {
     if (error) throw error
 
     if (campos.prioridad && anterior?.prioridad !== campos.prioridad) {
-      await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_PRIORIDAD, { anterior: anterior.prioridad, nuevo: campos.prioridad })
+      await logActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_PRIORIDAD, { anterior: anterior.prioridad, nuevo: campos.prioridad })
     }
     if (campos.estados) {
       const anteriores = anterior?.estados ?? []
       if (JSON.stringify([...anteriores].sort()) !== JSON.stringify([...campos.estados].sort())) {
-        await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos: campos.estados })
+        await logActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos: campos.estados })
       }
     }
     if (asignados !== undefined) {
@@ -113,12 +122,12 @@ export function usePedidos(filters = {}) {
       if (agregados.length || removidos.length) {
         const { data: perfiles } = await supabase.from('profiles').select('id, full_name').in('id', [...agregados, ...removidos])
         const nombre = uid => perfiles?.find(p => p.id === uid)?.full_name ?? uid
-        await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.ASIGNACION, { agregados: agregados.map(nombre), removidos: removidos.map(nombre) })
+        await logActividad(id, user?.id, TIPO_ACTIVIDAD.ASIGNACION, { agregados: agregados.map(nombre), removidos: removidos.map(nombre) })
       }
     }
-    const camposEditados = Object.keys(campos).filter(k => !['prioridad','estados'].includes(k))
+    const camposEditados = Object.keys(campos).filter(k => !['prioridad', 'estados'].includes(k))
     if (camposEditados.length > 0) {
-      await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.EDICION)
+      await logActividad(id, user?.id, TIPO_ACTIVIDAD.EDICION)
     }
     await fetchPedidos()
   }
@@ -127,14 +136,14 @@ export function usePedidos(filters = {}) {
     const { error } = await supabase.from('pedidos')
       .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id }).eq('id', id)
     if (error) throw error
-    await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.ELIMINACION)
+    await logActividad(id, user?.id, TIPO_ACTIVIDAD.ELIMINACION)
     await fetchPedidos()
   }
 
   async function restaurarPedido(id) {
     const { error } = await supabase.from('pedidos').update({ deleted_at: null, deleted_by: null }).eq('id', id)
     if (error) throw error
-    await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.RESTAURACION)
+    await logActividad(id, user?.id, TIPO_ACTIVIDAD.RESTAURACION)
     await fetchPedidos()
   }
 

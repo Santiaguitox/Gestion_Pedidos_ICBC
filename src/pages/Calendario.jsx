@@ -3,13 +3,47 @@ import { useNavigate } from 'react-router-dom'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useEstados } from '@/hooks/useEstados'
 import { PRIORIDADES } from '@/lib/constants'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isToday, isPast, isFuture } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isToday, isPast } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 
 function useIsMobile() {
   return window.innerWidth <= 640
+}
+
+function EstadoChip({ est, estados }) {
+  const e = estados.find(x => x.value === est)
+  return (
+    <span style={{
+      fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
+      background: e ? `${e.color}18` : 'var(--bg-hover)',
+      color: e ? e.color : 'var(--text-muted)',
+      border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
+    }}>
+      {e ? e.label : est.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
+function PedidoItemPanel({ p, estados, navigate, last }) {
+  const prio = PRIORIDADES.find(x => x.value === p.prioridad)
+  const esFinalizado = p.estados?.includes('finalizado')
+  return (
+    <div onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
+      className="cal-pedido-item"
+      style={{ borderBottom: !last ? '1px solid var(--border)' : 'none', opacity: esFinalizado ? 0.6 : 1 }}>
+      <div className="flex items-center gap-2">
+        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: prio?.color ?? '#6B7280', flexShrink: 0 }} />
+        <span className="cal-pedido-nombre">{p.asunto}</span>
+      </div>
+      {p.estados?.length > 0 && (
+        <div className="cal-pedido-estados">
+          {p.estados.map(est => <EstadoChip key={est} est={est} estados={estados} />)}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function Calendario() {
@@ -23,11 +57,15 @@ export default function Calendario() {
 
   const days = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) })
   const startPad = (getDay(startOfMonth(currentDate)) + 6) % 7
-  const pedidosConFecha = pedidos.filter(p => p.fecha_limite && !p.estados?.includes('finalizado'))
+
+  // Todos los pedidos con fecha, sin importar estado
   const todosConFecha = pedidos.filter(p => p.fecha_limite)
+  const activosConFecha = todosConFecha.filter(p => !p.estados?.includes('finalizado'))
 
   const diaRef = selectedDay ?? new Date()
   const pedidosDia = todosConFecha.filter(p => isSameDay(new Date(p.fecha_limite + 'T00:00:00'), diaRef))
+  const pedidosDiaActivos = pedidosDia.filter(p => !p.estados?.includes('finalizado'))
+  const pedidosDiaFinalizados = pedidosDia.filter(p => p.estados?.includes('finalizado'))
 
   const pedidosMes = todosConFecha.filter(p => {
     const d = new Date(p.fecha_limite + 'T00:00:00')
@@ -35,7 +73,7 @@ export default function Calendario() {
   })
   const vencidosMes = pedidosMes.filter(p => isPast(new Date(p.fecha_limite + 'T00:00:00')) && !p.estados?.includes('finalizado'))
 
-  // Para mobile — agrupar pedidos del mes por día
+  // Timeline: agrupar todos (activos + finalizados) por día
   const pedidosPorDia = days.reduce((acc, day) => {
     const dp = todosConFecha.filter(p => isSameDay(new Date(p.fecha_limite + 'T00:00:00'), day))
     if (dp.length > 0) acc.push({ day, pedidos: dp })
@@ -89,78 +127,59 @@ export default function Calendario() {
         <Nav />
       </div>
 
-      {/* Timeline o Mobile */}
       {mostrarTimeline ? (
         <div className="flex flex-col gap-3">
 
-          {/* Panel pedidos del día — solo en mobile */}
-          {isMobile && <div className="cal-panel">
-            <div className="cal-panel-header">
-              <p className="cal-panel-title">
-                {selectedDay
-                  ? format(selectedDay, "d 'de' MMMM", { locale: es })
-                  : format(new Date(), "d 'de' MMMM", { locale: es })}
-              </p>
-              <p className="cal-panel-subtitle">
-                {pedidosDia.length === 0 ? 'Sin pedidos' : `${pedidosDia.length} pedido${pedidosDia.length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
-            <div className="cal-panel-body">
-              {pedidosDia.length === 0 ? (
-                <div className="cal-empty"><Calendar size={24} /><p>Tocá un día para ver sus pedidos</p></div>
-              ) : pedidosDia.map((p, i) => {
-                const prio = PRIORIDADES.find(x => x.value === p.prioridad)
-                return (
-                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
-                    className="cal-pedido-item"
-                    style={{ borderBottom: i < pedidosDia.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div className="flex items-center gap-2">
-                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: prio?.color ?? '#6B7280', flexShrink: 0 }} />
-                      <span className="cal-pedido-nombre">{p.asunto}</span>
-                    </div>
-                    {p.estados?.length > 0 && (
-                      <div className="cal-pedido-estados">
-                        {p.estados.map(est => {
-                          const e = estados.find(x => x.value === est)
-                          return (
-                            <span key={est} style={{
-                              fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
-                              background: e ? `${e.color}18` : 'var(--bg-hover)',
-                              color: e ? e.color : 'var(--text-muted)',
-                              border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
-                            }}>
-                              {e ? e.label : est.replace(/_/g, ' ')}
-                            </span>
-                          )
-                        })}
-                      </div>
+          {isMobile && (
+            <div className="cal-panel">
+              <div className="cal-panel-header">
+                <p className="cal-panel-title">
+                  {selectedDay ? format(selectedDay, "d 'de' MMMM", { locale: es }) : format(new Date(), "d 'de' MMMM", { locale: es })}
+                </p>
+                <p className="cal-panel-subtitle">
+                  {pedidosDia.length === 0 ? 'Sin pedidos' : `${pedidosDia.length} pedido${pedidosDia.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <div className="cal-panel-body">
+                {pedidosDia.length === 0 ? (
+                  <div className="cal-empty"><Calendar size={24} /><p>Tocá un día para ver sus pedidos</p></div>
+                ) : (
+                  <>
+                    {pedidosDiaActivos.map((p, i) => (
+                      <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
+                        last={i === pedidosDiaActivos.length - 1 && pedidosDiaFinalizados.length === 0} />
+                    ))}
+                    {pedidosDiaFinalizados.length > 0 && (
+                      <>
+                        <div className="cal-section-label">Finalizados</div>
+                        {pedidosDiaFinalizados.map((p, i) => (
+                          <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
+                            last={i === pedidosDiaFinalizados.length - 1} />
+                        ))}
+                      </>
                     )}
-                  </div>
-                )
-              })}
+                  </>
+                )}
+              </div>
             </div>
-          </div>}
+          )}
 
-          {/* Timeline */}
           {pedidosPorDia.length === 0 ? (
             <div className="empty-state"><Calendar size={32} /><p>No hay pedidos este mes</p></div>
           ) : pedidosPorDia.map(({ day, pedidos: dp }) => {
             const esHoy = isToday(day)
             const esPasado = isPast(day) && !esHoy
+            const activos = dp.filter(p => !p.estados?.includes('finalizado'))
+            const finalizados = dp.filter(p => p.estados?.includes('finalizado'))
             return (
               <div key={day.toISOString()} className="flex gap-3">
-                {/* Fecha — clickeable para cargar en el panel */}
-                <div style={{
-                    flexShrink: 0, width: '48px', display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', paddingTop: '0.25rem',
-                  }}>
+                <div style={{ flexShrink: 0, width: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '0.25rem' }}>
                   <span style={{
                     width: '36px', height: '36px', borderRadius: '50%', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9375rem',
                     background: esHoy ? 'var(--icbc-red)' : 'var(--bg-surface)',
                     color: esHoy ? '#fff' : esPasado ? 'var(--text-muted)' : 'var(--text-primary)',
                     border: esHoy ? 'none' : '1px solid var(--border)',
-                    transition: 'all 150ms',
                   }}>
                     {format(day, 'd')}
                   </span>
@@ -168,9 +187,8 @@ export default function Calendario() {
                     {format(day, 'EEE', { locale: es })}
                   </span>
                 </div>
-                {/* Pedidos del día */}
                 <div className="flex flex-col gap-2 flex-1">
-                  {dp.map(p => {
+                  {activos.map(p => {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                     return (
                       <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
@@ -181,31 +199,40 @@ export default function Calendario() {
                         </div>
                         {p.estados?.length > 0 && (
                           <div className="flex gap-1 flex-wrap">
-                            {p.estados.map(est => {
-                              const e = estados.find(x => x.value === est)
-                              return (
-                                <span key={est} style={{
-                                  fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
-                                  background: e ? `${e.color}18` : 'var(--bg-hover)',
-                                  color: e ? e.color : 'var(--text-muted)',
-                                  border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
-                                }}>
-                                  {e ? e.label : est.replace(/_/g, ' ')}
-                                </span>
-                              )
-                            })}
+                            {p.estados.map(est => <EstadoChip key={est} est={est} estados={estados} />)}
                           </div>
                         )}
                       </div>
                     )
                   })}
+                  {finalizados.length > 0 && (
+                    <>
+                      <span className="cal-section-label">Finalizados</span>
+                      {finalizados.map(p => {
+                        const prio = PRIORIDADES.find(x => x.value === p.prioridad)
+                        return (
+                          <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
+                            className="pedido-card-full" style={{ cursor: 'pointer', opacity: 0.6 }}>
+                            <div className="flex items-center gap-2">
+                              {prio && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: prio.color, flexShrink: 0 }} />}
+                              <span className="pedido-title" style={{ fontSize: '0.875rem' }}>{p.asunto}</span>
+                            </div>
+                            {p.estados?.length > 0 && (
+                              <div className="flex gap-1 flex-wrap">
+                                {p.estados.map(est => <EstadoChip key={est} est={est} estados={estados} />)}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
                 </div>
               </div>
             )
           })}
         </div>
       ) : (
-        /* Grid desktop */
         <div className="cal-root">
           <div className="cal-grid">
             {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
@@ -215,7 +242,8 @@ export default function Calendario() {
               <div key={`pad-${i}`} className="cal-day-empty" />
             ))}
             {days.map(day => {
-              const dayPedidos = pedidosConFecha.filter(p => isSameDay(new Date(p.fecha_limite + 'T00:00:00'), day))
+              // Grid muestra todos (activos + finalizados)
+              const dayPedidos = todosConFecha.filter(p => isSameDay(new Date(p.fecha_limite + 'T00:00:00'), day))
               const todayFlag = isToday(day)
               const isSelected = selectedDay && isSameDay(day, selectedDay)
               const isPastDay = isPast(day) && !todayFlag
@@ -229,11 +257,12 @@ export default function Calendario() {
                   </span>
                   {dayPedidos.slice(0, 3).map(p => {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
+                    const esFinalizado = p.estados?.includes('finalizado')
                     return (
                       <div key={p.id}
                         onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } }) }}
                         className="cal-event"
-                        style={{ borderLeft: `3px solid ${prio?.color ?? '#6B7280'}` }}>
+                        style={{ borderLeft: `3px solid ${prio?.color ?? '#6B7280'}`, opacity: esFinalizado ? 0.5 : 1 }}>
                         <span className="cal-event-text">{p.asunto}</span>
                       </div>
                     )
@@ -244,6 +273,7 @@ export default function Calendario() {
             })}
           </div>
 
+          {/* Panel lateral */}
           <div className="cal-panel">
             <div className="cal-panel-header">
               <p className="cal-panel-title">
@@ -256,36 +286,23 @@ export default function Calendario() {
             <div className="cal-panel-body">
               {pedidosDia.length === 0 ? (
                 <div className="cal-empty"><Calendar size={24} /><p>No hay pedidos para este día</p></div>
-              ) : pedidosDia.map((p, i) => {
-                const prio = PRIORIDADES.find(x => x.value === p.prioridad)
-                return (
-                  <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
-                    className="cal-pedido-item"
-                    style={{ borderBottom: i < pedidosDia.length - 1 ? '1px solid var(--border)' : 'none', opacity: p.estados?.includes('finalizado') ? 0.6 : 1 }}>
-                    <div className="flex items-center gap-2">
-                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: prio?.color ?? '#6B7280', flexShrink: 0 }} />
-                      <span className="cal-pedido-nombre">{p.asunto}</span>
-                    </div>
-                    {p.estados?.length > 0 && (
-                      <div className="cal-pedido-estados">
-                        {p.estados.map(est => {
-                          const e = estados.find(x => x.value === est)
-                          return (
-                            <span key={est} style={{
-                              fontSize: '0.6875rem', padding: '0.1rem 0.4rem', borderRadius: '99px',
-                              background: e ? `${e.color}18` : 'var(--bg-hover)',
-                              color: e ? e.color : 'var(--text-muted)',
-                              border: `1px solid ${e ? `${e.color}40` : 'var(--border)'}`,
-                            }}>
-                              {e ? e.label : est.replace(/_/g, ' ')}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              ) : (
+                <>
+                  {pedidosDiaActivos.map((p, i) => (
+                    <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
+                      last={i === pedidosDiaActivos.length - 1 && pedidosDiaFinalizados.length === 0} />
+                  ))}
+                  {pedidosDiaFinalizados.length > 0 && (
+                    <>
+                      <div className="cal-section-label">Finalizados</div>
+                      {pedidosDiaFinalizados.map((p, i) => (
+                        <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
+                          last={i === pedidosDiaFinalizados.length - 1} />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

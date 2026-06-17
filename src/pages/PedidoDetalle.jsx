@@ -3,13 +3,16 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { labelActividad, registrarActividad } from '@/hooks/useActividad'
 import { PRIORIDADES, ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
+import { useInstancias } from '@/hooks/useInstancias'
 import { Badge } from '@/components/ui/Badge'
 import PedidoForm from '@/components/pedidos/PedidoForm'
-import { ArrowLeft, ExternalLink, Plus, Trash2, Edit, ChevronDown, ChevronUp, Copy, Check, Clock, Lock, Unlock, User } from 'lucide-react'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { ArrowLeft, ExternalLink, Plus, Trash2, Edit, ChevronDown, ChevronUp, Copy, Check, Clock, Lock, Unlock, User, FileSpreadsheet, X, CheckCircle } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -35,6 +38,25 @@ function Section({ title, icon, defaultOpen = true, badge, children }) {
         {open ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
       </button>
       {open && <div className="section-accordion-body">{children}</div>}
+    </div>
+  )
+}
+
+function SuccessModal({ message, onClose }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: '380px' }}>
+        <div className="modal-body" style={{ alignItems: 'center', textAlign: 'center', gap: '1rem' }}>
+          <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+            <CheckCircle size={26} color="#10B981" />
+          </div>
+          <div>
+            <h2 className="modal-title" style={{ marginBottom: '0.25rem' }}>¡Registrado!</h2>
+            <p className="text-muted-sm">{message}</p>
+          </div>
+          <button onClick={onClose} className="btn-primary" style={{ width: 'auto', marginTop: '0.25rem' }}>Cerrar</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -82,7 +104,7 @@ function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }) {
             return (
               <button key={e.value} onClick={() => toggle(e.value)}
                 className="estado-popover-item"
-                style={{ background: active ? `${e.color}12` : 'transparent', color: active ? e.color : 'var(--text-secondary)' }}
+                style={{ background: active ? `${e.color}12` : 'transparent', color: active ? e.color : 'var(--text-secondary)', whiteSpace: 'nowrap' }}
                 onMouseEnter={ev => { if (!active) ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onMouseLeave={ev => { if (!active) ev.currentTarget.style.background = 'transparent' }}>
                 <span className="estado-dot" style={{ background: active ? e.color : 'var(--border)', border: `2px solid ${active ? e.color : 'var(--border-strong)'}` }} />
@@ -146,9 +168,199 @@ function Historial({ pedidoId }) {
   )
 }
 
-function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, onToggle, onEliminar, onAgregar }) {
+// ─── Modal Sheet Diseño ───────────────────────────────────────────────────────
+function SheetDisenoModal({ pedido, subtarea, onClose, onConfirm }) {
+  const [data, setData] = useState({
+    nombre_campana: pedido.asunto ?? '',
+    fecha_pedido:   format(new Date(subtarea.created_at), "dd/MM/yyyy", { locale: es }),
+    hora_pedido:    format(new Date(subtarea.created_at), "HH:mm", { locale: es }),
+    descripcion:    subtarea.descripcion ?? '',
+    fecha_entrega:  subtarea.completada_at ? format(new Date(subtarea.completada_at), "yyyy-MM-dd") : '',
+    hora_entrega:   subtarea.completada_at ? format(new Date(subtarea.completada_at), "HH:mm") : '',
+    aclaraciones:   '',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setData(d => ({ ...d, [k]: v }))
+
+  async function handleConfirm() {
+    setSaving(true)
+    const fechaFmt = data.fecha_entrega ? format(new Date(data.fecha_entrega + 'T00:00:00'), "dd/MM/yyyy") : ''
+    await onConfirm({ ...data, fecha_entrega: fechaFmt })
+    setSaving(false)
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: '520px' }}>
+        <div className="modal-header">
+          <h2 className="modal-title">Registrar tarea de diseño</h2>
+          <button onClick={onClose} className="modal-close"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="text-muted-sm" style={{ marginBottom: '0.75rem' }}>
+            Revisá y editá los datos antes de confirmar.
+          </p>
+          <div className="flex flex-col gap-2">
+            <div className="sheet-field">
+              <label className="field-label">Nombre de campaña</label>
+              <input value={data.nombre_campana} onChange={e => set('nombre_campana', e.target.value)} placeholder="Nombre de campaña…" />
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Fecha pedido</label>
+                <input value={data.fecha_pedido} onChange={e => set('fecha_pedido', e.target.value)} placeholder="Fecha pedido…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Hora pedido</label>
+                <input value={data.hora_pedido} onChange={e => set('hora_pedido', e.target.value)} placeholder="HH:MM" maxLength={5} />
+              </div>
+            </div>
+            <div className="sheet-field">
+              <label className="field-label">Descripción</label>
+              <input value={data.descripcion} onChange={e => set('descripcion', e.target.value)} placeholder="Descripción…" />
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Fecha entrega</label>
+                <DatePicker value={data.fecha_entrega} onChange={val => set('fecha_entrega', val)} placeholder="Seleccionar fecha…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Hora entrega</label>
+                <input value={data.hora_entrega} onChange={e => set('hora_entrega', e.target.value)} placeholder="HH:MM" maxLength={5} />
+              </div>
+            </div>
+            <div className="sheet-field">
+              <label className="field-label">Aclaraciones</label>
+              <input value={data.aclaraciones} onChange={e => set('aclaraciones', e.target.value)} placeholder="Aclaraciones…" />
+            </div>
+          </div>
+          <div className="modal-footer" style={{ marginTop: '1.25rem' }}>
+            <button onClick={onClose} className="btn-secondary">Cancelar</button>
+            <button onClick={handleConfirm} disabled={saving} className="btn-primary"
+              style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Registrando…' : 'Confirmar y registrar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Sheet Pedidos ──────────────────────────────────────────────────────
+const TIPOS_ENVIO_LABELS = { test: 'Test', real: 'Real', otro: 'Otro' }
+
+function SheetModal({ pedido, entregables, onClose, onConfirm }) {
+  const primeraAprobacion = entregables.find(e => e.aprobado_at)
+  const fechaAprobRef = primeraAprobacion ? new Date(primeraAprobacion.aprobado_at) : new Date()
+
+  const [data, setData] = useState({
+    nombre_campana:    pedido.asunto ?? '',
+    fecha_pedido:      format(new Date(pedido.created_at), "dd/MM/yyyy", { locale: es }),
+    hora_pedido:       format(new Date(pedido.created_at), "HH:mm", { locale: es }),
+    descripcion:       pedido.descripcion ?? '',
+    instancia:         pedido.instancia ?? '',
+    fecha_aprobacion:  format(fechaAprobRef, "yyyy-MM-dd"),
+    hora_aprobacion:   format(fechaAprobRef, "HH:mm", { locale: es }),
+    cantidad_envios:   String(pedido.cantidad_envios ?? entregables.filter(e => e.nombre_pieza).length),
+    aclaraciones:      pedido.tipo_envio === 'otro' ? (pedido.tipo_envio_otro ?? '') : (TIPOS_ENVIO_LABELS[pedido.tipo_envio] ?? ''),
+    dia_programacion:  pedido.fecha_programacion ?? '',
+    hora_programacion: pedido.hora_programacion ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setData(d => ({ ...d, [k]: v }))
+
+  async function handleConfirm() {
+    setSaving(true)
+    const diaFmt        = data.dia_programacion  ? format(new Date(data.dia_programacion  + 'T00:00:00'), "dd/MM/yyyy") : ''
+    const fechaAprobFmt = data.fecha_aprobacion  ? format(new Date(data.fecha_aprobacion  + 'T00:00:00'), "dd/MM/yyyy") : ''
+    await onConfirm({ ...data, dia_programacion: diaFmt, fecha_aprobacion: fechaAprobFmt })
+    setSaving(false)
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: '560px' }}>
+        <div className="modal-header">
+          <h2 className="modal-title">Registrar en Google Sheets</h2>
+          <button onClick={onClose} className="modal-close"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="text-muted-sm" style={{ marginBottom: '0.75rem' }}>
+            Revisá y editá los datos antes de confirmar el registro.
+          </p>
+          <div className="flex flex-col gap-2">
+            <div className="sheet-field">
+              <label className="field-label">Nombre de campaña</label>
+              <input value={data.nombre_campana} onChange={e => set('nombre_campana', e.target.value)} placeholder="Nombre de campaña…" />
+            </div>
+            <div className="sheet-field">
+              <label className="field-label">Descripción</label>
+              <input value={data.descripcion} onChange={e => set('descripcion', e.target.value)} placeholder="Descripción…" />
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Fecha pedido</label>
+                <input value={data.fecha_pedido} onChange={e => set('fecha_pedido', e.target.value)} placeholder="Fecha pedido…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Hora pedido</label>
+                <input value={data.hora_pedido} onChange={e => set('hora_pedido', e.target.value)} placeholder="HH:MM" maxLength={5} />
+              </div>
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Instancia</label>
+                <input value={data.instancia} onChange={e => set('instancia', e.target.value)} placeholder="Instancia…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Cantidad envíos</label>
+                <input value={data.cantidad_envios} onChange={e => set('cantidad_envios', e.target.value)} placeholder="Cantidad…" />
+              </div>
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Fecha aprobación</label>
+                <DatePicker value={data.fecha_aprobacion} onChange={val => set('fecha_aprobacion', val)} placeholder="Seleccionar fecha…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Hora aprobación</label>
+                <input value={data.hora_aprobacion} onChange={e => set('hora_aprobacion', e.target.value)} placeholder="HH:MM" maxLength={5} />
+              </div>
+            </div>
+            <div className="sheet-field">
+              <label className="field-label">Aclaraciones</label>
+              <input value={data.aclaraciones} onChange={e => set('aclaraciones', e.target.value)} placeholder="Aclaraciones…" />
+            </div>
+            <div className="sheet-grid-2">
+              <div className="sheet-field">
+                <label className="field-label">Día de programación</label>
+                <DatePicker value={data.dia_programacion} onChange={val => set('dia_programacion', val)} placeholder="Seleccionar fecha…" />
+              </div>
+              <div className="sheet-field">
+                <label className="field-label">Hora programación</label>
+                <input value={data.hora_programacion} onChange={e => set('hora_programacion', e.target.value)} placeholder="HH:MM" maxLength={5} />
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer" style={{ marginTop: '1.25rem' }}>
+            <button onClick={onClose} className="btn-secondary">Cancelar</button>
+            <button onClick={handleConfirm} disabled={saving} className="btn-primary"
+              style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Registrando…' : 'Confirmar y registrar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usuariosConArea, onToggle, onEliminar, onAgregar, pedido, showSuccess, showError }) {
   const [descripcion, setDescripcion] = useState('')
   const [asignadoA, setAsignadoA] = useState('')
+  const [sheetDiseno, setSheetDiseno] = useState(null)
+  const [successMsg, setSuccessMsg] = useState('')
 
   function handleAgregar() {
     if (!descripcion.trim()) return
@@ -159,6 +371,31 @@ function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, onToggle, o
   const completadas = subtareas.filter(s => s.completada).length
   const total = subtareas.length
   const progreso = total > 0 ? Math.round((completadas / total) * 100) : 0
+
+  function esDiseno(userId) {
+    return usuariosConArea.find(x => x.id === userId)?.area_equipo === 'Diseño'
+  }
+
+  async function handleRegistrarDiseno(data, subtarea) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/escribir-sheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          hoja: 'diseno',
+          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.fecha_entrega, data.hora_entrega, data.aclaraciones]
+        })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error ?? 'Error al registrar')
+      await supabase.from('subtareas').update({ registrado_sheet: true, registrado_sheet_at: new Date().toISOString() }).eq('id', subtarea.id)
+      setSheetDiseno(null)
+      setSuccessMsg('La tarea de diseño fue registrada en Google Sheets.')
+    } catch (err) {
+      showError(err.message || 'Error al registrar en Sheet')
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -206,6 +443,21 @@ function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, onToggle, o
                   <span className="subtarea-asignado-nombre">{s.profiles.full_name}</span>
                 </div>
               )}
+              {canEdit && s.asignado_a && esDiseno(s.asignado_a) && s.completada && (
+                s.registrado_sheet ? (
+                  <div className="flex items-center gap-1" style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#10B981' }}>
+                    <Check size={12} strokeWidth={2.5} />
+                    Registrado en Sheet
+                    {s.registrado_sheet_at && ` · ${format(new Date(s.registrado_sheet_at), "d MMM HH:mm", { locale: es })}`}
+                  </div>
+                ) : (
+                  <button onClick={() => setSheetDiseno(s)}
+                    className="flex items-center gap-1"
+                    style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--icomm-violet)', fontWeight: 500 }}>
+                    <FileSpreadsheet size={13} />Registrar en Sheet
+                  </button>
+                )
+              )}
             </div>
           </div>
         ))}
@@ -226,6 +478,16 @@ function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, onToggle, o
           </div>
         </div>
       )}
+
+      {sheetDiseno && (
+        <SheetDisenoModal
+          pedido={pedido}
+          subtarea={sheetDiseno}
+          onClose={() => setSheetDiseno(null)}
+          onConfirm={(data) => handleRegistrarDiseno(data, sheetDiseno)}
+        />
+      )}
+      {successMsg && <SuccessModal message={successMsg} onClose={() => setSuccessMsg('')} />}
     </div>
   )
 }
@@ -234,7 +496,6 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar }) {
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
   const [editando, setEditando] = useState(false)
-  const [confirm, setConfirm] = useState(null) // { title, message, onConfirm }
   const bloqueado = ent.aprobado && !isSuperAdmin
 
   async function guardar() {
@@ -274,7 +535,6 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar }) {
           </button>
         )}
       </div>
-
       {editando && !bloqueado ? (
         <div className="entregable-edit-form">
           <input value={form.nombre_pieza} onChange={e => setForm(f => ({ ...f, nombre_pieza: e.target.value }))} placeholder="Nombre de la pieza" />
@@ -324,19 +584,14 @@ function CopyAllBtn({ entregables }) {
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <button onClick={handleCopy}
-      className="entregables-copy-all"
-      style={{
-        color: copied ? '#10B981' : 'var(--text-secondary)',
-        border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`,
-        background: copied ? 'rgba(16,185,129,0.06)' : 'transparent',
-      }}>
+    <button onClick={handleCopy} className="entregables-copy-all"
+      style={{ color: copied ? '#10B981' : 'var(--text-secondary)', border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`, background: copied ? 'rgba(16,185,129,0.06)' : 'transparent' }}>
       {copied ? <><Check size={13} />¡Copiado!</> : <><Copy size={13} />Copiar todo</>}
     </button>
   )
 }
 
-function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onUpdate }) {
+function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onUpdate, setConfirm }) {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nombre_pieza: '', link_online: '' })
   const [saving, setSaving] = useState(false)
@@ -392,17 +647,25 @@ export default function PedidoDetalle() {
   const backTo = state?.from ?? '/app/pedidos'
   const backLabel = backTo === '/app' ? 'Dashboard' : backTo === '/app/calendario' ? 'Calendario' : backTo === '/app/notificaciones' ? 'Notificaciones' : 'Pedidos'
   const { role, user } = useAuth()
+  const { showSuccess, showError } = useNotificaciones()
   const { actualizarPedido, eliminarPedido } = usePedidos()
   const [pedido, setPedido] = useState(null)
   const [loading, setLoading] = useState(true)
   const [editando, setEditando] = useState(false)
-  const [confirm, setConfirm] = useState(null) // { title, message, onConfirm }
+  const [confirm, setConfirm] = useState(null)
   const [usuarios, setUsuarios] = useState([])
+  const [usuariosConArea, setUsuariosConArea] = useState([])
   const { estados } = useEstados()
   const { tipos } = useTipos()
+  const { instancias } = useInstancias()
+  const [showSheet, setShowSheet] = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
 
   useEffect(() => {
-    supabase.from('profiles').select('id, full_name').order('full_name').then(({ data }) => setUsuarios(data ?? []))
+    supabase.from('profiles').select('id, full_name, area_equipo').order('full_name').then(({ data }) => {
+      setUsuarios(data ?? [])
+      setUsuariosConArea(data ?? [])
+    })
   }, [])
 
   async function fetchPedido() {
@@ -416,6 +679,7 @@ export default function PedidoDetalle() {
   useEffect(() => { fetchPedido() }, [id])
 
   async function handleEdit(data) { await actualizarPedido(id, data); setEditando(false); fetchPedido() }
+
   function handleDelete() {
     setConfirm({
       title: 'Eliminar pedido',
@@ -437,10 +701,35 @@ export default function PedidoDetalle() {
   }
 
   async function toggleSubtarea(subId, completada) {
-    await supabase.from('subtareas').update({ completada: !completada }).eq('id', subId); fetchPedido()
+    await supabase.from('subtareas').update({
+      completada: !completada,
+      completada_at: !completada ? new Date().toISOString() : null
+    }).eq('id', subId)
+    fetchPedido()
   }
+
   async function eliminarSubtarea(subId) {
     await supabase.from('subtareas').delete().eq('id', subId); fetchPedido()
+  }
+
+  async function handleRegistrarSheet(data) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/escribir-sheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          hoja: 'pedidos',
+          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.instancia, data.fecha_aprobacion, data.hora_aprobacion, data.cantidad_envios, data.aclaraciones, data.dia_programacion, data.hora_programacion]
+        })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error ?? 'Error al registrar en Sheet')
+      setShowSheet(false)
+      setSuccessMsg('El pedido fue registrado en Google Sheets correctamente.')
+    } catch (err) {
+      showError(err.message || 'Error al registrar en Sheet')
+    }
   }
 
   if (loading) return <div className="loading-text">Cargando…</div>
@@ -458,8 +747,6 @@ export default function PedidoDetalle() {
 
   return (
     <div className="detalle-root">
-
-      {/* Topbar */}
       <div className="detalle-topbar">
         <button onClick={() => navigate(backTo)} className="btn-back">
           <ArrowLeft size={16} />Volver a {backLabel}
@@ -472,7 +759,6 @@ export default function PedidoDetalle() {
         )}
       </div>
 
-      {/* Header */}
       <div className="detalle-header">
         <div className="detalle-meta-row">
           {prio && <Badge label={prio.label} color={prio.color} />}
@@ -492,7 +778,6 @@ export default function PedidoDetalle() {
         </div>
       </div>
 
-      {/* Info cards */}
       <div className="detalle-info-grid">
         <div className="info-card">
           <p className="info-card-label">Asignados</p>
@@ -522,39 +807,90 @@ export default function PedidoDetalle() {
             </div>
           </div>
         )}
+        {pedido.instancia && (
+          <div className="info-card">
+            <p className="info-card-label">Instancia</p>
+            {(() => {
+              const inst = instancias.find(i => i.value === pedido.instancia)
+              return inst
+                ? <div style={{ display: 'inline-flex' }}><Badge label={inst.label} color={inst.color} size="sm" /></div>
+                : <p className="info-card-value">{pedido.instancia}</p>
+            })()}
+          </div>
+        )}
+        {pedido.tipo_envio && (
+          <div className="info-card">
+            <p className="info-card-label">Tipo de envío</p>
+            <p className="info-card-value">
+              {pedido.tipo_envio === 'otro' ? pedido.tipo_envio_otro || 'Otro' : pedido.tipo_envio === 'test' ? 'Test' : 'Real'}
+            </p>
+          </div>
+        )}
+        {pedido.cantidad_envios != null && (
+          <div className="info-card">
+            <p className="info-card-label">Cantidad de envíos</p>
+            <p className="info-card-value">{pedido.cantidad_envios}</p>
+          </div>
+        )}
+        {(pedido.fecha_programacion || pedido.hora_programacion) && (
+          <div className="info-card">
+            <p className="info-card-label">Programación</p>
+            <p className="info-card-value">
+              {pedido.fecha_programacion && format(new Date(pedido.fecha_programacion + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
+              {pedido.hora_programacion && ` a las ${pedido.hora_programacion}`}
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Subtareas */}
       <Section title="Subtareas" defaultOpen={true}
         badge={subtareas.length > 0 ? `${subtareasCompletadas}/${subtareas.length}` : null}>
-        <SubtareasTimeline subtareas={subtareas} canWrite={canWrite} canEdit={canEdit}
-          usuarios={usuarios} onToggle={toggleSubtarea} onEliminar={eliminarSubtarea} onAgregar={agregarSubtarea} />
+        <SubtareasTimeline
+          subtareas={subtareas} canWrite={canWrite} canEdit={canEdit}
+          usuarios={usuarios} usuariosConArea={usuariosConArea}
+          onToggle={toggleSubtarea} onEliminar={eliminarSubtarea} onAgregar={agregarSubtarea}
+          pedido={pedido}
+          showSuccess={showSuccess}
+          showError={showError}
+        />
       </Section>
 
-      {/* Entregables */}
       <Section title="Piezas entregables" defaultOpen={true}
         badge={entregables.length > 0 ? entregables.length : null}>
         <EntregablesSection pedidoId={id} entregables={entregables} canWrite={canWrite}
-          isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} />
+          isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm} />
       </Section>
 
-      {/* Historial */}
       <Section title="Historial de actividad" icon={<Clock size={15} />} defaultOpen={false}>
         <Historial pedidoId={id} />
       </Section>
 
+      {canEdit && pedido.estados?.includes('finalizado') && (
+        <div className="flex justify-end">
+          <button onClick={() => setShowSheet(true)}
+            className="btn-primary flex items-center gap-2" style={{ width: 'auto' }}>
+            <FileSpreadsheet size={16} />Registrar en Sheet
+          </button>
+        </div>
+      )}
+
       {editando && <PedidoForm pedido={pedido} onSave={handleEdit} onCancel={() => setEditando(false)} />}
 
-      {confirm && (
-        <ConfirmModal
-          open={true}
-          title={confirm.title}
-          message={confirm.message}
-          confirmLabel="Eliminar"
-          variant="danger"
-          onConfirm={confirm.onConfirm}
-          onCancel={() => setConfirm(null)}
+      {showSheet && (
+        <SheetModal
+          pedido={pedido}
+          entregables={entregables}
+          onClose={() => setShowSheet(false)}
+          onConfirm={handleRegistrarSheet}
         />
+      )}
+
+      {successMsg && <SuccessModal message={successMsg} onClose={() => setSuccessMsg('')} />}
+
+      {confirm && (
+        <ConfirmModal open={true} title={confirm.title} message={confirm.message}
+          confirmLabel="Eliminar" variant="danger"
+          onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />
       )}
     </div>
   )

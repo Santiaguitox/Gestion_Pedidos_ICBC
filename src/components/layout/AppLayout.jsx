@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 
 function NotifToast({ toast, onDismiss, onNavigate }) {
@@ -32,6 +32,29 @@ function NotifToast({ toast, onDismiss, onNavigate }) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+const FEEDBACK_CONFIG = {
+  success: { icon: CheckCircle2, color: '#22c55e',  label: 'Listo'       },
+  error:   { icon: AlertCircle,  color: '#D0111B',  label: 'Error'       },
+  info:    { icon: Info,         color: '#5B4EE8',  label: 'Información' },
+}
+
+function FeedbackToast({ feedback, onDismiss }) {
+  if (!feedback) return null
+  const { icon: Icon, color, label } = FEEDBACK_CONFIG[feedback.type] ?? FEEDBACK_CONFIG.info
+  return (
+    <div className="feedback-toast" style={{ '--feedback-color': color }}>
+      <div className="feedback-toast-inner">
+        <Icon size={16} className="feedback-toast-icon" />
+        <div className="feedback-toast-body">
+          <span className="feedback-toast-label">{label}</span>
+          <span className="feedback-toast-message">{feedback.message}</span>
+        </div>
+        <button onClick={onDismiss} className="toast-dismiss"><X size={14} /></button>
       </div>
     </div>
   )
@@ -143,11 +166,10 @@ export default function AppLayout() {
   const { theme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { toast, dismissToast } = useNotificaciones()
+  const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Cerrar drawer al navegar
   useEffect(() => { setDrawerOpen(false) }, [location.pathname])
 
   return (
@@ -188,6 +210,7 @@ export default function AppLayout() {
       </div>
 
       <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/app/pedidos/${pedidoId}`)} />
+      <FeedbackToast feedback={feedback} onDismiss={dismissFeedback} />
     </div>
   )
 }

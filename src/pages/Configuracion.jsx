@@ -3,8 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
 import { useInstancias } from '@/hooks/useInstancias'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 
 const COLORES_SUGERIDOS = [
   '#8B5CF6','#3B82F6','#F59E0B','#EC4899','#10B981','#059669',
@@ -37,7 +39,7 @@ function ColorPicker({ value, onChange }) {
   )
 }
 
-function ItemRow({ item, tabla, onSave, onDelete }) {
+function ItemRow({ item, tabla, onSave, onDelete, showSuccess, showError }) {
   const [editando, setEditando] = useState(false)
   const [form, setForm] = useState({ label: item.label, color: item.color })
   const [saving, setSaving] = useState(false)
@@ -45,8 +47,17 @@ function ItemRow({ item, tabla, onSave, onDelete }) {
   async function guardar() {
     if (!form.label.trim()) return
     setSaving(true)
-    await supabase.from(tabla).update({ label: form.label.trim(), color: form.color }).eq('id', item.id)
-    setSaving(false); setEditando(false); onSave()
+    try {
+      const { error } = await supabase.from(tabla).update({ label: form.label.trim(), color: form.color }).eq('id', item.id)
+      if (error) throw error
+      setEditando(false)
+      onSave()
+      showSuccess('Cambios guardados')
+    } catch (err) {
+      showError(err.message || 'No se pudo guardar')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function cancelar() { setForm({ label: item.label, color: item.color }); setEditando(false) }
@@ -86,33 +97,50 @@ function ItemRow({ item, tabla, onSave, onDelete }) {
   )
 }
 
-function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, nombreItem, defaultColor = '#6B7280' }) {
-  const [open, setOpen] = useState(true)
+function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, nombreItem, storageKey, defaultColor = '#6B7280' }) {
+  const [open, setOpen] = useLocalStorage(storageKey, true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ value: '', label: '', color: defaultColor })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmEliminar, setConfirmEliminar] = useState(null)
+  const { showSuccess, showError } = useNotificaciones()
 
   async function agregar() {
     setError('')
     if (!form.label.trim() || !form.value.trim()) { setError('Completá nombre y clave.'); return }
     setSaving(true)
-    const { error: err } = await supabase.from(tabla).insert({
-      value: form.value.trim().toLowerCase().replace(/\s+/g, '_'),
-      label: form.label.trim(), color: form.color, orden: items.length,
-    })
-    if (err) { setError(err.message); setSaving(false); return }
-    setForm({ value: '', label: '', color: defaultColor })
-    setShowForm(false); setSaving(false); refetch()
+    try {
+      const { error: err } = await supabase.from(tabla).insert({
+        value: form.value.trim().toLowerCase().replace(/\s+/g, '_'),
+        label: form.label.trim(), color: form.color, orden: items.length,
+      })
+      if (err) throw err
+      setForm({ value: '', label: '', color: defaultColor })
+      setShowForm(false)
+      refetch()
+      showSuccess(`${nombreItem} creado correctamente`)
+    } catch (err) {
+      setError(err.message)
+      showError(err.message || `No se pudo crear el ${nombreItem.toLowerCase()}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function eliminar(id) { setConfirmEliminar(id) }
 
   async function confirmarEliminar() {
-    await supabase.from(tabla).delete().eq('id', confirmEliminar)
-    setConfirmEliminar(null)
-    refetch()
+    try {
+      const { error } = await supabase.from(tabla).delete().eq('id', confirmEliminar)
+      if (error) throw error
+      setConfirmEliminar(null)
+      refetch()
+      showSuccess(`${nombreItem} eliminado`)
+    } catch (err) {
+      setConfirmEliminar(null)
+      showError(err.message || `No se pudo eliminar el ${nombreItem.toLowerCase()}`)
+    }
   }
 
   function handleLabel(val) {
@@ -175,7 +203,11 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
             {loading && <p className="text-muted-sm">Cargando…</p>}
             <div className="flex flex-col gap-2">
               {items.map(item => (
-                <ItemRow key={item.id} item={item} tabla={tabla} onSave={refetch} onDelete={eliminar} />
+                <ItemRow
+                  key={item.id} item={item} tabla={tabla}
+                  onSave={refetch} onDelete={eliminar}
+                  showSuccess={showSuccess} showError={showError}
+                />
               ))}
             </div>
           </div>
@@ -184,8 +216,9 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
 
       {confirmEliminar && (
         <ConfirmModal
+          open={true}
           title={`¿Eliminar este ${nombreItem.toLowerCase()}?`}
-          message={`Los pedidos que lo tengan asignado lo perderán.`}
+          message="Los pedidos que lo tengan asignado lo perderán."
           onConfirm={confirmarEliminar}
           onCancel={() => setConfirmEliminar(null)}
         />
@@ -205,15 +238,9 @@ export default function Configuracion() {
         <h1 className="page-title">Configuración</h1>
         <p className="page-subtitle">Gestioná los estados, tipos e instancias disponibles para los pedidos</p>
       </div>
-      <SeccionConfig titulo="Estados de pedidos" descripcion="Estados que se pueden asignar a un pedido"
-        items={estados} tabla="estados" loading={loadingEstados} refetch={refetchEstados}
-        nombreItem="Estado" defaultColor="#6B7280" />
-      <SeccionConfig titulo="Tipos de pedido" descripcion="Tipos disponibles al crear un pedido"
-        items={tipos} tabla="tipos" loading={loadingTipos} refetch={refetchTipos}
-        nombreItem="Tipo" defaultColor="#6B7280" />
-      <SeccionConfig titulo="Instancias" descripcion="Plataformas de envío disponibles"
-        items={instancias} tabla="instancias" loading={loadingInstancias} refetch={refetchInstancias}
-        nombreItem="Instancia" defaultColor="#6B7280" />
+      <SeccionConfig titulo="Estados de pedidos" descripcion="Estados que se pueden asignar a un pedido" items={estados} tabla="estados" loading={loadingEstados} refetch={refetchEstados} nombreItem="Estado" storageKey="config:estadosOpen" defaultColor="#6B7280" />
+      <SeccionConfig titulo="Tipos de pedido" descripcion="Tipos disponibles al crear un pedido" items={tipos} tabla="tipos" loading={loadingTipos} refetch={refetchTipos} nombreItem="Tipo" storageKey="config:tiposOpen" defaultColor="#6B7280" />
+      <SeccionConfig titulo="Instancias" descripcion="Plataformas de envío disponibles" items={instancias} tabla="instancias" loading={loadingInstancias} refetch={refetchInstancias} nombreItem="Instancia" storageKey="config:instanciasOpen" defaultColor="#6B7280" />
     </div>
   )
 }

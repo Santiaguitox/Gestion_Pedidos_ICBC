@@ -16,6 +16,10 @@ import { format, differenceInDays, parseISO, startOfDay, endOfDay, isWithinInter
 import { es } from 'date-fns/locale'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useTipos } from '@/hooks/useTipos'
+// TEMP - borrar después de testear
+import { useNotificaciones } from '@/context/NotificacionesContext'
+
+
 
 const PRIORIDAD_ORDEN = { urgente: 0, alta: 1, media: 2, baja: 3 }
 const PAGE_OPTIONS = [10, 20, 50]
@@ -290,7 +294,7 @@ function Pagination({ pagina, totalPaginas, setPagina }) {
   )
 }
 
-function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, tipos, estados }) {
+function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, tipos, estados, mostrarFinalizados }) {
   const [pagina, setPagina] = useState(0)
   const total = pedidos.length
   const finalizados = pedidos.filter(p => p.estados?.includes('finalizado')).length
@@ -313,9 +317,33 @@ function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, ti
       </div>
 
       <div className="dia-group-cards">
-        {slice.map(p => vista === 'compact'
-          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
-          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+        {slice.filter(p => !p.estados?.includes('finalizado')).length > 0 && (
+          <>
+            {mostrarFinalizados && (
+              <div className="dia-group-header">
+                <div className="dia-group-line" />
+                <span className="dia-group-label dia-group-label-hoy"><span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> Activos</span>
+                <div className="dia-group-line-flex" />
+              </div>
+            )}
+            {slice.filter(p => !p.estados?.includes('finalizado')).map(p => vista === 'compact'
+              ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+              : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+            )}
+          </>
+        )}
+        {slice.filter(p => p.estados?.includes('finalizado')).length > 0 && (
+          <>
+            <div className="dia-group-header">
+              <div className="dia-group-line" />
+              <span className="dia-group-label dia-group-label-hoy"><span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> Finalizados</span>
+              <div className="dia-group-line-flex" />
+            </div>
+            {slice.filter(p => p.estados?.includes('finalizado')).map(p => vista === 'compact'
+              ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+              : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
+            )}
+          </>
         )}
       </div>
 
@@ -407,7 +435,7 @@ export default function Dashboard() {
   const [paginaSize, setPaginaSize] = useLocalStorage('dashboard:paginaSize', 10)
   const [proximosOpen, setProximosOpen] = useLocalStorage('dashboard:proximosOpen', true)
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('dashboard:filtrosOpen', true)
-  const [mostrarFinalizados, setMostrarFinalizados] = useState(false)
+  const [mostrarFinalizados, setMostrarFinalizados] = useLocalStorage('dashboard:mostrarFinalizados', false)
   const { tipos } = useTipos()
 
   useEffect(() => {
@@ -509,8 +537,6 @@ export default function Dashboard() {
   return (
     <div className="page-root">
       <h1 className="page-title">Dashboard</h1>
-
-      {/* Stat cards */}
       <div className="stat-grid">
         <StatCard icon={<ListTodo size={20} />}      label="Total pedidos" value={stats.total}       color="#5B4EE8" />
         <StatCard icon={<AlertTriangle size={20} />} label="Urgentes"      value={stats.urgentes}    color="#D0111B" />
@@ -518,7 +544,6 @@ export default function Dashboard() {
         <StatCard icon={<Clock size={20} />}         label="Sin estado"    value={stats.sinEstado}   color="#F59E0B" />
       </div>
 
-      {/* Agenda del día */}
       {proximos.length > 0 && (
         <div className="agenda-panel">
           <button className="agenda-header" onClick={() => setProximosOpen(!proximosOpen)}>
@@ -544,7 +569,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Panel de filtros */}
+      
+
       <div className="panel">
         <div className="panel-header panel-header-with-controls" onClick={() => setFiltrosOpen(!filtrosOpen)}>
           <div className="panel-header-left">
@@ -554,25 +580,15 @@ export default function Dashboard() {
           </div>
           <div className="panel-header-right">
             <div className="vista-controls" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setVista('compact')}
-                title="Vista compacta"
-                className={`btn-toggle ${vista === 'compact' ? 'btn-toggle-active' : ''}`}
-              >
+              <button onClick={() => setVista('compact')} title="Vista compacta"
+                className={`btn-toggle ${vista === 'compact' ? 'btn-toggle-active' : ''}`}>
                 <AlignJustify size={13} />
               </button>
-              <button
-                onClick={() => setVista('full')}
-                title="Vista completa"
-                className={`btn-toggle ${vista === 'full' ? 'btn-toggle-active' : ''}`}
-              >
+              <button onClick={() => setVista('full')} title="Vista completa"
+                className={`btn-toggle ${vista === 'full' ? 'btn-toggle-active' : ''}`}>
                 <LayoutList size={13} />
               </button>
-              <select
-                value={paginaSize}
-                onChange={e => setPaginaSize(Number(e.target.value))}
-                className="select-sm"
-              >
+              <select value={paginaSize} onChange={e => setPaginaSize(Number(e.target.value))} className="select-sm">
                 {PAGE_OPTIONS.map(n => <option key={n} value={n}>{n}/día</option>)}
               </select>
             </div>
@@ -607,10 +623,8 @@ export default function Dashboard() {
               {tagsDisponibles.length > 0 && (
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
               )}
-              <button
-                onClick={() => setOrdenUrgencia(v => !v)}
-                className={`btn-urgencia ${ordenUrgencia ? 'btn-urgencia-active' : ''}`}
-              >
+              <button onClick={() => setOrdenUrgencia(v => !v)}
+                className={`btn-urgencia ${ordenUrgencia ? 'btn-urgencia-active' : ''}`}>
                 <AlertTriangle size={13} />
                 {ordenUrgencia ? 'Por urgencia ✓' : 'Ordenar por urgencia'}
               </button>
@@ -649,7 +663,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Toggle finalizados */}
       {!mostrarTodoPorFiltro && listaFinalizados.length > 0 && (
         <button onClick={() => setMostrarFinalizados(v => !v)} className="btn-ghost-muted">
           {mostrarFinalizados
@@ -663,7 +676,6 @@ export default function Dashboard() {
         <p className="text-muted-sm">No hay pedidos con esos filtros.</p>
       )}
 
-      {/* Lista por día */}
       <div className="page-root">
         {porDia.map(([fecha, pedidosDia]) => (
           <DiaGroup
@@ -676,6 +688,7 @@ export default function Dashboard() {
             filtroTag={filtroTag}
             tipos={tipos}
             estados={estados}
+            mostrarFinalizados={mostrarFinalizados}
           />
         ))}
       </div>
