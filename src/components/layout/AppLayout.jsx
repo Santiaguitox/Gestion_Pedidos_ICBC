@@ -3,8 +3,9 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
+import PerfilUsuario from '@/components/auth/PerfilUsuario'
 
 function NotifToast({ toast, onDismiss, onNavigate }) {
   if (!toast) return null
@@ -38,8 +39,8 @@ function NotifToast({ toast, onDismiss, onNavigate }) {
 }
 
 const FEEDBACK_CONFIG = {
-  success: { icon: CheckCircle2, color: '#22c55e',  label: 'Listo'       },
-  error:   { icon: AlertCircle,  color: '#D0111B',  label: 'Error'       },
+  success: { icon: CheckCircle2, color: '#22c55e',  label: 'Listo'      },
+  error:   { icon: AlertCircle,  color: '#D0111B',  label: 'Error'      },
   info:    { icon: Info,         color: '#5B4EE8',  label: 'Información' },
 }
 
@@ -60,7 +61,7 @@ function FeedbackToast({ feedback, onDismiss }) {
   )
 }
 
-function SidebarContent({ collapsed, setCollapsed, onNavClick }) {
+function SidebarContent({ collapsed, setCollapsed, onNavClick, onPerfil }) {
   const { profile, role, signOut } = useAuth()
   const { theme, toggle } = useTheme()
   const { unreadCount } = useNotificaciones()
@@ -137,6 +138,14 @@ function SidebarContent({ collapsed, setCollapsed, onNavClick }) {
             <Trash2 size={18} />{!collapsed && <span>Papelera</span>}
           </NavLink>
         )}
+
+        <div className="sidebar-separator" />
+        {!collapsed && <span className="sidebar-section-label">Herramientas</span>}
+        <NavLink to="/app/revision" onClick={onNavClick}
+          className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+          title={collapsed ? 'Revisión de emails' : undefined}>
+          <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
+        </NavLink>
       </nav>
 
       {/* Footer */}
@@ -145,14 +154,16 @@ function SidebarContent({ collapsed, setCollapsed, onNavClick }) {
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           {!collapsed && <span>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>}
         </button>
-        {!collapsed && profile && (
-          <div className="sidebar-profile">
+        {profile && (
+          <button onClick={onPerfil} className="sidebar-profile-btn" title="Mi perfil">
             <div className="sidebar-avatar">{profile.full_name?.[0]?.toUpperCase() ?? '?'}</div>
-            <div className="flex flex-col overflow-hidden">
-              <span className="sidebar-username">{profile.full_name || profile.email}</span>
-              <span className="sidebar-role">{profile.role}</span>
-            </div>
-          </div>
+            {!collapsed && (
+              <div className="flex flex-col overflow-hidden">
+                <span className="sidebar-username">{profile.full_name || profile.email}</span>
+                <span className="sidebar-role">{profile.role}</span>
+              </div>
+            )}
+          </button>
         )}
         <button onClick={signOut} className="nav-btn" title="Cerrar sesión">
           <LogOut size={16} />{!collapsed && <span>Cerrar sesión</span>}
@@ -166,10 +177,13 @@ export default function AppLayout() {
   const { theme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [showCambiarPassword, setShowCambiarPassword] = useState(false)
+  const [showPerfil, setShowPerfil] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
   const location = useLocation()
 
+  // Cerrar drawer al navegar
   useEffect(() => { setDrawerOpen(false) }, [location.pathname])
 
   return (
@@ -180,13 +194,13 @@ export default function AppLayout() {
         className={`sidebar-desktop flex flex-col shrink-0 overflow-hidden border-r border-[var(--border)] bg-[var(--bg-surface)] ${collapsed ? 'sidebar-collapsed' : ''}`}
         style={{ width: collapsed ? '72px' : '220px', transition: 'width 200ms ease' }}
       >
-        <SidebarContent collapsed={collapsed} setCollapsed={setCollapsed} onNavClick={null} />
+        <SidebarContent collapsed={collapsed} setCollapsed={setCollapsed} onNavClick={null} onPerfil={() => setShowPerfil(true)} />
       </aside>
 
       {/* Drawer mobile */}
       <div className={`drawer-overlay ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
       <aside className={`sidebar-drawer ${drawerOpen ? 'open' : ''}`}>
-        <SidebarContent collapsed={false} setCollapsed={null} onNavClick={() => setDrawerOpen(false)} />
+        <SidebarContent collapsed={false} setCollapsed={null} onNavClick={() => setDrawerOpen(false)} onPerfil={() => setShowPerfil(true)} />
       </aside>
 
       {/* Contenido */}
@@ -211,6 +225,7 @@ export default function AppLayout() {
 
       <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/app/pedidos/${pedidoId}`)} />
       <FeedbackToast feedback={feedback} onDismiss={dismissFeedback} />
+      {showPerfil && <PerfilUsuario onClose={() => setShowPerfil(false)} />}
     </div>
   )
 }

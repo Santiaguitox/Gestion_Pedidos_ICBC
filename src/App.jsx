@@ -10,6 +10,7 @@ import Pedidos from '@/pages/Pedidos'
 import PedidoDetalle from '@/pages/PedidoDetalle'
 import Calendario from '@/pages/Calendario'
 import Notificaciones from '@/pages/Notificaciones'
+import RevisionEmail from '@/pages/RevisionEmail'
 import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
 import Configuracion from '@/pages/Configuracion'
@@ -32,6 +33,7 @@ export default function App() {
                 <Route path="pedidos/:id" element={<PedidoDetalle />} />
                 <Route path="calendario" element={<Calendario />} />
                 <Route path="notificaciones" element={<Notificaciones />} />
+                <Route path="revision" element={<RevisionEmail />} />
                 <Route path="usuarios" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
                     <Usuarios />
