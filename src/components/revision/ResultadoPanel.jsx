@@ -42,7 +42,7 @@ function AdvertenciaList({ advertencias }) {
 export default function ResultadoPanel({ resultados }) {
   return (
     <div className="flex flex-col gap-0">
-      <p className="revision-section-label">Análisis general</p>
+      <p className="revision-results-label">Análisis general</p>
 
       <ResultadoBloque resultado={resultados.estructuraHTML} delay={0}>
         <CheckList checks={resultados.estructuraHTML.checks} />
