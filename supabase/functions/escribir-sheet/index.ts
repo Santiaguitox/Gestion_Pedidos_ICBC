@@ -1,8 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { corsHeaders, requireUser, errorResponse } from '../_shared/auth.ts'
 
 const SHEET_ID = '1d487ncbJ1y-gP2cS2LtH8kbzT5lQTGKl1F4zcMEfkJk'
 const HOJA_PEDIDOS = 'Pedidos 2026'
 const HOJA_DISENO = 'Diseño piezas 2026'
+
+// Cantidad de columnas esperadas según la hoja destino (ver comentarios más abajo)
+const COLUMNAS_ESPERADAS = { pedidos: 11, diseno: 7 }
 
 // Genera JWT para autenticación con Google
 async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
@@ -84,15 +88,13 @@ async function appendRow(accessToken: string, hoja: string, values: string[]) {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      }
-    })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Cualquier usuario logueado con perfil válido puede registrar en el Sheet.
+    await requireUser(req)
+
     const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT')
     if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT secret no configurado')
 
@@ -108,24 +110,25 @@ serve(async (req) => {
     // [nombre_campana, fecha_pedido, hora_pedido, descripcion,
     //  fecha_entrega, hora_entrega, aclaraciones]
 
-    const hojaTarget = hoja === 'diseno' ? HOJA_DISENO : HOJA_PEDIDOS
+    const esDiseno = hoja === 'diseno'
+    const hojaTarget = esDiseno ? HOJA_DISENO : HOJA_PEDIDOS
+    const esperadas = esDiseno ? COLUMNAS_ESPERADAS.diseno : COLUMNAS_ESPERADAS.pedidos
+
+    if (!Array.isArray(data) || data.length !== esperadas) {
+      return new Response(JSON.stringify({
+        error: `'data' debe ser un array de ${esperadas} valores para la hoja '${esDiseno ? 'diseno' : 'pedidos'}'`
+      }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     const accessToken = await getGoogleAccessToken(serviceAccountJson)
     await appendRow(accessToken, hojaTarget, data)
 
     return new Response(JSON.stringify({ ok: true }), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      }
-    })
+    return errorResponse(err)
   }
 })

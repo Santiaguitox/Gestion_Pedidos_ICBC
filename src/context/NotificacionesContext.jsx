@@ -28,11 +28,14 @@ export function NotificacionesProvider({ children }) {
   const [unreadCount, setUnreadCount] = useState(0)
   const [toast, setToast] = useState(null)
   const [feedback, setFeedback] = useState(null) // { type: 'success'|'error'|'info', message: string }
-  const sonidoActivo = useRef(localStorage.getItem('notif:sonido') !== 'false')
+  const [sonidoActivo, setSonidoActivo] = useState(() => localStorage.getItem('notif:sonido') !== 'false')
   const feedbackTimer = useRef(null)
 
-  async function fetchNotificaciones() {
-    if (!user) return
+  // Función pura: trae y depura el exceso de notificaciones (sin tocar
+  // estado). Devuelve la lista final (ya recortada a LIMITE_NOTIFICACIONES)
+  // para que cada callsite decida qué hacer con el setState.
+  const queryNotificaciones = useCallback(async () => {
+    if (!user) return []
     const { data } = await supabase
       .from('notificaciones')
       .select('*')
@@ -41,18 +44,22 @@ export function NotificacionesProvider({ children }) {
       .limit(60)
 
     const todas = data ?? []
-
     if (todas.length > LIMITE_NOTIFICACIONES) {
       const aEliminar = todas.slice(LIMITE_NOTIFICACIONES)
-      const ids = aEliminar.map(n => n.id)
-      await supabase.from('notificaciones').delete().in('id', ids)
-      const visibles = todas.slice(0, LIMITE_NOTIFICACIONES)
-      setNotificaciones(visibles)
-      setUnreadCount(visibles.filter(n => !n.leida).length)
-    } else {
-      setNotificaciones(todas)
-      setUnreadCount(todas.filter(n => !n.leida).length)
+      await supabase.from('notificaciones').delete().in('id', aEliminar.map(n => n.id))
+      return todas.slice(0, LIMITE_NOTIFICACIONES)
     }
+    return todas
+  }, [user])
+
+  function aplicarNotificaciones(visibles) {
+    setNotificaciones(visibles)
+    setUnreadCount(visibles.filter(n => !n.leida).length)
+  }
+
+  // Wrapper con setState, usado por handleNueva (callback del realtime).
+  async function fetchNotificaciones() {
+    aplicarNotificaciones(await queryNotificaciones())
   }
 
   function handleNueva(payload) {
@@ -61,19 +68,19 @@ export function NotificacionesProvider({ children }) {
     if (!n) return
     setToast(n)
     setTimeout(() => setToast(null), 10000)
-    if (document.hidden && sonidoActivo.current) playNotifSound()
+    if (document.hidden && sonidoActivo) playNotifSound()
   }
 
   useEffect(() => {
     if (!user) return
-    fetchNotificaciones()
+    queryNotificaciones().then(aplicarNotificaciones)
     const chName = 'notif-' + user.id + '-' + Date.now()
     const ch = supabase
       .channel(chName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `user_id=eq.${user.id}` }, handleNueva)
       .subscribe()
     return () => supabase.removeChannel(ch)
-  }, [user?.id])
+  }, [user?.id, queryNotificaciones])
 
   // ─── Feedback toasts (success / error / info) ─────────────────────────────
 
@@ -141,9 +148,10 @@ export function NotificacionesProvider({ children }) {
   }
 
   function toggleSonido() {
-    sonidoActivo.current = !sonidoActivo.current
-    localStorage.setItem('notif:sonido', sonidoActivo.current ? 'true' : 'false')
-    return sonidoActivo.current
+    const nuevoValor = !sonidoActivo
+    setSonidoActivo(nuevoValor)
+    localStorage.setItem('notif:sonido', nuevoValor ? 'true' : 'false')
+    return nuevoValor
   }
 
   return (
@@ -153,7 +161,7 @@ export function NotificacionesProvider({ children }) {
       marcarLeida, marcarNoLeida,
       marcarTodasLeidas, marcarTodasNoLeidas,
       eliminar, eliminarVarias, eliminarTodas,
-      toggleSonido, sonidoActivo: sonidoActivo.current,
+      toggleSonido, sonidoActivo,
       // Feedback
       feedback, showSuccess, showError, showInfo, dismissFeedback,
     }}>

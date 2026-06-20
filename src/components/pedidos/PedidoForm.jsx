@@ -20,8 +20,8 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   const [form, setForm] = useState({
     asunto:             pedido?.asunto ?? '',
     descripcion:        pedido?.descripcion ?? '',
-    prioridad:          pedido?.prioridad ?? '',
-    tipo:               pedido?.tipo ?? '',
+    prioridad:          pedido?.prioridad ?? 'media',
+    tipo:               pedido?.tipo ?? 'creacion_email',
     fecha_limite:       pedido?.fecha_limite ?? '',
     tags:               pedido?.tags ?? [],
     estados:            pedido?.estados ?? [],
@@ -117,7 +117,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
             <div className="chip-group">
               {tipos.map(t => (
                 <button key={t.value} type="button"
-                  onClick={() => set('tipo', form.tipo === t.value ? '' : t.value)}
+                  onClick={() => set('tipo', t.value)}
                   className="chip" style={chipStyle(t.color, form.tipo === t.value)}>
                   {t.label}
                 </button>
@@ -132,7 +132,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
             <div className="chip-group">
               {PRIORIDADES.map(p => (
                 <button key={p.value} type="button"
-                  onClick={() => set('prioridad', form.prioridad === p.value ? '' : p.value)}
+                  onClick={() => set('prioridad', p.value)}
                   className="chip" style={chipStyle(p.color, form.prioridad === p.value)}>
                   {p.label}
                 </button>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
@@ -181,10 +181,11 @@ export default function AppLayout() {
   const [showPerfil, setShowPerfil] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
-  const location = useLocation()
 
-  // Cerrar drawer al navegar
-  useEffect(() => { setDrawerOpen(false) }, [location.pathname])
+  // El drawer se cierra desde el onClick de cada NavLink (onNavClick, ver
+  // SidebarContent más abajo) — no hace falta un efecto aparte. Mientras
+  // el drawer está abierto en mobile tapa toda la pantalla, así que no hay
+  // forma real de navegar sin pasar por esos clicks.
 
   return (
     <div className="flex h-screen overflow-hidden">

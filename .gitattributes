@@ -1,0 +1,13 @@
+# Normaliza los saltos de línea a LF para todo el código fuente,
+# sin importar el sistema operativo de quien lo edite. Esto evita que
+# Git marque archivos como "modificados" cuando lo único que cambió
+# fue CRLF vs LF (problema típico al editar en Windows).
+* text=auto eol=lf
+
+# Los binarios no se tocan nunca (por si acaso, aunque hoy no haya
+# binarios versionados en el repo).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.svg text eol=lf

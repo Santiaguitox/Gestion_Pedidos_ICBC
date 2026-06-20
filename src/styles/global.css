@@ -761,6 +761,11 @@ select:focus {
   flex-shrink: 0;
 }
 
+.pedido-meta-sin-fecha {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 /* ─── Día group / section divider ─────────────────────────────────────────── */
 .dia-group {
   display: flex;
@@ -3394,31 +3399,8 @@ select:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
-  padding: 1.5rem 1rem 1.5rem 1rem;
+  padding: 1rem;
   box-shadow: var(--shadow-lg);
-}
-
-.revision-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
-  transition: background 200ms;
-  flex-shrink: 0;
-  border: none;
-  cursor: pointer;
-}
-
-.revision-switch-thumb {
-  position: absolute;
-  top: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: left 200ms;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  display: block;
 }
 
 /* El iframe crece con su contenido, sin altura fija ni scroll */

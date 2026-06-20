@@ -1,10 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, requireUser, errorResponse } from '../_shared/auth.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const ROLES_PERMITIDOS = ['super_admin', 'admin']
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,6 +10,9 @@ serve(async (req) => {
   }
 
   try {
+    // Valida que quien llama esté logueado y tenga rol admin/super_admin.
+    await requireUser(req, ROLES_PERMITIDOS)
+
     const { user_id } = await req.json()
 
     if (!user_id) {
@@ -33,8 +34,6 @@ serve(async (req) => {
     })
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return errorResponse(err)
   }
 })

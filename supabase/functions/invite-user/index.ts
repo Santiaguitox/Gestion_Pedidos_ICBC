@@ -1,10 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, requireUser, errorResponse } from '../_shared/auth.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const ROLES_PERMITIDOS = ['super_admin', 'admin']
+const ROLES_VALIDOS = ['super_admin', 'admin', 'colaborador', 'viewer']
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,11 +11,27 @@ serve(async (req) => {
   }
 
   try {
+    // Valida que quien llama esté logueado y tenga rol admin/super_admin.
+    const { profile } = await requireUser(req, ROLES_PERMITIDOS)
+
     const { email, full_name, role } = await req.json()
 
     if (!email || !full_name || !role) {
       return new Response(JSON.stringify({ error: 'Faltan campos obligatorios' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (!ROLES_VALIDOS.includes(role)) {
+      return new Response(JSON.stringify({ error: 'Rol inválido' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Solo super_admin puede crear otro super_admin.
+    if (role === 'super_admin' && profile.role !== 'super_admin') {
+      return new Response(JSON.stringify({ error: 'Solo un super_admin puede asignar el rol super_admin' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
@@ -42,8 +57,6 @@ serve(async (req) => {
     })
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return errorResponse(err)
   }
 })

@@ -133,8 +133,12 @@ export default function PedidosList({ onNew }) {
   if (filtroEstado === 'sin_estado') listaBase = listaBase.filter(p => !p.estados?.length)
   else if (filtroEstado) listaBase = listaBase.filter(p => p.estados?.includes(filtroEstado))
   if (filtroTag) listaBase = listaBase.filter(p => p.tags?.includes(filtroTag))
-  if (fechaDesde) listaBase = listaBase.filter(p => p.created_at.slice(0, 10) >= fechaDesde)
-  if (fechaHasta) listaBase = listaBase.filter(p => p.created_at.slice(0, 10) <= fechaHasta)
+  // Filtra por fecha de VENCIMIENTO (fecha_limite), no de creación — es lo
+  // que se espera al filtrar "Desde/Hasta" (ej: "qué vence esta semana").
+  // Los pedidos sin fecha_limite definida se muestran siempre, sin importar
+  // el filtro, porque "sin fecha" no es ni anterior ni posterior a nada.
+  if (fechaDesde) listaBase = listaBase.filter(p => !p.fecha_limite || p.fecha_limite >= fechaDesde)
+  if (fechaHasta) listaBase = listaBase.filter(p => !p.fecha_limite || p.fecha_limite <= fechaHasta)
   if (search.trim()) {
     const q = search.toLowerCase()
     listaBase = listaBase.filter(p =>
@@ -174,10 +178,15 @@ export default function PedidosList({ onNew }) {
         <div className="flex gap-[0.3rem] shrink-0">
           {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
         </div>
-        {pedido.fecha_limite && (
+        {pedido.fecha_limite ? (
           <span className="pedido-meta-item">
             <Calendar size={12} />
             {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })}
+          </span>
+        ) : (
+          <span className="pedido-meta-item pedido-meta-sin-fecha">
+            <Calendar size={12} />
+            Sin fecha
           </span>
         )}
       </div>
@@ -203,10 +212,15 @@ export default function PedidosList({ onNew }) {
         <EntregablesInline entregables={entregables} />
         {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
         <div className="pedido-meta">
-          {pedido.fecha_limite && (
+          {pedido.fecha_limite ? (
             <span className="pedido-meta-item">
               <Calendar size={13} />
               {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
+            </span>
+          ) : (
+            <span className="pedido-meta-item pedido-meta-sin-fecha">
+              <Calendar size={13} />
+              Sin fecha de vencimiento
             </span>
           )}
           {pedido.pedido_asignados?.length > 0 && (
@@ -309,11 +323,11 @@ export default function PedidosList({ onNew }) {
             )}
             <div className="filter-dates-row">
               <div className="filter-date-col">
-                <span className="filter-date-label">Desde</span>
+                <span className="filter-date-label">Vence desde</span>
                 <DatePicker value={fechaDesde} onChange={setFechaDesde} placeholder="Fecha desde" />
               </div>
               <div className="filter-date-col">
-                <span className="filter-date-label">Hasta</span>
+                <span className="filter-date-label">Vence hasta</span>
                 <DatePicker value={fechaHasta} onChange={setFechaHasta} placeholder="Fecha hasta" />
               </div>
               {hayFiltrosActivos && (

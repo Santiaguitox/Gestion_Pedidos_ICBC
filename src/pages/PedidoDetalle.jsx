@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
@@ -50,15 +50,25 @@ export default function PedidoDetalle() {
     })
   }, [])
 
-  async function fetchPedido() {
+  const queryPedido = useCallback(async () => {
     const { data } = await supabase
       .from('pedidos')
       .select('*, pedido_asignados(user_id, profiles(id,full_name)), subtareas(*, profiles:asignado_a(full_name)), entregable(*)')
       .eq('id', id).single()
-    setPedido(data); setLoading(false)
+    return data
+  }, [id])
+
+  // Wrapper con setState, usado por los handlers de abajo y pasado como
+  // prop onUpdate a componentes hijos (EstadoPopover, etc.).
+  async function fetchPedido() {
+    const data = await queryPedido()
+    setPedido(data)
+    setLoading(false)
   }
 
-  useEffect(() => { fetchPedido() }, [id])
+  useEffect(() => {
+    queryPedido().then(data => { setPedido(data); setLoading(false) })
+  }, [queryPedido])
 
   async function handleEdit(data) { await actualizarPedido(id, data); setEditando(false); fetchPedido() }
 
@@ -124,6 +134,8 @@ export default function PedidoDetalle() {
   const entregables = Array.isArray(pedido.entregable) ? pedido.entregable : pedido.entregable ? [pedido.entregable] : []
   const subtareas = pedido.subtareas ?? []
   const canEdit = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
+  const canEditPedido = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN || role === ROLES.COLABORADOR
+  const canDelete = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
   const canWrite = role !== ROLES.VIEWER
   const isSuperAdmin = role === ROLES.SUPER_ADMIN
   const subtareasCompletadas = subtareas.filter(s => s.completada).length
@@ -134,10 +146,14 @@ export default function PedidoDetalle() {
         <button onClick={() => navigate(backTo)} className="btn-back">
           <ArrowLeft size={16} />Volver a {backLabel}
         </button>
-        {canEdit && (
+        {(canEditPedido || canDelete) && (
           <div className="detalle-topbar-actions">
-            <button onClick={() => setEditando(true)} className="btn-edit"><Edit size={15} />Editar</button>
-            <button onClick={handleDelete} className="btn-delete"><Trash2 size={15} />Eliminar</button>
+            {canEditPedido && (
+              <button onClick={() => setEditando(true)} className="btn-edit"><Edit size={15} />Editar</button>
+            )}
+            {canDelete && (
+              <button onClick={handleDelete} className="btn-delete"><Trash2 size={15} />Eliminar</button>
+            )}
           </div>
         )}
       </div>

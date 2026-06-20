@@ -414,7 +414,7 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.invite-user]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 import_map = "./functions/invite-user/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -423,9 +423,14 @@ entrypoint = "./functions/invite-user/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/invite-user/*.html" ]
 
+[functions.escribir-sheet]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/escribir-sheet/index.ts"
+
 [functions.delete-user]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 import_map = "./functions/delete-user/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

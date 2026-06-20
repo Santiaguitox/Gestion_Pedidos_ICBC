@@ -16,18 +16,24 @@ export default function Papelera() {
   const { restaurarPedido } = usePedidos()
   const { showSuccess, showError } = useNotificaciones()
 
-  async function fetchEliminados() {
-    setLoading(true)
+  async function queryEliminados() {
     const { data } = await supabase
       .from('pedidos')
       .select('*, deleted_by_profile:profiles!pedidos_deleted_by_fkey(full_name)')
       .not('deleted_at', 'is', null)
       .order('deleted_at', { ascending: false })
-    setPedidos(data ?? [])
+    return data ?? []
+  }
+
+  async function fetchEliminados() {
+    setLoading(true)
+    setPedidos(await queryEliminados())
     setLoading(false)
   }
 
-  useEffect(() => { fetchEliminados() }, [])
+  useEffect(() => {
+    queryEliminados().then(data => { setPedidos(data); setLoading(false) })
+  }, [])
 
   async function handleRestaurar(id) {
     try {
