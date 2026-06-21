@@ -102,7 +102,7 @@ export function CargaTrabajoModal({ onClose }) {
                 </div>
                 <div className="carga-trabajo-stat">
                   <span className="carga-trabajo-stat-valor">{promedio}</span>
-                  <span className="carga-trabajo-stat-label">Promedio por persona</span>
+                  <span className="carga-trabajo-stat-label">Promedio por usuario</span>
                 </div>
               </div>
 
@@ -134,7 +134,7 @@ export function CargaTrabajoModal({ onClose }) {
                   </div>
 
                   {personasSeleccionadas.length === 0 ? (
-                    <p className="text-muted-sm">Elegí una o más personas arriba para ver su detalle.</p>
+                    <p className="text-muted-sm">Elegí uno o más usuarios arriba para ver su detalle.</p>
                   ) : (
                     <div className="carga-trabajo-tabla-wrapper">
                       <table className="carga-trabajo-tabla">
@@ -142,7 +142,17 @@ export function CargaTrabajoModal({ onClose }) {
                           <tr>
                             <th></th>
                             {personasSeleccionadas.map(p => (
-                              <th key={p.id} style={{ color: p.color }}>{p.nombre}</th>
+                              <th key={p.id} style={{ color: p.color }}>
+                                {/* Solo el avatar, sin el nombre completo — el
+                                    nombre ya se ve en los chips de selección
+                                    de arriba; repetirlo acá ocupa espacio de
+                                    más, sobre todo con 3+ personas
+                                    seleccionadas, que es justo lo que esta
+                                    tabla necesita acomodar bien. */}
+                                <span className="carga-trabajo-chip-avatar" style={{ background: p.color }} title={p.nombre}>
+                                  {iniciales(p.nombre)}
+                                </span>
+                              </th>
                             ))}
                           </tr>
                         </thead>

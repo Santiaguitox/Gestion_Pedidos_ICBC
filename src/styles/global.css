@@ -803,6 +803,36 @@ select:focus {
     width: 100% !important;
   }
 
+  /* En la tabla de Carga de trabajo, la columna de etiquetas
+     (Vencidos/Hoy/Mañana/...) se achica un poco en mobile, ya que esos
+     textos son más largos que los números de cada celda de datos —
+     los encabezados de columna ya son solo el avatar (sin nombre, ver
+     CargaTrabajoModal.jsx), así que no hace falta nada más acá para
+     el header en sí. */
+  .carga-trabajo-tabla-label {
+    font-size: 0.75rem !important;
+  }
+
+  /* En mobile, los 3 stat cards pasan a ocupar el 100% del ancho (uno
+     debajo del otro) en vez de competir por espacio en 3 columnas — con
+     poco ancho disponible, el texto crecía demasiado en relación al
+     espacio (ver discusión 2026-06-21). El contenido pasa de apilado
+     (número arriba, texto abajo, centrado) a una sola fila (número a
+     la izquierda, texto a la derecha), ya que ahora hay ancho de sobra
+     para eso. !important necesario: las definiciones base equivalentes
+     viven más abajo en este archivo y ganarían por orden de aparición
+     sin esto. */
+  .carga-trabajo-stats-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .carga-trabajo-stat {
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    gap: 0.625rem !important;
+    text-align: left !important;
+  }
+
   /* Fechas largas como "Sábado 20 de junio" no entraban junto al
      contador "30 pedidos · 3 finalizados" en mobile — se achica el
      título en vez de tocar el layout (línea decorativa, flex-wrap,
@@ -4209,6 +4239,17 @@ select:focus {
 .carga-trabajo-tabla th {
   font-weight: 700;
   border-bottom: 1px solid var(--border);
+}
+
+/* El avatar (.carga-trabajo-chip-avatar) tiene display:flex para
+   centrar SU PROPIO contenido (la inicial) — pero un elemento flex se
+   comporta como bloque, así que el text-align:center del <th> que lo
+   contiene NO lo centra a él mismo (esa regla solo afecta contenido
+   inline/inline-block). Se centra explícitamente con margin:0 auto,
+   que sí funciona sobre un elemento de ancho fijo dentro de un
+   contenedor más ancho, sin importar su display interno. */
+.carga-trabajo-tabla th .carga-trabajo-chip-avatar {
+  margin: 0 auto;
 }
 
 .carga-trabajo-tabla td {
