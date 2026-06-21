@@ -4168,7 +4168,27 @@ select:focus {
 }
 
 /* ─── Revisión de emails ──────────────────────────────────────────────────── */
-/* ─── Revisión de emails ──────────────────────────────────────────────────── */
+.revision-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 99px;
+  border: none;
+  flex-shrink: 0;
+  transition: background 150ms ease;
+}
+
+.revision-switch-thumb {
+  position: absolute;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: left 150ms ease;
+}
+
 .revision-col-label {
   font-size: 0.6875rem;
   font-weight: 700;

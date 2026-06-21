@@ -33,9 +33,24 @@ import net from 'net'
 // como defensa en profundidad y debe mantenerse sincronizada a mano.
 const ALLOWED_HOST_SUFFIXES = ['icommarketing.com']
 
+// Las imágenes de las piezas (logos, banners) se alojan en un CDN de
+// CloudFront aparte del dominio de la pieza en sí — modo=imagen del
+// proxy las pide desde ahí. A diferencia de icommarketing.com (que
+// tiene subdominios variables), este es un distribution ID FIJO y
+// conocido (el mismo que valida ValidarDominioImagenes en
+// generales.js) — se valida por coincidencia EXACTA, no como sufijo,
+// para no abrir la puerta a cualquier distribution de CloudFront de
+// cualquier cliente de AWS (cloudfront.net es un dominio compartido
+// por millones de sitios, un sufijo genérico ahí sería demasiado
+// amplio para una allowlist).
+// 🔧 Si se agrega un nuevo CDN de imágenes, agregarlo acá tal cual
+// aparece en REVISION_CONFIG.DOMINIO_IMAGENES_APROBADO (src/lib/revision/config.js).
+const ALLOWED_HOSTS_EXACTOS = ['d343t93odde9ul.cloudfront.net']
+
 const MAX_REDIRECTS = 3
 
 function hostnameEsPermitido(hostname) {
+  if (ALLOWED_HOSTS_EXACTOS.includes(hostname)) return true
   return ALLOWED_HOST_SUFFIXES.some(
     sufijo => hostname === sufijo || hostname.endsWith('.' + sufijo)
   )

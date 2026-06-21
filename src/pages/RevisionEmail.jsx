@@ -1,9 +1,5 @@
 import { useState, useRef } from 'react'
-import { REVISION_CONFIG } from '@/lib/revision/config'
-import { templates } from '@/data/Templates/index'
-import { CompararConTemplates } from '@/lib/revision/templates'
-import { ValidarDominioImagenes, ValidarClasesDefinidas, ValidarLegal, ValidarLinks, ValidarAltImagenes, ValidarEstructuraHTML, ValidarPesoHTML } from '@/lib/revision/generales'
-import { ValidarDimensionesImagenes, ValidarPesoImagenes } from '@/lib/revision/imagenes'
+import { correrRevisionCompleta } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
 import { Search, Trash2, RotateCcw } from 'lucide-react'
 
@@ -58,55 +54,24 @@ export default function RevisionEmail() {
 
     setUrlError('')
     setCargando(true)
-    let htmlAAnalizar = ''
 
-    if (modo === 'html') {
-      htmlAAnalizar = html
-    } else {
-      try {
-        const response = await fetch(`${REVISION_CONFIG.PROXY_URL}?url=${encodeURIComponent(url)}`)
-        if (!response.ok) throw new Error('No se pudo obtener el HTML')
-        htmlAAnalizar = await response.text()
-        setHtml(htmlAAnalizar)
-        setHtmlAnalizado(htmlAAnalizar)
-      } catch {
-        setCargando(false)
-        return
-      }
+    try {
+      const { htmlAnalizado: htmlObtenido, resultados: resultadosObtenidos } = await correrRevisionCompleta({
+        modo,
+        url,
+        html,
+        onProgreso: setProgreso,
+      })
+      if (modo === 'url') setHtml(htmlObtenido)
+      setHtmlAnalizado(htmlObtenido)
+      setResultados(resultadosObtenidos)
+    } catch {
+      // El error ya se comunica con el estado vacío (sin resultados) —
+      // no hace falta un mensaje específico acá, RevisionEmail.jsx ya
+      // mostraba este mismo comportamiento antes de la extracción.
     }
-
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(htmlAAnalizar, 'text/html')
-    setHtmlAnalizado(htmlAAnalizar)
-    setProgreso('Analizando estructura y links...')
-
-    const imagenes = [...doc.querySelectorAll('img')]
-    const srcList = [...new Set(imagenes.map(img => img.getAttribute('src')).filter(Boolean))]
-    const cacheDatos = {}
-
-    for (let idx = 0; idx < srcList.length; idx++) {
-      setProgreso(`Verificando imagen ${idx + 1} de ${srcList.length}...`)
-      const src = srcList[idx]
-      try {
-        const response = await fetch(`${REVISION_CONFIG.PROXY_URL}?modo=imagen&url=${encodeURIComponent(src)}`)
-        if (response.ok) cacheDatos[src] = await response.json()
-      } catch {}
-    }
-
-    const [dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates] = await Promise.all([
-      Promise.resolve(ValidarDominioImagenes(doc)),
-      Promise.resolve(ValidarClasesDefinidas(doc)),
-      Promise.resolve(ValidarLegal(doc)),
-      Promise.resolve(ValidarLinks(doc)),
-      Promise.resolve(ValidarAltImagenes(doc)),
-      ValidarDimensionesImagenes(doc, cacheDatos),
-      ValidarPesoImagenes(doc, cacheDatos),
-      Promise.resolve(ValidarEstructuraHTML(doc, htmlAAnalizar)),
-      Promise.resolve(CompararConTemplates(doc, templates)),
-    ])
 
     setProgreso('')
-    setResultados({ pesoHTML: ValidarPesoHTML(htmlAAnalizar), pesoImagenes, estructuraHTML, dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, resumenTemplates })
     setCargando(false)
   }
 
@@ -121,7 +86,7 @@ export default function RevisionEmail() {
 
       {/* Input panel */}
       <div className="panel">
-        <div className="panel-body" style={{ padding: '1.25rem' }}>
+        <div className="panel-body" style={{ padding: '1.25rem', borderTop: 'none' }}>
 
           {/* Switch modo */}
           <div className="flex items-center gap-3 mb-5">
