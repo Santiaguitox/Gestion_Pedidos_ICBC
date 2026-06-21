@@ -741,7 +741,7 @@ select:focus {
    en vez de apretar todo en una sola línea horizontal. */
 @media (max-width: 640px) {
   .page-header {
-    flex-wrap: wrap;
+    flex-wrap: wrap !important;
   }
 
   /* Apila las 2 "columnas" de Revisión de emails, con los RESULTADOS
@@ -767,18 +767,40 @@ select:focus {
   }
 
   .revision-iframe {
-    width: 100%;
+    width: 100% !important;
   }
 
   /* "Ver histórico sin finalizar" es notablemente más largo que el
-     resto de los filtros básicos (Prioridad/Tipo/Estado/Usuario/Tags)
-     — compartiendo la misma grilla de 2 columnas en mobile, ese ancho
-     mínimo más largo empuja y corta el texto de los demás. Solo este
-     botón puntual pasa a ocupar el ancho completo de su fila; el resto
-     sigue acomodándose en 2 columnas sin problema (confirmado: en el
-     Dashboard, con solo 4 filtros cortos, ya entran bien en 2x2). */
-  .btn-historico-ancho {
-    flex: 1 1 100%;
+     resto de los filtros básicos — compartiendo la misma grilla de 2
+     columnas en mobile, ese ancho mínimo más largo empuja y corta el
+     texto de los demás. Tags y Histórico pasan a ocupar las 2 columnas
+     (ancho completo) cada uno en su propia fila — Tags es el QUINTO
+     elemento de la grilla (número impar), así que sin este ajuste
+     quedaría solo en su fila de todos modos (no hay un sexto elemento
+     "normal" que comparta esa fila con él, ya que Histórico ocupa la
+     fila completa); haciendo que ambos ocupen el 100% se evita el
+     hueco vacío. El resto (Prioridad/Tipo/Estado/Usuario) sigue
+     acomodándose en 2 columnas sin problema (confirmado: en el
+     Dashboard, con solo 4 filtros cortos, ya entran bien en 2x2).
+     grid-column (no flex) porque .filters-row es un GRID en mobile,
+     no flex — ver la otra regla de .filters-row más abajo en este
+     archivo, que define display:grid. !important necesario porque esa
+     regla vive después en el archivo y, sin esto, su
+     grid-template-columns fijo seguiría rigiendo sobre estos elementos. */
+  .btn-historico-ancho,
+  .tags-filtro-ancho {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* TagSearch.jsx define su propio ancho con style inline (width:'auto',
+     minWidth:'150px') — el grid-column de arriba hace que el WRAPPER
+     ocupe las 2 columnas, pero el componente interno (que es el que
+     realmente tiene el contenido visual) no se estira solo para llenar
+     ese espacio. Se fuerza el ancho del hijo directo desde acá, sin
+     tocar TagSearch.jsx (es un componente compartido, reusado en otros
+     lugares donde SÍ tiene sentido su ancho automático original). */
+  .tags-filtro-ancho > div {
+    width: 100% !important;
   }
 
   /* Fechas largas como "Sábado 20 de junio" no entraban junto al
@@ -786,9 +808,12 @@ select:focus {
      título en vez de tocar el layout (línea decorativa, flex-wrap,
      etc.), evitando desacomodar nada del diseño. Seguro de compartir
      con el Dashboard (ahí los títulos ya son cortos: "Hoy", "Mañana"
-     — verlos un poco más chicos en mobile no cambia nada negativo). */
+     — verlos un poco más chicos en mobile no cambia nada negativo).
+     !important necesario: la regla base equivalente vive más abajo en
+     este archivo (sección de grupos semánticos) y ganaría por orden de
+     aparición sin esto. */
   .dia-group-label-principal {
-    font-size: 1.125rem;
+    font-size: 1.125rem !important;
   }
 
   .pedido-compact-desktop {

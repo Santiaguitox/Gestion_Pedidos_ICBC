@@ -347,7 +347,9 @@ export default function PedidosList({ onNew }) {
                   {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                 </select>
                 {tagsDisponibles.length > 0 && (
-                  <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={v => { setFiltroTag(v) }} />
+                  <div className="tags-filtro-ancho">
+                    <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={v => { setFiltroTag(v) }} />
+                  </div>
                 )}
                 <button
                   onClick={() => { setModoHistorico(v => !v) }}

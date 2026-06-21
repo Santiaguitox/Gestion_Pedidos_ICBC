@@ -223,12 +223,13 @@ export default function RevisionEmail() {
         </div>
       </div>
 
-      {/* Resultados — layout en dos columnas */}
+      {/* Resultados — layout en dos columnas en desktop, apiladas (resultados
+          primero, preview después) en mobile vía CSS, ver .revision-layout */}
       {(resultados || cargando) && (
-        <div className="flex gap-6 items-start w-full">
+        <div className="revision-layout flex gap-6 items-start w-full">
 
           {/* Columna izquierda: preview */}
-          <div className="flex-shrink-0" style={{ width: '660px' }}>
+          <div className="revision-col-preview flex-shrink-0">
             <p className="revision-col-label">Vista previa</p>
             <div className="revision-preview-outer">
               <iframe
@@ -242,7 +243,7 @@ export default function RevisionEmail() {
           </div>
 
           {/* Columna derecha: resultados */}
-          <div className="flex-1 min-w-0">
+          <div className="revision-col-resultados flex-1 min-w-0">
             {cargando ? (
               <div className="flex flex-col items-center justify-center gap-3 py-16">
                 <div className="revision-spinner" />
