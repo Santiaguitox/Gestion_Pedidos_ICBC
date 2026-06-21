@@ -4,8 +4,10 @@ import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { ROLES, ROLE_COLORS } from '@/lib/constants'
 import { Badge } from '@/components/ui/Badge'
-import { Users, UserPlus, X, Trash2, Pencil } from 'lucide-react'
+import { Users, UserPlus, X, Trash2, Pencil, BarChart2 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
+import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 
 const AREAS_EQUIPO = ['PM', 'Diseño', 'Programación', 'Comercial', 'Otro']
 
@@ -15,6 +17,7 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showCargaTrabajo, setShowCargaTrabajo] = useState(false)
   const [form, setForm] = useState({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
   const [inviting, setInviting] = useState(false)
   const [inviteError, setInviteError] = useState('')
@@ -23,19 +26,19 @@ export default function Usuarios() {
   const [confirmEliminar, setConfirmEliminar] = useState(null)
   const [editingUserId, setEditingUserId] = useState(null)
   const [usuarioEditando, setUsuarioEditando] = useState(null)
-  const [editForm, setEditForm] = useState({ role: '', area_equipo: '' })
+  const [editForm, setEditForm] = useState({ role: '', area_equipo: '', avatar_color: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => { fetchUsuarios() }, [])
 
   function abrirEditarUsuario(u) {
     setUsuarioEditando(u)
-    setEditForm({ role: u.role, area_equipo: u.area_equipo ?? '' })
+    setEditForm({ role: u.role, area_equipo: u.area_equipo ?? '', avatar_color: u.avatar_color || colorAvatar(u.id) })
   }
 
   function cerrarEditarUsuario() {
     setUsuarioEditando(null)
-    setEditForm({ role: '', area_equipo: '' })
+    setEditForm({ role: '', area_equipo: '', avatar_color: '' })
   }
 
   async function guardarUsuarioEditado(e) {
@@ -45,12 +48,12 @@ export default function Usuarios() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ role: editForm.role, area_equipo: editForm.area_equipo || null })
+        .update({ role: editForm.role, area_equipo: editForm.area_equipo || null, avatar_color: editForm.avatar_color || null })
         .eq('id', usuarioEditando.id)
       if (error) throw error
       setUsuarios(prev =>
         prev.map(u => u.id === usuarioEditando.id
-          ? { ...u, role: editForm.role, area_equipo: editForm.area_equipo || null }
+          ? { ...u, role: editForm.role, area_equipo: editForm.area_equipo || null, avatar_color: editForm.avatar_color || null }
           : u
         )
       )
@@ -77,7 +80,7 @@ export default function Usuarios() {
 
   async function cambiarArea(id, area) {
     const { error } = await supabase.from('profiles').update({ area_equipo: area || null }).eq('id', id)
-    console.log('cambiarArea result', error)
+    if (error) { showError(error.message || 'No se pudo actualizar el área'); return }
     setUsuarios(u => u.map(x => x.id === id ? { ...x, area_equipo: area } : x))
   }
 
@@ -135,12 +138,21 @@ export default function Usuarios() {
 
       <div className="page-header">
         <h1 className="page-title">Usuarios</h1>
-        <button onClick={() => { setShowForm(v => !v); setInviteError(''); setInviteSuccess('') }}
-          className="btn-header-action">
-          {showForm ? <X size={16} /> : <UserPlus size={16} />}
-          {showForm ? 'Cancelar' : 'Invitar usuario'}
-        </button>
+        <div className="flex gap-2">
+          {myRole === ROLES.SUPER_ADMIN && (
+            <button onClick={() => setShowCargaTrabajo(true)} className="btn-estadisticas">
+              <BarChart2 size={16} />Estadísticas
+            </button>
+          )}
+          <button onClick={() => { setShowForm(v => !v); setInviteError(''); setInviteSuccess('') }}
+            className="btn-header-action">
+            {showForm ? <X size={16} /> : <UserPlus size={16} />}
+            {showForm ? 'Cancelar' : 'Invitar usuario'}
+          </button>
+        </div>
       </div>
+
+      {showCargaTrabajo && <CargaTrabajoModal onClose={() => setShowCargaTrabajo(false)} />}
 
       {showForm && (
         <div className="panel">
@@ -198,7 +210,9 @@ export default function Usuarios() {
         {usuarios.map(u => (
           <div key={u.id} className="usuario-item">
             <div className="flex items-center gap-3">
-              <span className="usuario-avatar">{u.full_name?.[0]?.toUpperCase() ?? '?'}</span>
+              <span className="usuario-avatar" style={{ background: u.avatar_color || colorAvatar(u.id) }}>
+                {iniciales(u.full_name)}
+              </span>
               <div className="usuario-info">
                 <p className="usuario-nombre">{u.full_name || u.email}</p>
                 <p className="usuario-email">{u.email}</p>
@@ -249,6 +263,18 @@ export default function Usuarios() {
                   <option value="">Sin área</option>
                   {AREAS_EQUIPO.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
+              </div>
+              <div className="field">
+                <label className="field-label">Color del avatar</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={editForm.avatar_color}
+                    onChange={e => setEditForm(f => ({ ...f, avatar_color: e.target.value }))}
+                    className="color-picker-input"
+                  />
+                  <span className="text-muted-sm">Se usa en los avatares de las tarjetas de pedido.</span>
+                </div>
               </div>
 
               {myRole === ROLES.SUPER_ADMIN && usuarioEditando.id !== myUser?.id && (

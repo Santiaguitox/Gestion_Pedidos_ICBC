@@ -29,38 +29,78 @@ async function logActividad(...args) {
   }
 }
 
+const PAGINA_SIZE_DEFAULT = 30
+
+// Llama a la función RPC listar_pedidos con los filtros actuales.
+// p_solo_id (opcional) restringe a un único pedido — usado por el
+// realtime para traer un pedido puntual con sus relaciones, reusando
+// toda la lógica de filtrado de la función en vez de duplicarla en JS.
+// 'pagina' viene como parámetro explícito (no de filters) porque ahora
+// la paginación es manejada internamente por el hook, no por quien lo
+// llama — ver paginaActual/cargarMas más abajo.
+async function rpcListarPedidos(filters, pagina = 0, soloId = null) {
+  const { data, error } = await supabase.rpc('listar_pedidos', {
+    p_modo: filters.modo ?? 'normal',
+    p_dias_normal: filters.diasNormal ?? 30,
+    p_vence_desde: filters.venceDesde || null,
+    p_vence_hasta: filters.venceHasta || null,
+    p_busqueda: filters.busqueda || null,
+    p_prioridad: filters.prioridad || null,
+    p_tipo: filters.tipo || null,
+    p_estado: filters.estado || null,
+    p_tag: filters.tag || null,
+    p_usuario_id: filters.usuarioId || null,
+    p_mostrar_finalizados: !!filters.mostrarFinalizados,
+    p_pagina: pagina,
+    p_pagina_size: filters.paginaSize ?? PAGINA_SIZE_DEFAULT,
+    p_solo_id: soloId,
+  })
+  if (error) throw new Error(error.message)
+  // La función devuelve una tabla de 1 fila: { pedidos: [...], total: N }
+  const fila = data?.[0]
+  return { pedidos: fila?.pedidos ?? [], total: fila?.total ?? 0 }
+}
+
 export function usePedidos(filters = {}) {
   const { user } = useAuth()
   const [pedidos, setPedidos] = useState([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [hayNuevos, setHayNuevos] = useState(false)
+
+  // Clave estable para detectar cambios reales en los FILTROS (sin
+  // incluir la página — la paginación ahora es interna al hook, ver
+  // paginaActual más abajo, y no debe disparar el efecto de "reemplazar
+  // todo" como si fuera un cambio de filtro).
+  const filtrosKey = [
+    filters.modo, filters.diasNormal, filters.venceDesde, filters.venceHasta,
+    filters.busqueda, filters.prioridad, filters.tipo, filters.estado,
+    filters.tag, filters.usuarioId, filters.mostrarFinalizados, filters.paginaSize,
+  ].join('|')
+
+  // Página actual gestionada internamente por el hook — ya no viene de
+  // filters. Se resetea a 0 cada vez que cambian los filtros (ver el
+  // efecto principal más abajo).
+  const [paginaActual, setPaginaActual] = useState(0)
 
   // Función pura: solo busca los datos y los devuelve (o lanza si falla).
-  // No toca ningún setState — así el setState queda visible en cada
-  // callsite (más abajo) en vez de escondido dentro de esta función,
-  // que es lo que necesita el linter para verificar que está bien
-  // diferido respecto al cuerpo síncrono del efecto que la invoca.
-  const queryPedidos = useCallback(async () => {
-    let query = supabase
-      .from('pedidos')
-      .select('*, pedido_asignados(user_id, profiles(id,full_name,role)), subtareas(*), entregable(*)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-    if (filters.prioridad) query = query.eq('prioridad', filters.prioridad)
-    if (filters.tipo)      query = query.eq('tipo', filters.tipo)
-    if (filters.search)    query = query.ilike('asunto', `%${filters.search}%`)
-    const { data, error } = await query
-    if (error) throw new Error(error.message)
-    return data ?? []
-  }, [filters.prioridad, filters.tipo, filters.search])
+  // No toca ningún setState — el setState queda visible en cada callsite
+  // (más abajo) para que el linter pueda verificar que está bien diferido
+  // respecto al cuerpo síncrono del efecto que la invoca.
+  const queryPedidos = useCallback((pagina = 0) => rpcListarPedidos(filters, pagina), [filtrosKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wrapper usado por las mutaciones (crearPedido, actualizarPedido, etc.)
   // y por quien necesite forzar un refetch manual sin pasar por loading.
+  // Siempre reemplaza todo desde la página 0 — para agregar más sin
+  // reemplazar, usar cargarMas().
   const fetchPedidos = useCallback(async () => {
     try {
-      const data = await queryPedidos()
+      const { pedidos: data, total: t } = await queryPedidos(0)
       setError(null)
       setPedidos(data)
+      setTotal(t)
+      setPaginaActual(0)
     } catch (err) {
       setError(err.message)
     }
@@ -69,30 +109,109 @@ export function usePedidos(filters = {}) {
   // loading arranca en true (useState arriba) para la carga inicial, así
   // que no hace falta prenderlo ahí. Para los refetches *por cambio de
   // filtro* sí queremos mostrar loading de nuevo (puede tardar con muchos
-  // pedidos); el realtime, en cambio, refresca en silencio sin loading
-  // para que la lista no "parpadee" cada vez que alguien más edita algo.
-  const filtrosKey = `${filters.prioridad ?? ''}|${filters.tipo ?? ''}|${filters.search ?? ''}`
+  // pedidos); el realtime, en cambio, nunca refetchea la lista completa
+  // (ver más abajo) así que no compite con este loading.
   const esPrimeraCarga = useRef(true)
   useEffect(() => {
     if (!esPrimeraCarga.current) setLoading(true)
     esPrimeraCarga.current = false
-    queryPedidos()
-      .then(data => { setError(null); setPedidos(data) })
+    setHayNuevos(false)
+    setPaginaActual(0)
+    queryPedidos(0)
+      .then(({ pedidos: data, total: t }) => { setError(null); setPedidos(data); setTotal(t) })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [filtrosKey, queryPedidos])
 
+  // Realtime: nunca refetchea toda la lista. Dos casos:
+  // 1) El pedido que cambió YA está en la página visible actual -> se
+  //    vuelve a pedir ESE pedido puntual (con sus relaciones) y se
+  //    actualiza/quita en memoria. Si la función ya no lo devuelve (por
+  //    ejemplo, se finalizó y mostrarFinalizados está en false), se
+  //    saca de la lista local.
+  // 2) El pedido es nuevo (no estaba en la lista) -> no se inserta
+  //    automáticamente (rompería la paginación visible). Se prende
+  //    hayNuevos para mostrar el indicador "hay pedidos nuevos".
   useEffect(() => {
     const ch = supabase
       .channel(`pedidos-rt-${crypto.randomUUID()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
-        queryPedidos()
-          .then(data => { setError(null); setPedidos(data) })
-          .catch(err => setError(err.message))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, (payload) => {
+        const id = payload.new?.id ?? payload.old?.id
+        if (!id) return
+
+        setPedidos(actuales => {
+          const yaEstaba = actuales.some(p => p.id === id)
+          if (!yaEstaba) {
+            // Caso 2: pedido nuevo (o uno que paso a matchear pero no
+            // estaba visible) — no se inserta, solo se avisa.
+            setHayNuevos(true)
+            return actuales
+          }
+          // Caso 1: actualizar/quitar en memoria, pidiendo solo esa fila
+          // con los filtros actuales (reusa la lógica de la función SQL).
+          // pagina=0 explícito: con p_solo_id seteado, el resultado tiene
+          // como máximo 1 fila, así que cualquier offset mayor a 0
+          // devolvería vacío — siempre hay que pedir la página 0 acá.
+          rpcListarPedidos(filters, 0, id).then(({ pedidos: encontrados }) => {
+            setPedidos(prev => {
+              if (encontrados.length === 0) {
+                // Ya no matchea los filtros actuales (ej: se finalizó)
+                return prev.filter(p => p.id !== id)
+              }
+              return prev.map(p => (p.id === id ? encontrados[0] : p))
+            })
+          }).catch(err => console.warn('[realtime pedidos]', err))
+          return actuales
+        })
       })
       .subscribe()
     return () => supabase.removeChannel(ch)
-  }, [queryPedidos])
+  }, [filtrosKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Trae la SIGUIENTE página con los filtros actuales y la agrega al
+  // final de lo que ya hay (no reemplaza) — usado por el botón "Cargar
+  // más". Tiene su propio estado de carga (cargandoMas), separado de
+  // 'loading', para no disparar el mensaje de carga de pantalla completa.
+  const [cargandoMas, setCargandoMas] = useState(false)
+  async function cargarMas() {
+    if (cargandoMas) return
+    setCargandoMas(true)
+    try {
+      const siguiente = paginaActual + 1
+      const { pedidos: data } = await queryPedidos(siguiente)
+      setPedidos(prev => [...prev, ...data])
+      setPaginaActual(siguiente)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setCargandoMas(false)
+    }
+  }
+
+  // Usado por el botón "Ver nuevos": en vez de un refetch que reemplaza
+  // todo (lo que perdería lo acumulado con "Cargar más"), pide la página
+  // 0 fresca con los filtros actuales, identifica cuáles de esos pedidos
+  // son GENUINAMENTE nuevos (su id no está en ningún lugar de la lista
+  // ya acumulada, sin importar en qué tanda haya llegado) y los inserta
+  // al principio — el resto de lo ya cargado no se toca.
+  // Devuelve los ids insertados, para que el componente pueda hacer
+  // scroll + resaltado hacia ellos.
+  async function verNuevos() {
+    setHayNuevos(false)
+    try {
+      const { pedidos: frescos, total: totalFresco } = await queryPedidos(0)
+      const idsActuales = new Set(pedidos.map(p => p.id))
+      const nuevos = frescos.filter(p => !idsActuales.has(p.id))
+      if (nuevos.length > 0) {
+        setPedidos(prev => [...nuevos, ...prev])
+      }
+      setTotal(totalFresco)
+      return nuevos.map(p => p.id)
+    } catch (err) {
+      setError(err.message)
+      return []
+    }
+  }
 
   async function crearPedido(data) {
     const { asignados, ...rest } = data
@@ -108,9 +227,9 @@ export function usePedidos(filters = {}) {
       await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: nuevo.id, user_id: uid })))
     }
     await logActividad(nuevo.id, user?.id, TIPO_ACTIVIDAD.CREACION)
-    // No se llama a fetchPedidos() aquí: la suscripción realtime (más abajo)
-    // ya reacciona al INSERT en la tabla pedidos y refresca la lista sola.
-    // Llamarlo también acá duplicaba el fetch completo en cada mutación.
+    // No se llama a fetchPedidos() aquí: el realtime ya recibe el INSERT.
+    // Como es un pedido nuevo, va a disparar el indicador "hay nuevos"
+    // (caso 2 de arriba) en vez de insertarse directo en la lista.
     return nuevo
   }
 
@@ -154,8 +273,8 @@ export function usePedidos(filters = {}) {
     if (camposEditados.length > 0) {
       await logActividad(id, user?.id, TIPO_ACTIVIDAD.EDICION)
     }
-    // No se llama a fetchPedidos() aquí: la suscripción realtime ya
-    // reacciona al UPDATE en pedidos y refresca la lista sola.
+    // No se llama a fetchPedidos() aquí: el realtime actualiza esa fila
+    // puntual en memoria si está visible (ver caso 1 más arriba).
   }
 
   async function eliminarPedido(id) {
@@ -163,17 +282,22 @@ export function usePedidos(filters = {}) {
       .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id }).eq('id', id)
     if (error) throw error
     await logActividad(id, user?.id, TIPO_ACTIVIDAD.ELIMINACION)
-    // No se llama a fetchPedidos() aquí: la suscripción realtime ya
-    // reacciona al UPDATE en pedidos y refresca la lista sola.
+    // No se llama a fetchPedidos() aquí: el realtime saca la fila de la
+    // lista local si ya no matchea los filtros (deleted_at no es null).
   }
 
   async function restaurarPedido(id) {
     const { error } = await supabase.from('pedidos').update({ deleted_at: null, deleted_by: null }).eq('id', id)
     if (error) throw error
     await logActividad(id, user?.id, TIPO_ACTIVIDAD.RESTAURACION)
-    // No se llama a fetchPedidos() aquí: la suscripción realtime ya
-    // reacciona al UPDATE en pedidos y refresca la lista sola.
+    // No se llama a fetchPedidos() aquí: el realtime actualiza/agrega
+    // según corresponda (ver casos 1 y 2 más arriba).
   }
 
-  return { pedidos, loading, error, crearPedido, actualizarPedido, eliminarPedido, restaurarPedido, refetch: fetchPedidos }
+  return {
+    pedidos, total, loading, error, hayNuevos, verNuevos,
+    cargarMas, cargandoMas, hayMas: pedidos.length < total,
+    crearPedido, actualizarPedido, eliminarPedido, restaurarPedido,
+    refetch: fetchPedidos,
+  }
 }

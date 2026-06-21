@@ -21,16 +21,44 @@ function CopyAllBtn({ entregables }) {
   )
 }
 
-function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar }) {
+function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otrosEntregables, setConfirm }) {
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [error, setError] = useState('')
   const bloqueado = ent.aprobado && !isSuperAdmin
 
-  async function guardar() {
+  async function guardarCambios() {
     setSaving(true)
     await supabase.from('entregable').update(form).eq('id', ent.id)
-    setSaving(false); setEditando(false); onUpdate()
+    setSaving(false); setEditando(false); setError(''); onUpdate()
+  }
+
+  function guardar() {
+    setError('')
+    const nombre = form.nombre_pieza.trim()
+    const link = form.link_online.trim()
+
+    // Misma regla que al cargar una pieza nueva (ver EntregablesSection):
+    // el link debe ser único dentro del pedido, comparado contra el
+    // resto de las piezas (no contra sí misma).
+    if (link && otrosEntregables.some(e => e.link_online?.trim() === link)) {
+      setError('Ya hay otra pieza con ese link en este pedido. El link debe ser único.')
+      return
+    }
+
+    if (nombre && otrosEntregables.some(e => e.nombre_pieza?.trim() === nombre)) {
+      setConfirm({
+        title: 'Nombre de pieza repetido',
+        message: `Ya hay otra pieza llamada "${nombre}" en este pedido. ¿Querés guardarla igual?`,
+        confirmLabel: 'Guardar igual',
+        variant: 'warning',
+        onConfirm: async () => { setConfirm(null); await guardarCambios() }
+      })
+      return
+    }
+
+    guardarCambios()
   }
 
   async function toggleAprobado() {
@@ -68,8 +96,9 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar }) {
         <div className="entregable-edit-form">
           <input value={form.nombre_pieza} onChange={e => setForm(f => ({ ...f, nombre_pieza: e.target.value }))} placeholder="Nombre de la pieza" />
           <input value={form.link_online} onChange={e => setForm(f => ({ ...f, link_online: e.target.value }))} placeholder="https://…" />
+          {error && <p className="msg-error">{error}</p>}
           <div className="entregable-edit-actions">
-            <button onClick={() => setEditando(false)} className="btn-secondary">Cancelar</button>
+            <button onClick={() => { setEditando(false); setError('') }} className="btn-secondary">Cancelar</button>
             <button onClick={guardar} disabled={saving} className="btn-primary" style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
@@ -108,12 +137,44 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nombre_pieza: '', link_online: '' })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  async function agregar() {
-    if (!form.nombre_pieza.trim()) return
+  async function insertarPieza() {
     setSaving(true)
     await supabase.from('entregable').insert({ ...form, pedido_id: pedidoId })
-    setForm({ nombre_pieza: '', link_online: '' }); setShowForm(false); setSaving(false); onUpdate()
+    setForm({ nombre_pieza: '', link_online: '' }); setShowForm(false); setSaving(false); setError(''); onUpdate()
+  }
+
+  function agregar() {
+    const nombre = form.nombre_pieza.trim()
+    if (!nombre) return
+    setError('')
+
+    // El LINK debe ser único dentro del mismo pedido — no tiene sentido
+    // de negocio que dos piezas distintas apunten al mismo recurso
+    // publicado, así que esto se bloquea directamente, sin posibilidad
+    // de continuar.
+    const link = form.link_online.trim()
+    if (link && entregables.some(e => e.link_online?.trim() === link)) {
+      setError('Ya hay una pieza con ese link en este pedido. El link debe ser único.')
+      return
+    }
+
+    // El NOMBRE sí puede repetirse legítimamente (la misma pieza puede
+    // llamarse igual en distintas campañas) — solo se avisa por si fue
+    // un error de tipeo, pero se permite seguir si la persona confirma.
+    if (entregables.some(e => e.nombre_pieza?.trim() === nombre)) {
+      setConfirm({
+        title: 'Nombre de pieza repetido',
+        message: `Ya hay una pieza llamada "${nombre}" en este pedido. ¿Querés cargarla igual?`,
+        confirmLabel: 'Cargar igual',
+        variant: 'warning',
+        onConfirm: async () => { setConfirm(null); await insertarPieza() }
+      })
+      return
+    }
+
+    insertarPieza()
   }
 
   function eliminar(id) {
@@ -128,14 +189,16 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
     <div className="flex flex-col gap-3">
       {entregables.length === 0 && !showForm && <p className="text-muted-sm">No hay piezas cargadas.</p>}
       {entregables.map(ent => (
-        <EntregableItem key={ent.id} ent={ent} canWrite={canWrite} isSuperAdmin={isSuperAdmin} onUpdate={onUpdate} onEliminar={eliminar} />
+        <EntregableItem key={ent.id} ent={ent} canWrite={canWrite} isSuperAdmin={isSuperAdmin} onUpdate={onUpdate} onEliminar={eliminar}
+          otrosEntregables={entregables.filter(e => e.id !== ent.id)} setConfirm={setConfirm} />
       ))}
       {showForm && (
         <div className="entregable-item">
           <input value={form.nombre_pieza} onChange={e => setForm(f => ({ ...f, nombre_pieza: e.target.value }))} placeholder="Nombre de la pieza *" autoFocus />
           <input value={form.link_online} onChange={e => setForm(f => ({ ...f, link_online: e.target.value }))} placeholder="Link versión online (opcional)" />
+          {error && <p className="msg-error">{error}</p>}
           <div className="entregable-edit-actions">
-            <button onClick={() => { setShowForm(false); setForm({ nombre_pieza: '', link_online: '' }) }} className="btn-secondary">Cancelar</button>
+            <button onClick={() => { setShowForm(false); setForm({ nombre_pieza: '', link_online: '' }); setError('') }} className="btn-secondary">Cancelar</button>
             <button onClick={agregar} disabled={saving || !form.nombre_pieza.trim()}
               className="btn-primary" style={{ width: 'auto', opacity: saving || !form.nombre_pieza.trim() ? 0.6 : 1 }}>
               {saving ? 'Guardando…' : 'Guardar pieza'}

@@ -68,6 +68,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
         type="button"
         disabled={disabled}
         onClick={handleOpen}
+        title={placeholder}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: '0.375rem',
           background: 'var(--bg-elevated)', border: '1px solid var(--border)',

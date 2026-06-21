@@ -1,578 +1,314 @@
-import { useState, useEffect, useMemo } from 'react'
-import { TagSearch } from '@/components/ui/TagSearch'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { TagSearch } from '@/components/ui/TagSearch'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { PRIORIDADES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
-import { Badge } from '@/components/ui/Badge'
-import { DatePicker } from '@/components/ui/DatePicker'
 import {
-  ListTodo, Clock, CheckCircle, AlertTriangle, Calendar, User,
-  ExternalLink, Copy, Check, AlarmClock, ChevronDown, ChevronUp,
-  LayoutList, AlignJustify, Filter, Tag, X
+  ChevronDown, ChevronUp, LayoutList, AlignJustify, Filter, Tag, X,
+  Calendar, CalendarOff,
 } from 'lucide-react'
-import { format, differenceInDays, parseISO, startOfDay, endOfDay, isWithinInterval } from 'date-fns'
+import { startOfWeek, endOfWeek, addWeeks, differenceInDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useTipos } from '@/hooks/useTipos'
-// TEMP - borrar después de testear
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useTagsDisponibles } from '@/hooks/useTagsDisponibles'
+import { useUsuarios } from '@/hooks/useUsuarios'
+import { PedidoCardCompact, PedidoCardFull } from '@/components/pedidos/PedidoCard'
 
+// Metadata de los 6 grupos "normales" (Vencidos se maneja aparte, con su
+// propio componente de acordeón de alerta — ver VencidosAcordeon más
+// abajo). Escala de "temperatura" decreciente según urgencia: rojo
+// institucional (Hoy) → naranja (Mañana) → naranja claro (Esta semana)
+// → amarillo-dorado (Próxima semana) → gris (Más adelante/Sin fecha).
+// "Hoy" usa el rojo INSTITUCIONAL (--icbc-red) en lugar del rojo de
+// prioridad "Urgente" — ese rojo es más pálido y queda apagado como
+// fondo sólido grande (confirmado visualmente el 2026-06-20). El
+// amarillo de "Próxima semana" se eligió específicamente por su buen
+// contraste tanto en texto sobre blanco como en blanco sobre el color
+// (confirmado visualmente, ver #F5C10B) — un amarillo más puro se
+// vuelve ilegible en alguno de los dos casos.
+const GRUPOS_META = [
+  { key: 'hoy',            label: 'Hoy',              Icono: Calendar,    color: '#D0111B' }, // rojo institucional, mismo que Vencidos
+  { key: 'mañana',         label: 'Mañana',           Icono: Calendar,    color: '#F97316' }, // naranja, como prioridad "Alta"
+  { key: 'esta_semana',    label: 'Esta semana',      Icono: Calendar,    color: '#F59E0B' }, // naranja claro, como prioridad "Media"
+  { key: 'proxima_semana', label: 'Próxima semana',   Icono: Calendar,    color: '#F5C10B' }, // amarillo-dorado, distinto del gris de Más adelante/Sin fecha
+  { key: 'mas_adelante',   label: 'Más adelante',     Icono: Calendar,    color: '#6B7280' },
+  { key: 'sin_fecha',      label: 'Sin fecha límite', Icono: CalendarOff, color: '#6B7280' },
+]
 
+// Los 5 stat cards de arriba — subconjunto de los grupos más urgentes y
+// accionables del día a día. "Vencidos" NO está acá: en un día ideal
+// debería estar vacío, así que no merece uno de los espacios más
+// prominentes — en cambio, cuando SÍ hay vencidos, se destaca con su
+// propio acordeón de alerta arriba de todo (ver VencidosAcordeon).
+const STAT_CARDS_KEYS = ['hoy', 'mañana', 'esta_semana', 'proxima_semana', 'sin_fecha']
 
-const PRIORIDAD_ORDEN = { urgente: 0, alta: 1, media: 2, baja: 3 }
-const PAGE_OPTIONS = [10, 20, 50]
+// Clasifica un pedido (ya activo, sin 'finalizado') en uno de los 7
+// grupos semánticos, según su fecha_limite respecto a hoy. El orden de
+// evaluación es deliberado: Hoy/Mañana siempre "ganan" sobre la semana a
+// la que pertenecen, incluso si caen sábado/domingo (ver discusión del
+// 2026-06-20 en el spec).
+export function calcularGrupo(pedido, hoy) {
+  if (!pedido.fecha_limite) return 'sin_fecha'
 
-function toLocalDate(isoString) {
-  const d = new Date(isoString)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const fecha = new Date(pedido.fecha_limite + 'T00:00:00')
+  const dias = differenceInDays(fecha, hoy)
+
+  if (dias < 0) return 'vencidos'
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'mañana'
+
+  const finEstaSemana = endOfWeek(hoy, { weekStartsOn: 1 })
+  if (fecha <= finEstaSemana) return 'esta_semana'
+
+  const inicioProxSemana = startOfWeek(addWeeks(hoy, 1), { weekStartsOn: 1 })
+  const finProxSemana = endOfWeek(addWeeks(hoy, 1), { weekStartsOn: 1 })
+  if (fecha >= inicioProxSemana && fecha <= finProxSemana) return 'proxima_semana'
+
+  return 'mas_adelante'
 }
 
-function CopyBtn({ text }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-      title="Copiar"
-      className={`copy-btn ${copied ? 'copy-btn-copied' : ''}`}
-    >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-    </button>
-  )
-}
+function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, estados, limite }) {
+  if (pedidos.length === 0) return null
+  const { label, Icono, color } = meta
+  const navigate = useNavigate()
+  // Límite opcional (usado solo en "Más adelante" — ver Dashboard más
+  // abajo): el Dashboard se pensó para ser un vistazo rápido, no una
+  // pantalla de trabajo con paginación configurable como Pedidos.jsx —
+  // si hay más de los que el límite permite, se corta ahí y se ofrece
+  // un link a Pedidos para ver el resto, en vez de paginar acá mismo.
+  const visibles = limite ? pedidos.slice(0, limite) : pedidos
+  const ocultos = pedidos.length - visibles.length
 
-function StatCard({ icon, label, value, color }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-card-icon" style={{ background: `${color}1a`, color }}>
-        {icon}
-      </div>
-      <div>
-        <p className="stat-card-value">{value}</p>
-        <p className="stat-card-label">{label}</p>
-      </div>
-    </div>
-  )
-}
-
-function CopyAllBtnInline({ entregables }) {
-  const [copied, setCopied] = useState(false)
-  function handleCopy(e) {
-    e.stopPropagation()
-    const texto = entregables
-      .filter(e => e.nombre_pieza)
-      .map(e => e.link_online ? `${e.nombre_pieza} || ${e.link_online}` : e.nombre_pieza)
-      .join('\n')
-    navigator.clipboard.writeText(texto)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  // Al ir a Pedidos desde "Más adelante", configura automáticamente el
+  // filtro de vencimiento con el rango correspondiente (desde el día
+  // siguiente al fin de la próxima semana, sin límite superior) — así
+  // la persona llega viendo directamente esos pedidos, sin tener que
+  // buscar manualmente qué filtro activar.
+  function irAPedidosConFiltro() {
+    const hoyCalc = new Date(); hoyCalc.setHours(0, 0, 0, 0)
+    const finProxSemana = endOfWeek(addWeeks(hoyCalc, 1), { weekStartsOn: 1 })
+    const desde = new Date(finProxSemana); desde.setDate(desde.getDate() + 1)
+    navigate('/app/pedidos', { state: { venceDesde: format(desde, 'yyyy-MM-dd') } })
   }
-  return (
-    <button onClick={handleCopy} className={`copy-all-btn ${copied ? 'copy-all-btn-copied' : ''}`}>
-      {copied ? <><Check size={11} />¡Copiado!</> : <><Copy size={11} />Copiar todo</>}
-    </button>
-  )
-}
-
-function EntregablesCard({ entregables }) {
-  const [expandido, setExpandido] = useState(false)
-  if (!entregables?.length) return null
-
-  const conNombre = entregables.filter(e => e.nombre_pieza)
-  if (!conNombre.length) return null
-
-  const visibles = expandido ? conNombre : conNombre.slice(0, 2)
-  const hayMas = conNombre.length > 2
-
-  return (
-    <div onClick={e => e.stopPropagation()} className="entregables-card">
-      <div
-        className="entregables-header"
-        onClick={hayMas ? () => setExpandido(v => !v) : undefined}
-        style={{ cursor: hayMas ? 'pointer' : 'default' }}
-      >
-        <span className="entregables-header-left">
-          Piezas
-          <span className="badge-count">{conNombre.length}</span>
-        </span>
-        <div className="entregables-header-right">
-          {conNombre.length > 1 && <CopyAllBtnInline entregables={conNombre} />}
-          {hayMas && (
-            <span className="entregables-expand-hint">
-              {expandido ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              {expandido ? 'Ver menos' : `Ver ${conNombre.length - 2} más`}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-col">
-        {visibles.map((ent, i) => (
-          <div
-            key={ent.id}
-            className="entregable-row"
-            style={{ borderBottom: i < visibles.length - 1 ? '1px solid var(--badge-border)' : 'none' }}
-          >
-            <div className="entregable-nombre">
-              {ent.aprobado && <span className="aprobado-badge">✓</span>}
-              <span className="entregable-nombre-text">{ent.nombre_pieza}</span>
-              <CopyBtn text={ent.nombre_pieza} />
-            </div>
-            {ent.link_online && (
-              <div className="entregable-link-row">
-                <span className="entregable-link-text">{ent.link_online}</span>
-                <CopyBtn text={ent.link_online} />
-                <a
-                  href={ent.link_online}
-                  target="_blank"
-                  rel="noopener"
-                  onClick={e => e.stopPropagation()}
-                  className="entregable-link-btn"
-                >
-                  <ExternalLink size={11} />
-                </a>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [] }) {
-  const navigate = useNavigate()
-  const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-  const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
-
-  return (
-    <div
-      onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
-      className="pedido-card-compact"
-    >
-      {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-      <span className="pedido-asunto-compact">{pedido.asunto}</span>
-
-      {pedido.tags?.length > 0 && (
-        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-          {pedido.tags.map(t => (
-            <button
-              key={t}
-              onClick={() => onTagClick(t)}
-              className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}
-            >
-              <Tag size={9} />{t}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="flex gap-[0.3rem] shrink-0">
-        {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-      </div>
-
-      {pedido.fecha_limite && (
-        <span className="pedido-meta-item">
-          <Calendar size={12} />
-          {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [] }) {
-  const navigate = useNavigate()
-  const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
-  const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
-  const entregables = Array.isArray(pedido.entregable)
-    ? pedido.entregable
-    : pedido.entregable ? [pedido.entregable] : []
-
-  return (
-    <div
-      onClick={() => navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && navigate(`/app/pedidos/${pedido.id}`, { state: { from: '/app' } })}
-      className="pedido-card-full"
-    >
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-          {(() => {
-            const tipo = tipos.find(t => t.value === pedido.tipo)
-            return tipo ? <span className="tipo-label" style={{ color: tipo.color }}>{tipo.label}</span> : null
-          })()}
-        </div>
-        <div className="flex gap-[0.375rem] flex-wrap">
-          {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-        </div>
-      </div>
-
-      <h3 className="pedido-title">{pedido.asunto}</h3>
-      <EntregablesCard entregables={entregables} />
-
-      {pedido.descripcion && (
-        <p className="pedido-descripcion">{pedido.descripcion}</p>
-      )}
-
-      <div className="pedido-meta">
-        {pedido.fecha_limite && (
-          <span className="pedido-meta-item">
-            <Calendar size={13} />
-            {format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
-          </span>
-        )}
-        {pedido.pedido_asignados?.length > 0 && (
-          <span className="pedido-meta-item">
-            <User size={13} />
-            {pedido.pedido_asignados.length} asignado{pedido.pedido_asignados.length !== 1 ? 's' : ''}
-          </span>
-        )}
-        {pedido.tags?.length > 0 && (
-          <div className="flex gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
-            {pedido.tags.map(t => (
-              <button
-                key={t}
-                onClick={() => onTagClick(t)}
-                className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}
-              >
-                <Tag size={9} />{t}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Pagination({ pagina, totalPaginas, setPagina }) {
-  if (totalPaginas <= 1) return null
-  return (
-    <div className="pagination">
-      <button
-        disabled={pagina === 0}
-        onClick={() => setPagina(p => p - 1)}
-        className="btn-page btn-page-nav"
-        style={{ opacity: pagina === 0 ? 0.4 : 1 }}
-      >←</button>
-
-      {totalPaginas > 3
-        ? <select
-            value={pagina}
-            onChange={e => setPagina(Number(e.target.value))}
-            className="select-pagination"
-          >
-            {Array.from({ length: totalPaginas }, (_, i) => (
-              <option key={i} value={i}>Página {i + 1}</option>
-            ))}
-          </select>
-        : Array.from({ length: totalPaginas }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setPagina(i)}
-              className={`btn-page ${pagina === i ? 'btn-page-active' : ''}`}
-            >
-              {i + 1}
-            </button>
-          ))
-      }
-
-      <button
-        disabled={pagina >= totalPaginas - 1}
-        onClick={() => setPagina(p => p + 1)}
-        className="btn-page btn-page-nav"
-        style={{ opacity: pagina >= totalPaginas - 1 ? 0.4 : 1 }}
-      >→</button>
-    </div>
-  )
-}
-
-function DiaGroup({ fecha, pedidos, vista, paginaSize, onTagClick, filtroTag, tipos, estados, mostrarFinalizados }) {
-  const [pagina, setPagina] = useState(0)
-  const total = pedidos.length
-  const finalizados = pedidos.filter(p => p.estados?.includes('finalizado')).length
-  const slice = pedidos.slice(pagina * paginaSize, pagina * paginaSize + paginaSize)
-  const totalPaginas = Math.ceil(total / paginaSize)
-  const hoyLocal = toLocalDate(new Date().toISOString())
-  const esHoy = fecha === hoyLocal
-  const labelRaw = esHoy ? 'Hoy' : format(parseISO(fecha), "EEEE d 'de' MMMM", { locale: es })
-  const label = labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1)
 
   return (
     <div className="dia-group">
       <div className="dia-group-header">
-        <div className="dia-group-line" />
-        <span className={`dia-group-label ${esHoy ? 'dia-group-label-hoy' : ''}`}>{label}</span>
-        <div className="dia-group-line-flex" />
-        <span className="dia-group-count">
-          {total} pedido{total !== 1 ? 's' : ''}{finalizados > 0 ? ` · ${finalizados} finalizado${finalizados !== 1 ? 's' : ''}` : ''}
+        <span className="grupo-semantico-icono" style={{ color }}>
+          <Icono size={18} />
         </span>
+        <span className="dia-group-label dia-group-label-principal">{label}</span>
+        <div className="dia-group-line-flex" style={{ background: color, opacity: 0.35 }} />
+        <span className="dia-group-count" style={{ color }}>{pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}</span>
       </div>
-
       <div className="dia-group-cards">
-        {slice.filter(p => !p.estados?.includes('finalizado')).length > 0 && (
-          <>
-            {mostrarFinalizados && (
-              <div className="dia-group-header">
-                <div className="dia-group-line" />
-                <span className="dia-group-label dia-group-label-hoy"><span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> Activos</span>
-                <div className="dia-group-line-flex" />
-              </div>
-            )}
-            {slice.filter(p => !p.estados?.includes('finalizado')).map(p => vista === 'compact'
-              ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
-              : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
-            )}
-          </>
+        {visibles.map(p => vista === 'compact'
+          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
+          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
         )}
-        {slice.filter(p => p.estados?.includes('finalizado')).length > 0 && (
-          <>
-            <div className="dia-group-header">
-              <div className="dia-group-line" />
-              <span className="dia-group-label dia-group-label-hoy"><span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> Finalizados</span>
-              <div className="dia-group-line-flex" />
-            </div>
-            {slice.filter(p => p.estados?.includes('finalizado')).map(p => vista === 'compact'
-              ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
-              : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} />
-            )}
-          </>
+        {ocultos > 0 && (
+          <button onClick={irAPedidosConFiltro} className="btn-ver-todos-pedidos">
+            Ver {ocultos} más en Pedidos →
+          </button>
         )}
-      </div>
-
-      <div className="pagination" style={{ paddingLeft: '1.5rem' }}>
-        <Pagination pagina={pagina} totalPaginas={totalPaginas} setPagina={setPagina} />
       </div>
     </div>
   )
 }
 
-function ProximosPaginado({ proximos, navigate, hoy }) {
-  const [pagina, setPagina] = useState(0)
-  const PAGE_SIZE = 10
-  const PRIO_ORDEN = { urgente: 0, alta: 1, media: 2, baja: 3 }
-
-  const activos = proximos
-    .filter(p => !p.estados?.includes('esperando_respuesta'))
-    .sort((a, b) => (PRIO_ORDEN[a.prioridad] ?? 99) - (PRIO_ORDEN[b.prioridad] ?? 99))
-
-  const hoy0 = activos.filter(p => differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy) <= 1)
-  const semana = activos.filter(p => differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy) > 1)
-  const totalPaginas = Math.ceil(activos.length / PAGE_SIZE)
-
-  if (activos.length === 0) return (
-    <p className="text-muted-sm" style={{ padding: '0.5rem 0' }}>
-      No hay pendientes activos — los pedidos en espera de respuesta no se muestran aquí.
-    </p>
-  )
-
-  function PedidoRow({ p }) {
-    const dias = differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy)
-    const prio = PRIORIDADES.find(x => x.value === p.prioridad)
-    const esHoyMañana = dias <= 1
-    return (
-      <div
-        onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app' } })}
-        className={`pedido-row ${esHoyMañana ? 'pedido-row-urgent' : ''}`}
-      >
-        <div className="pedido-row-info">
-          <span className="pedido-row-name">{p.asunto}</span>
-          <span className={`pedido-row-vence ${esHoyMañana ? 'pedido-row-vence-urgent' : ''}`}>
-            {dias === 0 ? 'Vence hoy' : dias === 1 ? 'Vence mañana' : `Vence en ${dias} días`}
-          </span>
-        </div>
-        {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-      </div>
-    )
-  }
+// Acordeón especial para "Vencidos" — la única categoría que realmente
+// necesita "gritar". Arranca CERRADO (no ocupa espacio con sus tarjetas
+// hasta que se hace click), con un punto rojo pulsante que llama la
+// atención sin saturar el resto de la pantalla con colores. Si no hay
+// ningún pedido vencido, no se renderiza nada (no tiene sentido mostrar
+// una alerta vacía).
+function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estados }) {
+  const [open, setOpen] = useState(false)
+  if (pedidos.length === 0) return null
 
   return (
-    <div className="proximos-root">
-      {hoy0.length > 0 && (
-        <div className="proximos-section">
-          <span className="section-label section-label-urgent">Hoy y mañana</span>
-          {hoy0.map(p => <PedidoRow key={p.id} p={p} />)}
+    <div className="vencidos-acordeon">
+      <button className="vencidos-acordeon-header" onClick={() => setOpen(v => !v)}>
+        <span className="vencidos-acordeon-dot" />
+        <span className="vencidos-acordeon-label">Vencidos</span>
+        <span className="vencidos-acordeon-count">{pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}</span>
+        <span className="vencidos-acordeon-chevron">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      </button>
+      {open && (
+        <div className="vencidos-acordeon-cards">
+          {pedidos.map(p => vista === 'compact'
+            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
+            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
+          )}
         </div>
       )}
-      {semana.length > 0 && (
-        <div className="proximos-section">
-          <span className="section-label section-label-muted">Esta semana</span>
-          {semana.map(p => <PedidoRow key={p.id} p={p} />)}
-        </div>
-      )}
-      <Pagination pagina={pagina} totalPaginas={totalPaginas} setPagina={setPagina} />
     </div>
+  )
+}
+
+// Stat card clickeable de arriba — funciona como filtro rápido. En
+// estado normal, el bullet y el número grande llevan el color de la
+// categoría (sobre fondo blanco). Al activarlo (es el grupo actualmente
+// filtrado), el fondo se vuelve sólido de ese color y el contenido pasa
+// a blanco, para que siga siendo legible sobre el fondo.
+function StatCard({ label, cantidad, color, onClick, activo, destacado }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`stat-card-clickeable ${activo ? 'stat-card-clickeable-activo' : ''} ${destacado ? 'stat-card-clickeable-destacado' : ''}`}
+      style={{ '--stat-card-color': color, ...(activo ? { background: color, borderColor: color } : {}) }}
+    >
+      <span className="stat-card-clickeable-fila-superior">
+        <span className="stat-card-clickeable-dot" style={{ background: activo ? '#fff' : color }} />
+        <span className="stat-card-clickeable-label" style={activo ? { color: '#fff' } : undefined}>{label}</span>
+      </span>
+      <span className="stat-card-clickeable-valor" style={{ color: activo ? '#fff' : color }}>{cantidad}</span>
+    </button>
   )
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
-  const navigate = useNavigate()
+  const { user, profile } = useAuth()
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
-  const [usuarios, setUsuarios] = useState([])
   const { estados } = useEstados()
-
-  const hoyISO = toLocalDate(new Date().toISOString())
+  const { tipos } = useTipos()
+  const { tags: tagsDisponibles } = useTagsDisponibles()
+  const { usuarios } = useUsuarios()
 
   const [filtroEstado, setFiltroEstado] = useLocalStorage('dashboard:filtroEstado', '')
   const [filtroPrioridad, setFiltroPrioridad] = useLocalStorage('dashboard:filtroPrioridad', '')
   const [filtroTipo, setFiltroTipo] = useLocalStorage('dashboard:filtroTipo', '')
   const [filtroUsuario, setFiltroUsuario] = useLocalStorage('dashboard:filtroUsuario', '')
   const [filtroTag, setFiltroTag] = useLocalStorage('dashboard:filtroTag', '')
-  const [ordenUrgencia, setOrdenUrgencia] = useLocalStorage('dashboard:ordenUrgencia', false)
-  const [fechaDesde, setFechaDesde] = useLocalStorage('dashboard:fechaDesde', hoyISO)
-  const [fechaHasta, setFechaHasta] = useLocalStorage('dashboard:fechaHasta', hoyISO)
-  const [fechaError, setFechaError] = useState('')
   const [vista, setVista] = useLocalStorage('dashboard:vista', 'compact')
-  const [paginaSize, setPaginaSize] = useLocalStorage('dashboard:paginaSize', 10)
-  const [proximosOpen, setProximosOpen] = useLocalStorage('dashboard:proximosOpen', true)
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('dashboard:filtrosOpen', true)
-  const [mostrarFinalizados, setMostrarFinalizados] = useLocalStorage('dashboard:mostrarFinalizados', false)
-  const { tipos } = useTipos()
+
+  const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag
+
+  // Trae TODOS los pedidos activos (modo 'dashboard' de listar_pedidos —
+  // sin paginar del lado SQL, ver comentario en la función). La
+  // paginación real de esta pantalla es por GRUPO semántico, no por
+  // página plana, así que no tiene sentido pedir "páginas" acá.
+  // Función pura de fetch, reusada tanto por el efecto que dispara con
+  // cambios de filtro como por el canal de realtime de abajo — evita
+  // duplicar la misma llamada en dos lugares.
+  function fetchPedidosDashboard() {
+    setLoading(true)
+    supabase.rpc('listar_pedidos', {
+      p_modo: 'dashboard',
+      p_prioridad: filtroPrioridad || null,
+      p_tipo: filtroTipo || null,
+      p_estado: filtroEstado || null,
+      p_tag: filtroTag || null,
+      p_usuario_id: filtroUsuario === 'mios' ? (user?.id ?? null) : (filtroUsuario || null),
+    }).then(({ data, error }) => {
+      if (error) { setLoading(false); return }
+      setPedidos(data?.[0]?.pedidos ?? [])
+      setLoading(false)
+    })
+  }
 
   useEffect(() => {
-    fetchPedidos()
-    supabase.from('profiles').select('id, full_name').order('full_name').then(({ data }) => setUsuarios(data ?? []))
-  }, [])
+    fetchPedidosDashboard()
+  }, [filtroPrioridad, filtroTipo, filtroEstado, filtroTag, filtroUsuario, user?.id])
 
-  async function fetchPedidos() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('pedidos')
-      .select('*, pedido_asignados(user_id, profiles(id,full_name)), subtareas(*), entregable(*)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-    setPedidos(data ?? [])
-    setLoading(false)
-  }
+  // Realtime: a diferencia de usePedidos.js (que pagina y por eso
+  // actualiza filas puntuales para no perder la paginación), el
+  // Dashboard siempre trae TODOS los pedidos activos de una (modo
+  // 'dashboard' no pagina) — así que ante cualquier cambio en la tabla,
+  // alcanza con un refetch completo simple, sin la complejidad de
+  // actualizar una fila a la vez.
+  useEffect(() => {
+    const canal = supabase
+      .channel(`dashboard-pedidos-${crypto.randomUUID()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+        fetchPedidosDashboard()
+      })
+      .subscribe()
+    return () => supabase.removeChannel(canal)
+  }, [filtroPrioridad, filtroTipo, filtroEstado, filtroTag, filtroUsuario, user?.id])
 
-  function validarRango(desde, hasta) {
-    if (!desde || !hasta) { setFechaError(''); return }
-    const d = parseISO(desde), h = parseISO(hasta)
-    if (h < d) { setFechaError('La fecha hasta debe ser posterior a la fecha desde.'); return }
-    if (differenceInDays(h, d) > 31) { setFechaError('El rango no puede superar 31 días.'); return }
-    setFechaError('')
-  }
-
-  function handleDesde(val) { setFechaDesde(val); validarRango(val, fechaHasta) }
-  function handleHasta(val) { setFechaHasta(val); validarRango(fechaDesde, val) }
+  const [grupoFiltrado, setGrupoFiltrado] = useLocalStorage('dashboard:grupoFiltrado', '')
 
   function limpiarFiltros() {
     setFiltroEstado(''); setFiltroPrioridad(''); setFiltroTipo('')
-    setFiltroUsuario(''); setFiltroTag(''); setOrdenUrgencia(false)
-    setFechaDesde(''); setFechaHasta(''); setFechaError('')
+    setFiltroUsuario(''); setFiltroTag('')
   }
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
 
-  const tagsDisponibles = useMemo(() =>
-    [...new Set(pedidos.flatMap(p => p.tags ?? []))].sort()
-  , [pedidos])
+  // "Vencidos" se separa del resto — tiene su propio componente de
+  // alerta (VencidosAcordeon), no es uno de los 6 grupos "normales".
+  const vencidos = pedidos
+    .filter(p => calcularGrupo(p, hoy) === 'vencidos')
+    .sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite))
 
-  const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag || ordenUrgencia || fechaDesde || fechaHasta
+  // Clasifica cada pedido (no vencido) en su grupo semántico y los junta
+  // por grupo, en el orden definido por GRUPOS_META. Cada grupo ya viene
+  // ordenado por fecha_limite ascendente (lo más próximo a vencer
+  // primero) — salvo "sin_fecha", que no tiene fecha para ordenar, se
+  // deja en el orden que llegó (created_at desc, heredado de la función
+  // SQL).
+  const gruposTodos = GRUPOS_META.map(meta => {
+    const pedidosGrupo = pedidos
+      .filter(p => calcularGrupo(p, hoy) === meta.key)
+      .sort((a, b) => {
+        if (meta.key === 'sin_fecha') return 0
+        return new Date(a.fecha_limite) - new Date(b.fecha_limite)
+      })
+    return { meta, pedidos: pedidosGrupo }
+  })
 
-  const proximos = useMemo(() => pedidos.filter(p => {
-    if (!p.fecha_limite || p.estados?.includes('finalizado')) return false
-    const dias = differenceInDays(new Date(p.fecha_limite + 'T00:00:00'), hoy)
-    return dias >= 0 && dias <= 7
-  }).sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite)), [pedidos])
+  // Si hay un grupo filtrado (click en un stat card), solo se muestra
+  // ese grupo en la lista de abajo — el resto queda oculto hasta que se
+  // vuelva a hacer click en el mismo card (lo desactiva) o en otro.
+  const grupos = grupoFiltrado
+    ? gruposTodos.filter(g => g.meta.key === grupoFiltrado)
+    : gruposTodos
 
-  const stats = {
-    total: pedidos.length,
-    urgentes: pedidos.filter(p => p.prioridad === 'urgente').length,
-    finalizados: pedidos.filter(p => p.estados?.includes('finalizado')).length,
-    sinEstado: pedidos.filter(p => !p.estados?.length).length,
+  function toggleStatCard(key) {
+    setGrupoFiltrado(actual => actual === key ? '' : key)
   }
 
-  const listaFiltrada = useMemo(() => {
-    let lista = [...pedidos]
-    if (filtroEstado === 'sin_estado') lista = lista.filter(p => !p.estados?.length)
-    else if (filtroEstado) lista = lista.filter(p => p.estados?.includes(filtroEstado))
-    if (filtroPrioridad) lista = lista.filter(p => p.prioridad === filtroPrioridad)
-    if (filtroTipo) lista = lista.filter(p => p.tipo === filtroTipo)
-    if (filtroTag) lista = lista.filter(p => p.tags?.includes(filtroTag))
-    if (filtroUsuario === 'mios') lista = lista.filter(p => p.pedido_asignados?.some(a => a.user_id === user?.id))
-    else if (filtroUsuario) lista = lista.filter(p => p.pedido_asignados?.some(a => a.user_id === filtroUsuario))
-    if (fechaDesde && fechaHasta && !fechaError) {
-      const desde = startOfDay(parseISO(fechaDesde))
-      const hasta = endOfDay(parseISO(fechaHasta))
-      lista = lista.filter(p => isWithinInterval(new Date(p.created_at), { start: desde, end: hasta }))
-    } else if (fechaDesde && !fechaHasta) {
-      lista = lista.filter(p => new Date(p.created_at) >= startOfDay(parseISO(fechaDesde)))
-    }
-    if (ordenUrgencia) lista = lista.sort((a, b) => (PRIORIDAD_ORDEN[a.prioridad] ?? 99) - (PRIORIDAD_ORDEN[b.prioridad] ?? 99))
-    return lista
-  }, [pedidos, filtroEstado, filtroPrioridad, filtroTipo, filtroUsuario, filtroTag, fechaDesde, fechaHasta, fechaError, ordenUrgencia])
-
-  const mostrarTodoPorFiltro = filtroEstado === 'finalizado'
-  const listaActivos = mostrarTodoPorFiltro ? listaFiltrada : listaFiltrada.filter(p => !p.estados?.includes('finalizado'))
-  const listaFinalizados = mostrarTodoPorFiltro ? [] : listaFiltrada.filter(p => p.estados?.includes('finalizado'))
-  const listaVisible = mostrarTodoPorFiltro ? listaFiltrada : [...listaActivos, ...(mostrarFinalizados ? listaFinalizados : [])]
-
-  const porDia = useMemo(() => {
-    const map = {}
-    listaVisible.forEach(p => {
-      const dia = toLocalDate(p.created_at)
-      if (!map[dia]) map[dia] = []
-      map[dia].push(p)
-    })
-    const hoyStr = toLocalDate(new Date().toISOString())
-    return Object.entries(map).sort((a, b) => {
-      if (a[0] === hoyStr) return -1
-      if (b[0] === hoyStr) return 1
-      return b[0].localeCompare(a[0])
-    })
-  }, [listaVisible])
-
-  const pendientesActivos = proximos.filter(p => !p.estados?.includes('esperando_respuesta')).length
+  const totalVisible = pedidos.length
+  const nombrePila = (profile?.full_name ?? '').split(' ')[0]
+  const fechaHoyTexto = format(hoy, "EEEE d 'de' MMMM", { locale: es })
+  const fechaHoyCapitalizada = fechaHoyTexto.charAt(0).toUpperCase() + fechaHoyTexto.slice(1)
 
   return (
     <div className="page-root">
-      <h1 className="page-title">Dashboard</h1>
-      <div className="stat-grid">
-        <StatCard icon={<ListTodo size={20} />}      label="Total pedidos" value={stats.total}       color="#5B4EE8" />
-        <StatCard icon={<AlertTriangle size={20} />} label="Urgentes"      value={stats.urgentes}    color="#D0111B" />
-        <StatCard icon={<CheckCircle size={20} />}   label="Finalizados"   value={stats.finalizados} color="#10B981" />
-        <StatCard icon={<Clock size={20} />}         label="Sin estado"    value={stats.sinEstado}   color="#F59E0B" />
+      <div className="dashboard-saludo">
+        <h1 className="page-title">{nombrePila ? `Hola, ${nombrePila}` : 'Dashboard'}</h1>
+        <p className="page-subtitle">
+          {fechaHoyCapitalizada} · {totalVisible} pedido{totalVisible !== 1 ? 's' : ''} pendiente{totalVisible !== 1 ? 's' : ''}
+        </p>
       </div>
 
-      {proximos.length > 0 && (
-        <div className="agenda-panel">
-          <button className="agenda-header" onClick={() => setProximosOpen(!proximosOpen)}>
-            <div className="agenda-icon">
-              <AlarmClock size={16} color="var(--icomm-violet)" />
-            </div>
-            <div className="flex-1 text-left">
-              <div className="agenda-title">Agenda del día</div>
-              <div className="agenda-subtitle">
-                {pendientesActivos} pendiente{pendientesActivos !== 1 ? 's' : ''} activo{pendientesActivos !== 1 ? 's' : ''} para trabajar esta semana
-              </div>
-            </div>
-            {proximosOpen
-              ? <ChevronUp size={16} color="var(--icomm-violet)" />
-              : <ChevronDown size={16} color="var(--icomm-violet)" />
-            }
-          </button>
-          {proximosOpen && (
-            <div className="agenda-body">
-              <ProximosPaginado proximos={proximos} navigate={navigate} hoy={hoy} />
-            </div>
-          )}
-        </div>
-      )}
-
-      
+      <div className="stat-cards-row">
+        {GRUPOS_META.filter(m => STAT_CARDS_KEYS.includes(m.key)).map(meta => {
+          const cantidad = gruposTodos.find(g => g.meta.key === meta.key)?.pedidos.length ?? 0
+          return (
+            <StatCard
+              key={meta.key}
+              label={meta.label}
+              cantidad={cantidad}
+              color={meta.color}
+              activo={grupoFiltrado === meta.key}
+              destacado={meta.key === 'hoy'}
+              onClick={() => toggleStatCard(meta.key)}
+            />
+          )
+        })}
+      </div>
 
       <div className="panel">
-        <div className="panel-header panel-header-with-controls" onClick={() => setFiltrosOpen(!filtrosOpen)}>
+        <div className="panel-header" onClick={() => setFiltrosOpen(!filtrosOpen)}>
           <div className="panel-header-left">
             <Filter size={15} color="var(--text-muted)" />
             <span className="panel-label">Filtros y vista</span>
@@ -588,9 +324,6 @@ export default function Dashboard() {
                 className={`btn-toggle ${vista === 'full' ? 'btn-toggle-active' : ''}`}>
                 <LayoutList size={13} />
               </button>
-              <select value={paginaSize} onChange={e => setPaginaSize(Number(e.target.value))} className="select-sm">
-                {PAGE_OPTIONS.map(n => <option key={n} value={n}>{n}/día</option>)}
-              </select>
             </div>
             {filtrosOpen
               ? <ChevronUp size={16} color="var(--text-muted)" />
@@ -602,11 +335,6 @@ export default function Dashboard() {
         {filtrosOpen && (
           <div className="panel-body">
             <div className="filters-row">
-              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="select-auto">
-                <option value="">Todos los estados</option>
-                <option value="sin_estado">Sin estado</option>
-                {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
-              </select>
               <select value={filtroPrioridad} onChange={e => setFiltroPrioridad(e.target.value)} className="select-auto">
                 <option value="">Todas las prioridades</option>
                 {PRIORIDADES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -615,19 +343,24 @@ export default function Dashboard() {
                 <option value="">Todos los tipos</option>
                 {tipos.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
+              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="select-auto">
+                <option value="">Todos los estados</option>
+                <option value="sin_estado">Sin estado</option>
+                {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+              </select>
               <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)} className="select-auto">
                 <option value="">Todos los usuarios</option>
                 <option value="mios">Mis pedidos</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </select>
               {tagsDisponibles.length > 0 && (
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
               )}
-              <button onClick={() => setOrdenUrgencia(v => !v)}
-                className={`btn-urgencia ${ordenUrgencia ? 'btn-urgencia-active' : ''}`}>
-                <AlertTriangle size={13} />
-                {ordenUrgencia ? 'Por urgencia ✓' : 'Ordenar por urgencia'}
-              </button>
+              {hayFiltrosActivos && (
+                <button onClick={limpiarFiltros} className="btn-clear-filters">
+                  <X size={13} />Limpiar filtros
+                </button>
+              )}
             </div>
 
             {filtroTag && (
@@ -641,57 +374,42 @@ export default function Dashboard() {
                 </span>
               </div>
             )}
-
-            <div className="filter-dates-row">
-              <div className="filter-date-col">
-                <span className="filter-date-label">Desde</span>
-                <DatePicker value={fechaDesde} onChange={handleDesde} placeholder="Fecha desde" />
-              </div>
-              <div className="filter-date-col">
-                <span className="filter-date-label">Hasta</span>
-                <DatePicker value={fechaHasta} onChange={handleHasta} placeholder="Fecha hasta" />
-              </div>
-              {hayFiltrosActivos && (
-                <button onClick={limpiarFiltros} className="btn-clear-filters">
-                  <X size={13} />Limpiar filtros
-                </button>
-              )}
-            </div>
-
-            {fechaError && <p className="msg-error">{fechaError}</p>}
           </div>
         )}
       </div>
 
-      {!mostrarTodoPorFiltro && listaFinalizados.length > 0 && (
-        <button onClick={() => setMostrarFinalizados(v => !v)} className="btn-ghost-muted">
-          {mostrarFinalizados
-            ? <><ChevronUp size={14} />Ocultar finalizados</>
-            : <><ChevronDown size={14} />Mostrar finalizados ({listaFinalizados.length})</>}
-        </button>
-      )}
-
       {loading && <p className="text-muted-sm">Cargando…</p>}
-      {!loading && porDia.length === 0 && (
-        <p className="text-muted-sm">No hay pedidos con esos filtros.</p>
+      {!loading && totalVisible === 0 && (
+        <div className="empty-state">
+          <Filter size={32} />
+          <p>No hay pedidos pendientes con esos filtros.</p>
+        </div>
       )}
 
-      <div className="page-root">
-        {porDia.map(([fecha, pedidosDia]) => (
-          <DiaGroup
-            key={fecha}
-            fecha={fecha}
-            pedidos={pedidosDia}
-            vista={vista}
-            paginaSize={paginaSize}
-            onTagClick={setFiltroTag}
-            filtroTag={filtroTag}
-            tipos={tipos}
-            estados={estados}
-            mostrarFinalizados={mostrarFinalizados}
-          />
-        ))}
-      </div>
+      {!grupoFiltrado && (
+        <VencidosAcordeon
+          pedidos={vencidos}
+          vista={vista}
+          onTagClick={setFiltroTag}
+          filtroTag={filtroTag}
+          tipos={tipos}
+          estados={estados}
+        />
+      )}
+
+      {grupos.map(({ meta, pedidos: pedidosGrupo }) => (
+        <GrupoSemantico
+          key={meta.key}
+          meta={meta}
+          pedidos={pedidosGrupo}
+          vista={vista}
+          onTagClick={setFiltroTag}
+          filtroTag={filtroTag}
+          tipos={tipos}
+          estados={estados}
+          limite={meta.key === 'mas_adelante' ? 15 : undefined}
+        />
+      ))}
     </div>
   )
 }

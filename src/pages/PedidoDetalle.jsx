@@ -276,7 +276,7 @@ export default function PedidoDetalle() {
       {successMsg && <SuccessModal message={successMsg} onClose={() => setSuccessMsg('')} />}
       {confirm && (
         <ConfirmModal open={true} title={confirm.title} message={confirm.message}
-          confirmLabel="Eliminar" variant="danger"
+          confirmLabel={confirm.confirmLabel ?? 'Eliminar'} variant={confirm.variant ?? 'danger'}
           onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />
       )}
     </div>

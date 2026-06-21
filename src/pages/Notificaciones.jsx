@@ -136,7 +136,7 @@ export default function Notificaciones() {
 
             <div className="form-divider" />
             <span className="filter-date-label">Acciones</span>
-            <div className="filters-row">
+            <div className="filters-row filters-row-acciones">
               {noLeidas > 0 && (
                 <button onClick={marcarTodasLeidas} className="btn-edit"
                   style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>

@@ -38,7 +38,21 @@ export default function RevisionEmail() {
     if (modo === 'url') {
       try {
         const host = new URL(url).hostname
-        if (!host.endsWith('icommarketing.com')) { setUrlError('Solo se pueden analizar piezas de icommarketing.com'); return }
+        // Esta validación es solo cosmética (UX) — la defensa REAL contra
+        // SSRF vive en api/proxy.js (ALLOWED_HOST_SUFFIXES), porque ese
+        // endpoint puede llamarse directo sin pasar por este formulario.
+        // 🔧 Si se agrega un dominio nuevo a api/proxy.js, actualizar
+        // también esta validación (y viceversa) — quedaron duplicadas
+        // a propósito como defensa en profundidad, pero hay que
+        // mantenerlas sincronizadas a mano.
+        //
+        // Con punto delante: evita que "evilicommarketing.com" pase la
+        // validación por ser un substring que también "termina en"
+        // icommarketing.com sin ser un subdominio real.
+        if (host !== 'icommarketing.com' && !host.endsWith('.icommarketing.com')) {
+          setUrlError('Solo se pueden analizar piezas de icommarketing.com')
+          return
+        }
       } catch { setUrlError('La URL ingresada no es válida'); return }
     }
 
