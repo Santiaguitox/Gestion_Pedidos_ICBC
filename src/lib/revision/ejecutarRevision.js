@@ -27,14 +27,22 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
 
   const parser = new DOMParser()
   const doc = parser.parseFromString(htmlAAnalizar, 'text/html')
-  onProgreso?.('Analizando estructura y links...')
+  // Segundo argumento (porcentaje 0-100) opcional — RevisionEmail.jsx
+  // solo usa el texto, EntregablesSection.jsx lo usa además para la
+  // barra de progreso por pieza.
+  onProgreso?.('Analizando estructura y links...', 5)
 
   const imagenes = [...doc.querySelectorAll('img')]
   const srcList = [...new Set(imagenes.map(img => img.getAttribute('src')).filter(Boolean))]
   const cacheDatos = {}
 
   for (let idx = 0; idx < srcList.length; idx++) {
-    onProgreso?.(`Verificando imagen ${idx + 1} de ${srcList.length}...`)
+    // El análisis de imágenes ocupa del 10% al 90% del progreso total —
+    // se deja margen al principio (parseo/estructura) y al final
+    // (validadores finales) para que la barra no salte de 0 a 100 de
+    // golpe en piezas con pocas imágenes.
+    const porcentaje = srcList.length > 0 ? 10 + Math.round(((idx + 1) / srcList.length) * 80) : 50
+    onProgreso?.(`Verificando imagen ${idx + 1} de ${srcList.length}...`, porcentaje)
     const src = srcList[idx]
     try {
       const response = await fetch(`${REVISION_CONFIG.PROXY_URL}?modo=imagen&url=${encodeURIComponent(src)}`)
@@ -54,7 +62,7 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     Promise.resolve(CompararConTemplates(doc, templates)),
   ])
 
-  onProgreso?.('')
+  onProgreso?.('', 100)
 
   return {
     htmlAnalizado: htmlAAnalizar,
@@ -65,10 +73,13 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
   }
 }
 
-// Los 9 bloques principales que determinan el resumen (X de 9 pruebas) —
-// 'resumenTemplates' no entra en este conteo porque no es un bloque
-// pasa/no-pasa como los demás (es una lista de estructuras obsoletas
-// detectadas, puede tener 0 o más elementos, no un único .ok booleano).
+// Los 10 bloques que determinan el resumen (X de 10 pruebas).
+// 'resumenTemplates' es distinto a los otros 9: devuelve un ARRAY de
+// estructuras obsoletas detectadas (0 o más), no un objeto único con
+// .ok — se normaliza acá mismo ({ ok: encontró 0 obsoletas }) para que
+// pueda sumarse al mismo conteo sin necesitar un caso especial en
+// resumirResultados. Es una prueba importante: detecta HTML viejo de
+// versiones anteriores de piezas que ya no debería usarse.
 const BLOQUES_RESUMEN = [
   'estructuraHTML', 'clasesCSS', 'legal', 'links',
   'dominioImagenes', 'altImagenes', 'dimensiones', 'pesoImagenes', 'pesoHTML',
@@ -79,7 +90,8 @@ const BLOQUES_RESUMEN = [
 // bloques pasaron, el total, y la severidad agregada (el estado más
 // grave de cualquiera de los bloques).
 export function resumirResultados(resultados) {
-  const bloques = BLOQUES_RESUMEN.map(key => resultados[key]).filter(Boolean)
+  const bloqueTemplates = { ok: (resultados.resumenTemplates?.length ?? 0) === 0 }
+  const bloques = [...BLOQUES_RESUMEN.map(key => resultados[key]).filter(Boolean), bloqueTemplates]
   const ok = bloques.filter(b => b.ok).length
   const total = bloques.length
   const hayError = bloques.some(b => !b.ok && !b.advertencia)

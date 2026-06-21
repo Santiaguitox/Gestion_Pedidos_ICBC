@@ -1,11 +1,19 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { correrRevisionCompleta } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
 import { Search, Trash2, RotateCcw } from 'lucide-react'
 
 export default function RevisionEmail() {
+  const location = useLocation()
+  // Si se llega desde la pieza de un pedido ("Ver detalle"), state.url
+  // trae el link a precargar — se arranca directo en modo 'url' con ese
+  // valor, y se dispara el análisis automáticamente al montar (ver
+  // useEffect más abajo), para no obligar a la persona a tocar "Analizar"
+  // de nuevo si ya vino con la intención clara de ver ESE resultado.
+  const urlInicial = location.state?.url ?? ''
   const [modo, setModo] = useState('url')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(urlInicial)
   const [html, setHtml] = useState('')
   const [resultados, setResultados] = useState(null)
   const [cargando, setCargando] = useState(false)
@@ -13,6 +21,14 @@ export default function RevisionEmail() {
   const [progreso, setProgreso] = useState('')
   const [urlError, setUrlError] = useState('')
   const iframeRef = useRef(null)
+
+  // Si llegamos con una URL precargada (desde "Ver detalle" de una
+  // pieza), disparar el análisis automáticamente al montar — solo una
+  // vez, no en cada cambio de 'url' (si no, se repetiría cada vez que
+  // la persona edita el campo a mano después).
+  useEffect(() => {
+    if (urlInicial) handleAnalizar()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleReiniciar() {
     setHtml(''); setHtmlAnalizado(''); setResultados(null); setUrl(''); setUrlError('')
