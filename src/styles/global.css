@@ -1726,6 +1726,7 @@ select:focus {
   flex-direction: column;
   gap: 0;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .modal-body .field {
@@ -4028,6 +4029,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .carga-trabajo-stats-row {
