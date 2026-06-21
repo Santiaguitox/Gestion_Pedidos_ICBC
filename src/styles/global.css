@@ -740,6 +740,57 @@ select:focus {
 /* Mobile: filas apiladas — título+fecha / prioridad+tipo / estados / tags —
    en vez de apretar todo en una sola línea horizontal. */
 @media (max-width: 640px) {
+  .page-header {
+    flex-wrap: wrap;
+  }
+
+  /* Apila las 2 "columnas" de Revisión de emails, con los RESULTADOS
+     primero y el preview después (orden más útil en mobile: ves el
+     resultado del análisis sin tener que scrollear más allá de un
+     iframe grande primero). */
+  .revision-layout {
+    flex-direction: column;
+  }
+
+  .revision-col-resultados {
+    order: 1;
+    width: 100%;
+  }
+
+  .revision-col-preview {
+    order: 2;
+    /* !important necesario: la regla base (.revision-col-preview {
+       width: 660px }) vive más abajo en este archivo, en la sección
+       de Revisión de emails, y por orden de aparición ganaría sobre
+       esta regla mobile sin el !important. */
+    width: 100% !important;
+  }
+
+  .revision-iframe {
+    width: 100%;
+  }
+
+  /* "Ver histórico sin finalizar" es notablemente más largo que el
+     resto de los filtros básicos (Prioridad/Tipo/Estado/Usuario/Tags)
+     — compartiendo la misma grilla de 2 columnas en mobile, ese ancho
+     mínimo más largo empuja y corta el texto de los demás. Solo este
+     botón puntual pasa a ocupar el ancho completo de su fila; el resto
+     sigue acomodándose en 2 columnas sin problema (confirmado: en el
+     Dashboard, con solo 4 filtros cortos, ya entran bien en 2x2). */
+  .btn-historico-ancho {
+    flex: 1 1 100%;
+  }
+
+  /* Fechas largas como "Sábado 20 de junio" no entraban junto al
+     contador "30 pedidos · 3 finalizados" en mobile — se achica el
+     título en vez de tocar el layout (línea decorativa, flex-wrap,
+     etc.), evitando desacomodar nada del diseño. Seguro de compartir
+     con el Dashboard (ahí los títulos ya son cortos: "Hoy", "Mañana"
+     — verlos un poco más chicos en mobile no cambia nada negativo). */
+  .dia-group-label-principal {
+    font-size: 1.125rem;
+  }
+
   .pedido-compact-desktop {
     display: none;
   }
@@ -4289,6 +4340,10 @@ select:focus {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
   transition: left 150ms ease;
+}
+
+.revision-col-preview {
+  width: 660px;
 }
 
 .revision-col-label {

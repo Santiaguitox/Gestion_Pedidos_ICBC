@@ -351,7 +351,7 @@ export default function PedidosList({ onNew }) {
                 )}
                 <button
                   onClick={() => { setModoHistorico(v => !v) }}
-                  className={`select-auto btn-toggle-pill ${modoHistorico ? 'btn-toggle-pill-active' : ''}`}
+                  className={`select-auto btn-toggle-pill btn-historico-ancho ${modoHistorico ? 'btn-toggle-pill-active' : ''}`}
                   title="Pedidos activos (sin finalizar) que quedaron fuera del rango habitual"
                 >
                   <History size={13} />Ver histórico sin finalizar
