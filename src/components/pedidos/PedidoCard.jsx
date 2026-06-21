@@ -173,19 +173,35 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
     ? format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })
     : null
   const peorRevision = peorRevisionDePedido(pedido.entregable)
+  // Acordeón mobile: arranca colapsado (tipo y prioridad son campos
+  // obligatorios al crear un pedido, así que el cuerpo expandido nunca
+  // queda vacío — siempre hay algo que mostrar al abrirlo).
+  const [expandidoMobile, setExpandidoMobile] = useState(false)
+  // Color del borde izquierdo en mobile: NO es prioridad, es "necesita
+  // atención en la revisión" — sin color si no hay piezas con revisión
+  // o si el resultado es perfecto (10/10); ámbar si la peor severidad
+  // es 'advertencia'; rojo si es 'error'. Reusa peorRevisionDePedido
+  // (ya calculado arriba), sin lógica de severidad nueva.
+  const esRevisionPerfecta = peorRevision && peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total
+  const colorBordeRevision = !peorRevision || esRevisionPerfecta
+    ? null
+    : peorRevision.revision_severidad === 'error' ? 'var(--icbc-red)' : '#F59E0B'
 
   return (
-    <div
-      onClick={irAlDetalle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && irAlDetalle()}
-      className="pedido-card-compact"
-    >
+    <div className="pedido-card-compact">
       {/* Desktop: una sola línea, orden original — prioridad, título, tags,
           estados, fecha — con un separador "|" entre tags/estados/fecha.
-          Oculto en mobile vía CSS (.pedido-compact-desktop). */}
-      <div className="pedido-compact-desktop">
+          Oculto en mobile vía CSS (.pedido-compact-desktop). El click de
+          TODA la fila navega al detalle — comportamiento exclusivo de
+          desktop, ver el bloque mobile más abajo para su propio manejo
+          de click (acordeón, no navegación). */}
+      <div
+        onClick={irAlDetalle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && irAlDetalle()}
+        className="pedido-compact-desktop"
+      >
         {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
         <span className="pedido-asunto-compact">{pedido.asunto}</span>
         <div className="pedido-compact-grupos-derecha">
@@ -225,63 +241,98 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
         </div>
       </div>
 
-      {/* Mobile: filas apiladas con etiquetas — título+fecha, prioridad+tipo,
-          estados, tags. Oculto en desktop vía CSS (.pedido-compact-mobile). */}
-      <div className="pedido-compact-mobile">
-        <div className="pedido-compact-fila pedido-compact-fila-titulo">
-          <span className="pedido-asunto-compact">{pedido.asunto}</span>
-          <span className={`pedido-meta-item ${!fechaTexto ? 'pedido-meta-sin-fecha' : ''}`}>
-            <Calendar size={12} />
-            {fechaTexto ?? 'Sin fecha'}
-          </span>
+      {/* Mobile: acordeón colapsado por default — header siempre visible
+          (franja de color + título + prioridad + fecha + chevron), cuerpo
+          expandible con Tipo/Estados/Tags/Revisión + botón Ver pedido.
+          Oculto en desktop vía CSS (.pedido-compact-mobile). El click del
+          header solo abre/cierra — NUNCA navega (a diferencia del bloque
+          desktop de arriba); la única forma de ir al detalle es el botón
+          "Ver pedido" de adentro. */}
+      <div className="pedido-compact-mobile" style={colorBordeRevision ? { borderLeftColor: colorBordeRevision } : undefined}>
+        <div
+          onClick={() => setExpandidoMobile(v => !v)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && setExpandidoMobile(v => !v)}
+          className="pedido-compact-mobile-header"
+        >
+          <div className="pedido-compact-mobile-header-fila1">
+            <button
+              onClick={e => { e.stopPropagation(); irAlDetalle() }}
+              className="pedido-compact-mobile-ir-detalle"
+              title="Ir al detalle del pedido"
+            >
+              <ExternalLink size={14} />
+            </button>
+            <span className="pedido-asunto-compact">{pedido.asunto}</span>
+            {expandidoMobile ? <ChevronUp size={16} className="pedido-compact-mobile-chevron" /> : <ChevronDown size={16} className="pedido-compact-mobile-chevron" />}
+          </div>
+          <div className="pedido-compact-mobile-header-fila2">
+            {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
+            <span className={`pedido-meta-item ${!fechaTexto ? 'pedido-meta-sin-fecha' : ''}`}>
+              <Calendar size={12} />
+              {fechaTexto ?? 'Sin fecha'}
+            </span>
+          </div>
         </div>
 
-        {prio && (
-          <div className="pedido-compact-fila">
-            <span className="pedido-compact-fila-label">Prioridad · Tipo:</span>
-            <Badge label={prio.label} color={prio.color} size="sm" />
-            {tipo && <Badge label={tipo.label} color={tipo.color} size="sm" />}
-          </div>
-        )}
-
-        {estadosBadge.length > 0 && (
-          <div className="pedido-compact-fila">
-            <span className="pedido-compact-fila-label">Estados:</span>
-            <div className="flex gap-[0.3rem] flex-wrap">
-              {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-            </div>
-          </div>
-        )}
-
-        {pedido.tags?.length > 0 && (
-          <div className="pedido-compact-fila" onClick={e => e.stopPropagation()}>
-            <span className="pedido-compact-fila-label">Tags:</span>
-            <div className="flex gap-1 flex-wrap">
-              {pedido.tags.map(t => (
-                <button key={t} onClick={() => onTagClick?.(t)}
-                  className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
-                  <Tag size={9} />{t}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {peorRevision && (
-          <div className="pedido-compact-fila" onClick={e => e.stopPropagation()}>
-            <span className="pedido-compact-fila-label">Revisión:</span>
-            {peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total ? (
-              <span className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}>
-                {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-              </span>
-            ) : (
-              <button
-                onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
-                className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
-              >
-                {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-              </button>
+        {expandidoMobile && (
+          <div className="pedido-compact-mobile-body" onClick={e => e.stopPropagation()}>
+            {tipo && (
+              <div className="pedido-compact-mobile-seccion">
+                <span className="pedido-compact-fila-label">Tipo:</span>
+                <div className="pedido-compact-mobile-pills">
+                  <Badge label={tipo.label} color={tipo.color} size="sm" />
+                </div>
+              </div>
             )}
+
+            {estadosBadge.length > 0 && (
+              <div className="pedido-compact-mobile-seccion">
+                <span className="pedido-compact-fila-label">Estados:</span>
+                <div className="pedido-compact-mobile-pills">
+                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+                </div>
+              </div>
+            )}
+
+            {pedido.tags?.length > 0 && (
+              <div className="pedido-compact-mobile-seccion">
+                <span className="pedido-compact-fila-label">Tags:</span>
+                <div className="pedido-compact-mobile-pills">
+                  {pedido.tags.map(t => (
+                    <button key={t} onClick={() => onTagClick?.(t)}
+                      className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
+                      <Tag size={9} />{t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {peorRevision && (
+              <div className="pedido-compact-mobile-seccion">
+                <span className="pedido-compact-fila-label">Revisión:</span>
+                <div className="pedido-compact-mobile-pills">
+                  {esRevisionPerfecta ? (
+                    <span className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}>
+                      {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
+                      className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                    >
+                      {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button onClick={irAlDetalle} className="pedido-compact-mobile-ver-pedido">
+              <ExternalLink size={13} />Ver pedido
+            </button>
           </div>
         )}
       </div>

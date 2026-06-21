@@ -71,9 +71,15 @@ export function calcularGrupo(pedido, hoy) {
 }
 
 function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, estados, limite }) {
+  // El Hook va ANTES del early return de abajo — las reglas de Hooks de
+  // React exigen que se llamen siempre, en el mismo orden, en CADA
+  // render, sin importar si después el componente retorna null. Tenerlo
+  // después del return rompía esa regla (no se llamaba cuando
+  // pedidos.length === 0), lo que generaba el error interno de React
+  // "Expected static flag was missing" — confirmado el 2026-06-22.
+  const navigate = useNavigate()
   if (pedidos.length === 0) return null
   const { label, Icono, color } = meta
-  const navigate = useNavigate()
   // Límite opcional (usado solo en "Más adelante" — ver Dashboard más
   // abajo): el Dashboard se pensó para ser un vistazo rápido, no una
   // pantalla de trabajo con paginación configurable como Pedidos.jsx —

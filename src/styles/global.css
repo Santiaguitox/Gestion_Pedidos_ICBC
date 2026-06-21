@@ -151,6 +151,7 @@ select:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
  
+
 /* ─── Sidebar nav items ───────────────────────────────────────────────────── */
 .nav-item,
 .nav-btn {
@@ -217,13 +218,6 @@ select:focus {
   gap: 0.45rem;
 }
 
-.sidebar-profile {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.55rem 0.85rem;
-}
-
 .sidebar-collapsed .sidebar-nav {
   padding: 1rem 0.5rem;
   align-items: center;
@@ -255,7 +249,6 @@ select:focus {
 
 /* ─── Input utilities ─────────────────────────────────────────────────────── */
 .input-icon-left  { padding-left: 2.25rem; }
-.input-icon-right { padding-right: 2.25rem; }
 .input-icon-both  { padding-left: 2.25rem; padding-right: 2.25rem; }
 
 /* ─── Button utilities ────────────────────────────────────────────────────── */
@@ -370,93 +363,6 @@ select:focus {
   font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 700;
-}
-
-/* ─── Stat cards ──────────────────────────────────────────────────────────── */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-}
-
-.stat-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-card-value {
-  font-family: var(--font-display);
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.stat-card-label {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  margin-top: 0.25rem;
-}
-
-/* ─── Agenda panel ────────────────────────────────────────────────────────── */
-.agenda-panel {
-  background: linear-gradient(135deg, rgba(91,78,232,0.06) 0%, rgba(91,78,232,0.02) 100%);
-  border: 1px solid rgba(91,78,232,0.2);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.agenda-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
-  cursor: pointer;
-}
-
-.agenda-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: rgba(91,78,232,0.12);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.agenda-title {
-  font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.agenda-subtitle {
-  font-size: 0.75rem;
-  color: var(--icomm-violet);
-  margin-top: 0.125rem;
-  font-weight: 500;
-}
-
-.agenda-body {
-  padding: 0.75rem 1.25rem 1.25rem;
-  border-top: 1px solid rgba(91,78,232,0.15);
 }
 
 /* ─── Generic collapsible panel ───────────────────────────────────────────── */
@@ -703,6 +609,10 @@ select:focus {
   border-radius: var(--radius-md);
   padding: 0.6rem 1rem;
   cursor: pointer;
+  /* Necesario para que la franja de color del borde izquierdo (ver
+     .pedido-compact-mobile, solo mobile) respete las esquinas
+     redondeadas de la tarjeta en vez de sobresalir con ángulos rectos. */
+  overflow: hidden;
 }
 
 /* Desktop: una sola línea horizontal — orden original (prioridad, título,
@@ -735,157 +645,6 @@ select:focus {
 
 .pedido-compact-mobile {
   display: none;
-}
-
-/* Mobile: filas apiladas — título+fecha / prioridad+tipo / estados / tags —
-   en vez de apretar todo en una sola línea horizontal. */
-@media (max-width: 640px) {
-  .page-header {
-    flex-wrap: wrap !important;
-  }
-
-  /* Apila las 2 "columnas" de Revisión de emails, con los RESULTADOS
-     primero y el preview después (orden más útil en mobile: ves el
-     resultado del análisis sin tener que scrollear más allá de un
-     iframe grande primero). */
-  .revision-layout {
-    flex-direction: column;
-  }
-
-  .revision-col-resultados {
-    order: 1;
-    width: 100%;
-  }
-
-  .revision-col-preview {
-    order: 2;
-    /* !important necesario: la regla base (.revision-col-preview {
-       width: 660px }) vive más abajo en este archivo, en la sección
-       de Revisión de emails, y por orden de aparición ganaría sobre
-       esta regla mobile sin el !important. */
-    width: 100% !important;
-  }
-
-  .revision-iframe {
-    width: 100% !important;
-  }
-
-  /* "Ver histórico sin finalizar" es notablemente más largo que el
-     resto de los filtros básicos — compartiendo la misma grilla de 2
-     columnas en mobile, ese ancho mínimo más largo empuja y corta el
-     texto de los demás. Tags y Histórico pasan a ocupar las 2 columnas
-     (ancho completo) cada uno en su propia fila — Tags es el QUINTO
-     elemento de la grilla (número impar), así que sin este ajuste
-     quedaría solo en su fila de todos modos (no hay un sexto elemento
-     "normal" que comparta esa fila con él, ya que Histórico ocupa la
-     fila completa); haciendo que ambos ocupen el 100% se evita el
-     hueco vacío. El resto (Prioridad/Tipo/Estado/Usuario) sigue
-     acomodándose en 2 columnas sin problema (confirmado: en el
-     Dashboard, con solo 4 filtros cortos, ya entran bien en 2x2).
-     grid-column (no flex) porque .filters-row es un GRID en mobile,
-     no flex — ver la otra regla de .filters-row más abajo en este
-     archivo, que define display:grid. !important necesario porque esa
-     regla vive después en el archivo y, sin esto, su
-     grid-template-columns fijo seguiría rigiendo sobre estos elementos. */
-  .btn-historico-ancho,
-  .tags-filtro-ancho {
-    grid-column: 1 / -1 !important;
-  }
-
-  /* TagSearch.jsx define su propio ancho con style inline (width:'auto',
-     minWidth:'150px') — el grid-column de arriba hace que el WRAPPER
-     ocupe las 2 columnas, pero el componente interno (que es el que
-     realmente tiene el contenido visual) no se estira solo para llenar
-     ese espacio. Se fuerza el ancho del hijo directo desde acá, sin
-     tocar TagSearch.jsx (es un componente compartido, reusado en otros
-     lugares donde SÍ tiene sentido su ancho automático original). */
-  .tags-filtro-ancho > div {
-    width: 100% !important;
-  }
-
-  /* En la tabla de Carga de trabajo, la columna de etiquetas
-     (Vencidos/Hoy/Mañana/...) se achica un poco en mobile, ya que esos
-     textos son más largos que los números de cada celda de datos —
-     los encabezados de columna ya son solo el avatar (sin nombre, ver
-     CargaTrabajoModal.jsx), así que no hace falta nada más acá para
-     el header en sí. */
-  .carga-trabajo-tabla-label {
-    font-size: 0.75rem !important;
-  }
-
-  /* En mobile, los 3 stat cards pasan a ocupar el 100% del ancho (uno
-     debajo del otro) en vez de competir por espacio en 3 columnas — con
-     poco ancho disponible, el texto crecía demasiado en relación al
-     espacio (ver discusión 2026-06-21). El contenido pasa de apilado
-     (número arriba, texto abajo, centrado) a una sola fila (número a
-     la izquierda, texto a la derecha), ya que ahora hay ancho de sobra
-     para eso. !important necesario: las definiciones base equivalentes
-     viven más abajo en este archivo y ganarían por orden de aparición
-     sin esto. */
-  .carga-trabajo-stats-row {
-    grid-template-columns: 1fr !important;
-  }
-
-  .carga-trabajo-stat {
-    flex-direction: row !important;
-    justify-content: flex-start !important;
-    gap: 0.625rem !important;
-    text-align: left !important;
-  }
-
-  /* Fechas largas como "Sábado 20 de junio" no entraban junto al
-     contador "30 pedidos · 3 finalizados" en mobile — se achica el
-     título en vez de tocar el layout (línea decorativa, flex-wrap,
-     etc.), evitando desacomodar nada del diseño. Seguro de compartir
-     con el Dashboard (ahí los títulos ya son cortos: "Hoy", "Mañana"
-     — verlos un poco más chicos en mobile no cambia nada negativo).
-     !important necesario: la regla base equivalente vive más abajo en
-     este archivo (sección de grupos semánticos) y ganaría por orden de
-     aparición sin esto. */
-  .dia-group-label-principal {
-    font-size: 1.125rem !important;
-  }
-
-  .pedido-compact-desktop {
-    display: none;
-  }
-
-  .pedido-compact-mobile {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .pedido-compact-fila {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .pedido-compact-fila + .pedido-compact-fila {
-    padding-top: 0.4rem;
-    border-top: 1px solid var(--border);
-  }
-
-  .pedido-compact-fila-titulo {
-    justify-content: space-between;
-  }
-
-  .pedido-compact-fila-titulo .pedido-asunto-compact {
-    flex: 1;
-    min-width: 0;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
-  }
-
-  .pedido-compact-fila-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
 }
 
 .pedido-card-full {
@@ -1086,13 +845,6 @@ select:focus {
   100% { background: transparent; box-shadow: 0 0 0 2px rgba(91,78,232,0); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pedido-recien-llegado {
-    animation: none;
-    background: rgba(91,78,232,0.18);
-  }
-}
-
 /* ─── Grupos semánticos del Dashboard (Hoy/Mañana/etc.) ──────────────────── */
 .grupo-semantico-icono {
   display: flex;
@@ -1106,28 +858,11 @@ select:focus {
   50% { opacity: 0.55; transform: scale(1.25); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .vencidos-acordeon-dot { animation: none; }
-}
-
 /* ─── Stat cards clickeables (filtro rápido del Dashboard) ───────────────── */
 .stat-cards-row {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0.75rem;
-}
-
-@media (max-width: 640px) {
-  .stat-cards-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  /* "Hoy" es el más urgente/accionable del día a día — ocupa el ancho
-     completo en mobile para destacarlo, mientras el resto se acomoda en
-     2x2 debajo. */
-  .stat-card-clickeable-destacado {
-    grid-column: 1 / -1;
-  }
 }
 
 .stat-card-clickeable {
@@ -1243,69 +978,6 @@ select:focus {
   padding: 0 1rem 0.875rem;
 }
 
-/* ─── Próximos / Agenda rows ──────────────────────────────────────────────── */
-.proximos-root {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.proximos-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.section-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
-}
-
-.section-label-urgent { color: #EF4444; }
-.section-label-muted  { color: var(--text-muted); }
-
-.pedido-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: background 150ms;
-}
-
-.pedido-row:hover { background: rgba(91,78,232,0.08); border-color: rgba(91,78,232,0.25); }
-
-.pedido-row-urgent { border-color: rgba(239,68,68,0.2); }
-
-.pedido-row-info {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-}
-
-.pedido-row-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pedido-row-vence {
-  font-size: 0.75rem;
-  margin-top: 0.125rem;
-  color: var(--text-muted);
-}
-
-.pedido-row-vence-urgent { color: #EF4444; }
-
 /* ─── Pagination ──────────────────────────────────────────────────────────── */
 .pagination {
   display: flex;
@@ -1360,12 +1032,6 @@ select:focus {
   color: #fff;
 }
 
-.select-pagination {
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.5rem;
-  width: auto;
-}
-
 /* ─── Filter panel controls ───────────────────────────────────────────────── */
 .filters-row {
   display: flex;
@@ -1378,35 +1044,6 @@ select:focus {
   width: auto;
   min-width: 150px;
   font-size: 0.8125rem;
-}
-
-.select-sm {
-  width: auto;
-  font-size: 0.8125rem;
-  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
-}
-
-.btn-urgencia {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 400;
-  padding: 0.5rem 0.875rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  background: transparent;
-  transition: all 150ms ease;
-  white-space: nowrap;
-}
-
-.btn-urgencia-active {
-  color: var(--icbc-red);
-  background: rgba(208,17,27,0.08);
-  border-color: var(--border);
 }
 
 .btn-clear-filters {
@@ -1691,16 +1328,6 @@ select:focus {
   display: none;
 }
 
-@media (max-width: 640px) {
-  .switch-finalizados-label-desktop {
-    display: none;
-  }
-
-  .switch-finalizados-label-mobile {
-    display: flex;
-  }
-}
-
 .btn-toggle {
   display: flex;
   align-items: center;
@@ -1718,25 +1345,6 @@ select:focus {
 }
 
 /* ─── Misc ────────────────────────────────────────────────────────────────── */
-.btn-ghost-muted {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 0.625rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  align-self: flex-start;
-  transition: all 150ms;
-  background: transparent;
-}
-
-.btn-ghost-muted:hover {
-  border-color: var(--text-secondary);
-  color: var(--text-secondary);
-}
 
 .text-muted-sm {
   color: var(--text-muted);
@@ -1752,26 +1360,6 @@ select:focus {
   height: 1px;
   background: var(--border);
   margin: 0.25rem 0;
-}
-
-/* Bloque contenedor de los 3 chip groups */
-.chip-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  gap: 0.875rem;
-}
-
-/* Separador fino entre tipo / prioridad / estados dentro del bloque */
-.chip-section-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 0 -1rem;
-  padding: 0 1rem;
 }
 
 /* ─── Modal / Form overlay ────────────────────────────────────────────────── */
@@ -3130,74 +2718,6 @@ select:focus {
   overflow-y: auto;
 }
 
-/* ─── Notificaciones ──────────────────────────────────────────────────────── */
-.notif-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.notif-section-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 0.25rem;
-}
-
-.notif-item-nueva {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
-  padding: 1rem;
-  background: rgba(208,17,27,0.04);
-  border: 1px solid rgba(208,17,27,0.2);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 150ms;
-}
-.notif-item-nueva:hover { background: rgba(208,17,27,0.07); }
-
-.notif-item-leida {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
-  padding: 0.875rem 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  opacity: 0.7;
-  transition: opacity 150ms;
-}
-.notif-item-leida:hover { opacity: 1; }
-
-.notif-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--icbc-red);
-  flex-shrink: 0;
-  margin-top: 5px;
-}
-
-.notif-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.notif-mensaje {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.notif-time {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
 /* ─── Papelera ────────────────────────────────────────────────────────────── */
 .papelera-item {
   background: var(--bg-surface);
@@ -3313,16 +2833,6 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.btn-delete-user {
-  display: flex;
-  align-items: center;
-  padding: 0.3rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(208,17,27,0.3);
-  color: var(--icbc-red);
-  transition: all 150ms;
 }
 
 .msg-success {
@@ -3633,15 +3143,6 @@ select:focus {
   padding-left: 1.375rem;
 }
 
-.cal-estado-chip {
-  font-size: 0.6875rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 99px;
-  background: var(--bg-hover);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-}
-
 .cal-empty {
   display: flex;
   flex-direction: column;
@@ -3653,12 +3154,6 @@ select:focus {
 }
 
 /* ─── Notificaciones v2 ───────────────────────────────────────────────────── */
-.notif-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
 
 .notif-filter-btn {
   font-size: 0.8125rem;
@@ -3751,26 +3246,9 @@ select:focus {
 .notif-action-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
 .notif-action-btn-danger:hover { color: var(--icbc-red); border-color: rgba(208,17,27,0.4); }
 
-.notif-bulk-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 1rem;
-  background: rgba(208,17,27,0.05);
-  border-bottom: 1px solid rgba(208,17,27,0.15);
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
 .notif-bulk-count {
   font-weight: 600;
   color: var(--icbc-red);
-}
-
-.notif-bulk-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: auto;
 }
 
 .notif-container {
@@ -3786,226 +3264,6 @@ select:focus {
   gap: 0.5rem;
 }
 
-/* ─── Responsive mobile ───────────────────────────────────────────────────── */
-@media (max-width: 640px) {
-
-  /* Main content — menos padding */
-  .main-content {
-    padding: 1rem;
-  }
-
-  /* Page title más chico */
-  .page-title {
-    font-size: 1.25rem;
-  }
-
-  /* ── Filtros — 2 por fila ── */
-  .filters-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .select-auto {
-    width: 100%;
-    min-width: unset;
-  }
-
-  .filter-date-col {
-    min-width: unset;
-    flex: 1;
-  }
-
-  .filter-dates-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .filter-dates-row .filter-shortcuts-row {
-    grid-column: 1 / -1;
-    justify-content: center;
-  }
-
-  .btn-urgencia,
-  .btn-clear-filters,
-  .btn-ghost-muted {
-    width: 100%;
-    justify-content: center;
-  }
-
-  /* ── Panel header con controles de vista — título arriba, controles abajo alineados izquierda ── */
-  .panel-header-with-controls {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .panel-header-with-controls .panel-header-left {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .panel-header-with-controls .panel-header-right {
-    width: 100%;
-    justify-content: flex-start;
-    border-top: 1px solid var(--border);
-    padding-top: 0.5rem;
-  }
-
-  /* ── Dashboard — día group sin margen izquierdo ── */
-  .dia-group-cards {
-    padding-left: 0;
-  }
-
-  /* ── Stat cards — 2 por fila ── */
-  .stat-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  /* ── Info grid detalle — 1 por fila ── */
-  .detalle-info-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* ── Field grid form — 1 por fila ── */
-  .field-grid-2 {
-    grid-template-columns: 1fr;
-  }
-
-  /* ── Modal — sheet desde abajo ── */
-  .modal-overlay {
-    align-items: flex-end;
-    padding: 0 0.75rem 0.75rem;  /* ← agregar margen lateral y abajo */
-  }
-
-  .modal {
-    max-width: 100%;
-    max-height: 92dvh;
-    border-radius: var(--radius-lg);  /* ← redondear todos los lados */
-  }
-
-  .sheet-grid-2 {
-    grid-template-columns: 1fr;
-  }
-
-  /* ── Calendario — panel lateral debajo ── */
-  .cal-root {
-    grid-template-columns: 1fr;
-  }
-
-  .cal-day {
-    min-height: 60px;
-  }
-
-  /* ── Toast — full width ── */
-  .toast {
-    right: 0;
-    left: 0;
-    max-width: 100%;
-    border-radius: 0;
-    border-right: none;
-  }
-
-  /* ── Notificaciones — acciones en vertical ── */
-  .notif-item-v2 {
-    align-items: flex-start;
-  }
-
-  .notif-item-actions {
-    flex-direction: column;
-    opacity: 1;
-    gap: 0.2rem;
-  }
-
-  .notif-action-btn {
-    width: 26px;
-    height: 26px;
-  }
-
-  /* ── Notif bulk bar — 2 líneas con botones al 100% ── */
-  .notif-bulk-bar {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.625rem 1rem;
-  }
-
-  .notif-bulk-actions {
-    width: 100%;
-    border-top: 1px solid var(--border);
-    padding-top: 0.5rem;
-    flex-direction: column;
-  }
-
-  .notif-bulk-actions .btn-edit,
-  .notif-bulk-actions .btn-delete {
-    width: 100%;
-    justify-content: center;
-  }
-
-  /* ── Notif filtros acciones — botones uno abajo del otro al 100% ── */
-  .filters-row-acciones {
-    grid-template-columns: 1fr;
-  }
-
-  .filters-row-acciones .btn-edit,
-  .filters-row-acciones .btn-delete {
-    width: 100%;
-    justify-content: center;
-  }
-
-  /* ── Notif header listado — 2 líneas ── */
-  .notif-header-row {
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    height: auto !important;
-    padding: 0.625rem 1rem !important;
-  }
-
-  .notif-header-row-count {
-    width: 100%;
-    border-top: 1px solid var(--border);
-    padding-top: 0.375rem;
-  }
-
-  /* ── Usuarios — 2 líneas ── */
-  .usuario-item {
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .usuario-actions {
-    width: 100%;
-    justify-content: flex-end;
-    border-top: 1px solid var(--border);
-    padding-top: 0.625rem;
-  }
-
-  /* ── Detalle topbar ── */
-  .detalle-topbar {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  /* ── Login / SetPassword ── */
-  .login-card {
-    padding: 1.5rem;
-    border-radius: var(--radius-lg);
-    box-shadow: none;
-    margin: 0 1rem;
-  }
-
-  .login-logo {
-    margin-bottom: 1.25rem;
-  }
-
-  .login-form {
-    gap: 1rem;
-    margin-top: 1.25rem;
-  }
-
-  .blob-red-tr {
-    display: none;
-  }
-}
-
 /* ─── Mobile nav drawer ───────────────────────────────────────────────────── */
 .mobile-topbar {
   display: none;
@@ -4018,95 +3276,6 @@ select:focus {
 /* Drawer oculto en desktop siempre */
 .sidebar-drawer {
   display: none;
-}
-
-@media (max-width: 640px) {
-  /* Ocultar sidebar normal */
-  .sidebar-desktop {
-    display: none !important;
-  }
-
-  /* Mostrar drawer en mobile */
-  .sidebar-drawer {
-    display: flex;
-  }
-
-  /* Topbar mobile */
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.875rem 1rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-surface);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    flex-shrink: 0;
-  }
-
-  .mobile-topbar-logo {
-    font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .mobile-hamburger {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-  }
-
-  /* Drawer */
-  .sidebar-drawer {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100dvh;
-    width: 260px;
-    z-index: 300;
-    background: var(--bg-surface);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    transform: translateX(-100%);
-    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: var(--shadow-lg);
-  }
-
-  .sidebar-drawer.open {
-    transform: translateX(0);
-  }
-
-  /* Overlay oscuro */
-  .drawer-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 299;
-    background: rgba(0,0,0,0.5);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 250ms ease;
-  }
-
-  .drawer-overlay.open {
-    opacity: 1;
-    pointer-events: all;
-  }
-
-  /* Main content sin el sidebar */
-  .main-content {
-    padding: 1rem;
-  }
 }
 
 /* ─── ConfirmModal ────────────────────────────────────────────────────────── */
@@ -4310,16 +3479,6 @@ select:focus {
 }
 
 .btn-confirm:hover { opacity: 0.85; }
-
-.btn-user-edit {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 0.375rem !important;
-  width: auto !important;
-  flex-shrink: 0;
-}
 
 .danger-zone {
   display: flex;
@@ -4541,7 +3700,561 @@ select:focus {
   margin-top: 0.375rem;
 }
 
+
 @keyframes revisionBloqueIn {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (max-width: 640px)
+   ────────────────────────────────────────────────────────────────────────
+   Único bloque @media de este breakpoint en todo el archivo. Todas las
+   reglas mobile viven acá, DESPUÉS de sus equivalentes base/desktop, así
+   que ganan por orden de aparición sin necesitar !important. Si una clase
+   nueva necesita un ajuste mobile, agregarla aquí (no crear un bloque
+   @media nuevo en otra parte del archivo).
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .page-header {
+    flex-wrap: wrap;
+  }
+
+  /* Apila las 2 "columnas" de Revisión de emails, con los RESULTADOS
+     primero y el preview después (orden más útil en mobile: ves el
+     resultado del análisis sin tener que scrollear más allá de un
+     iframe grande primero). */
+  .revision-layout {
+    flex-direction: column;
+  }
+
+  .revision-col-resultados {
+    order: 1;
+    width: 100%;
+  }
+
+  .revision-col-preview {
+    order: 2;
+    width: 100%;
+  }
+
+  .revision-iframe {
+    width: 100%;
+  }
+
+  /* "Ver histórico sin finalizar" es notablemente más largo que el
+     resto de los filtros básicos — compartiendo la misma grilla de 2
+     columnas en mobile, ese ancho mínimo más largo empuja y corta el
+     texto de los demás. Tags y Histórico pasan a ocupar las 2 columnas
+     (ancho completo) cada uno en su propia fila — Tags es el QUINTO
+     elemento de la grilla (número impar), así que sin este ajuste
+     quedaría solo en su fila de todos modos (no hay un sexto elemento
+     "normal" que comparta esa fila con él, ya que Histórico ocupa la
+     fila completa); haciendo que ambos ocupen el 100% se evita el
+     hueco vacío. El resto (Prioridad/Tipo/Estado/Usuario) sigue
+     acomodándose en 2 columnas sin problema (confirmado: en el
+     Dashboard, con solo 4 filtros cortos, ya entran bien en 2x2).
+     grid-column (no flex) porque .filters-row es un GRID en mobile,
+     no flex — ver la regla de .filters-row más abajo en este mismo
+     bloque, que define display:grid. */
+  .btn-historico-ancho,
+  .tags-filtro-ancho {
+    grid-column: 1 / -1;
+  }
+
+  /* TagSearch.jsx define su propio ancho con style inline (width:'auto',
+     minWidth:'150px') — el grid-column de arriba hace que el WRAPPER
+     ocupe las 2 columnas, pero el componente interno (que es el que
+     realmente tiene el contenido visual) no se estira solo para llenar
+     ese espacio. Se fuerza el ancho del hijo directo desde acá, sin
+     tocar TagSearch.jsx (es un componente compartido, reusado en otros
+     lugares donde SÍ tiene sentido su ancho automático original). */
+  .tags-filtro-ancho > div {
+    width: 100%;
+  }
+
+  /* En la tabla de Carga de trabajo, la columna de etiquetas
+     (Vencidos/Hoy/Mañana/...) se achica un poco en mobile, ya que esos
+     textos son más largos que los números de cada celda de datos —
+     los encabezados de columna ya son solo el avatar (sin nombre, ver
+     CargaTrabajoModal.jsx), así que no hace falta nada más acá para
+     el header en sí. */
+  .carga-trabajo-tabla-label {
+    font-size: 0.75rem;
+  }
+
+  /* En mobile, los 3 stat cards pasan a ocupar el 100% del ancho (uno
+     debajo del otro) en vez de competir por espacio en 3 columnas — con
+     poco ancho disponible, el texto crecía demasiado en relación al
+     espacio (ver discusión 2026-06-21). El contenido pasa de apilado
+     (número arriba, texto abajo, centrado) a una sola fila (número a
+     la izquierda, texto a la derecha), ya que ahora hay ancho de sobra
+     para eso. */
+  .carga-trabajo-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .carga-trabajo-stat {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.625rem;
+    text-align: left;
+  }
+
+  /* Fechas largas como "Sábado 20 de junio" no entraban junto al
+     contador "30 pedidos · 3 finalizados" en mobile — se achica el
+     título en vez de tocar el layout (línea decorativa, flex-wrap,
+     etc.), evitando desacomodar nada del diseño. Seguro de compartir
+     con el Dashboard (ahí los títulos ya son cortos: "Hoy", "Mañana"
+     — verlos un poco más chicos en mobile no cambia nada negativo). */
+  .dia-group-label-principal {
+    font-size: 1.125rem;
+  }
+
+  .pedido-compact-desktop {
+    display: none;
+  }
+
+  .pedido-compact-mobile {
+    display: flex;
+    flex-direction: column;
+    /* Franja de color en el borde izquierdo — indica severidad de
+       revisión (no prioridad): sin color (var(--border), el borde
+       normal de la tarjeta) si no hay piezas con revisión o el
+       resultado es perfecto; ámbar/rojo si hace falta atención (el
+       color real lo pone el style inline en PedidoCard.jsx, calculado
+       con peorRevisionDePedido — ver colorBordeRevision). */
+    border-left: 3px solid var(--border);
+    margin: -0.6rem -1rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .pedido-compact-mobile-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+
+  .pedido-compact-mobile-header-fila1 {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .pedido-compact-mobile-ir-detalle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+    margin-top: 0.0625rem;
+  }
+
+  .pedido-compact-mobile-header-fila1 .pedido-asunto-compact {
+    flex: 1;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    font-weight: 700;
+  }
+
+  .pedido-compact-mobile-header-fila2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .pedido-compact-mobile-chevron {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+  }
+
+  .pedido-compact-mobile-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Cada sección (Tipo/Estados/Tags/Revisión) muestra su etiqueta en su
+     PROPIA línea, con los pills debajo en otra línea — sin separadores
+     entre secciones (a diferencia de la vista anterior, que tenía un
+     border-top entre cada .pedido-compact-fila). */
+  .pedido-compact-mobile-seccion {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .pedido-compact-mobile-pills {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  .pedido-compact-fila-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* Botón "Ver pedido" — mismo patrón estructural que .toast-link
+     (AppLayout.jsx), pero rojo institucional sólido en vez de violeta:
+     este SÍ navega (es la única forma de ir al detalle desde la vista
+     colapsada), por eso se destaca como una acción real, no como un
+     link secundario. */
+  .pedido-compact-mobile-ver-pedido {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    align-self: flex-end;
+    margin-top: 0.2rem;
+    padding: 0.45rem 0.875rem;
+    border-radius: var(--radius-md);
+    background: var(--accent-primary);
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .stat-cards-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* "Hoy" es el más urgente/accionable del día a día — ocupa el ancho
+     completo en mobile para destacarlo, mientras el resto se acomoda en
+     2x2 debajo. */
+  .stat-card-clickeable-destacado {
+    grid-column: 1 / -1;
+  }
+
+  .switch-finalizados-label-desktop {
+    display: none;
+  }
+
+  .switch-finalizados-label-mobile {
+    display: flex;
+  }
+
+  /* Main content — menos padding */
+  .main-content {
+    padding: 1rem;
+  }
+
+  /* Page title más chico */
+  .page-title {
+    font-size: 1.25rem;
+  }
+
+  /* ── Filtros — 2 por fila ── */
+  .filters-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .select-auto {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .filter-date-col {
+    min-width: unset;
+    flex: 1;
+  }
+
+  .filter-dates-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-dates-row .filter-shortcuts-row {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .btn-urgencia,
+  .btn-clear-filters,
+  .btn-ghost-muted {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Panel header con controles de vista — título arriba, controles abajo alineados izquierda ── */
+  .panel-header-with-controls {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .panel-header-with-controls .panel-header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .panel-header-with-controls .panel-header-right {
+    width: 100%;
+    justify-content: flex-start;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+  }
+
+  /* ── Dashboard — día group sin margen izquierdo ── */
+  .dia-group-cards {
+    padding-left: 0;
+  }
+
+  /* ── Stat cards — 2 por fila ── */
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* ── Info grid detalle — 1 por fila ── */
+  .detalle-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Field grid form — 1 por fila ── */
+  .field-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Modal — sheet desde abajo ── */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0 0.75rem 0.75rem;  /* ← agregar margen lateral y abajo */
+  }
+
+  .modal {
+    max-width: 100%;
+    max-height: 92dvh;
+    border-radius: var(--radius-lg);  /* ← redondear todos los lados */
+  }
+
+  .sheet-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Calendario — panel lateral debajo ── */
+  .cal-root {
+    grid-template-columns: 1fr;
+  }
+
+  .cal-day {
+    min-height: 60px;
+  }
+
+  /* ── Toast — full width ── */
+  .toast {
+    right: 0;
+    left: 0;
+    max-width: 100%;
+    border-radius: 0;
+    border-right: none;
+  }
+
+  /* ── Notificaciones — acciones en vertical ── */
+  .notif-item-v2 {
+    align-items: flex-start;
+  }
+
+  .notif-item-actions {
+    flex-direction: column;
+    opacity: 1;
+    gap: 0.2rem;
+  }
+
+  .notif-action-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  /* ── Notif bulk bar — 2 líneas con botones al 100% ── */
+  .notif-bulk-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .notif-bulk-actions {
+    width: 100%;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    flex-direction: column;
+  }
+
+  .notif-bulk-actions .btn-edit,
+  .notif-bulk-actions .btn-delete {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Notif filtros acciones — botones uno abajo del otro al 100% ── */
+  .filters-row-acciones {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-row-acciones .btn-edit,
+  .filters-row-acciones .btn-delete {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Notif header listado — 2 líneas ── */
+  .notif-header-row {
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    height: auto;
+    padding: 0.625rem 1rem;
+  }
+
+  .notif-header-row-count {
+    width: 100%;
+    border-top: 1px solid var(--border);
+    padding-top: 0.375rem;
+  }
+
+  /* ── Usuarios — 2 líneas ── */
+  .usuario-item {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .usuario-actions {
+    width: 100%;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 0.625rem;
+  }
+
+  /* ── Detalle topbar ── */
+  .detalle-topbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* ── Login / SetPassword ── */
+  .login-card {
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    margin: 0 1rem;
+  }
+
+  .login-logo {
+    margin-bottom: 1.25rem;
+  }
+
+  .login-form {
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+
+  .blob-red-tr {
+    display: none;
+  }
+
+  /* Ocultar sidebar normal */
+  .sidebar-desktop {
+    display: none;
+  }
+
+  /* Mostrar drawer en mobile */
+  .sidebar-drawer {
+    display: flex;
+  }
+
+  /* Topbar mobile */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .mobile-topbar-logo {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .mobile-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  /* Drawer */
+  .sidebar-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    width: 260px;
+    z-index: 300;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar-drawer.open {
+    transform: translateX(0);
+  }
+
+  /* Overlay oscuro */
+  .drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+    background: rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 250ms ease;
+  }
+
+  .drawer-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Main content sin el sidebar */
+  .main-content {
+    padding: 1rem;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — PREFERS-REDUCED-MOTION
+   ════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .pedido-recien-llegado {
+    animation: none;
+    background: rgba(91,78,232,0.18);
+  }
+
+  .vencidos-acordeon-dot { animation: none; }
 }
