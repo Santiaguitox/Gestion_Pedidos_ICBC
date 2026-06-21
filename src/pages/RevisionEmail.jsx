@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { correrRevisionCompleta } from '@/lib/revision/ejecutarRevision'
+import { supabase } from '@/lib/supabase'
+import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
 import { Search, Trash2, RotateCcw } from 'lucide-react'
 
@@ -11,7 +12,11 @@ export default function RevisionEmail() {
   // valor, y se dispara el análisis automáticamente al montar (ver
   // useEffect más abajo), para no obligar a la persona a tocar "Analizar"
   // de nuevo si ya vino con la intención clara de ver ESE resultado.
+  // state.entregableId identifica a QUÉ pieza corresponde esa URL — se
+  // usa para volver a guardar el resumen actualizado si el resultado
+  // cambió desde la última vez (ver guardarSiCorrespondeAPieza).
   const urlInicial = location.state?.url ?? ''
+  const entregableId = location.state?.entregableId ?? null
   const [modo, setModo] = useState('url')
   const [url, setUrl] = useState(urlInicial)
   const [html, setHtml] = useState('')
@@ -21,6 +26,17 @@ export default function RevisionEmail() {
   const [progreso, setProgreso] = useState('')
   const [urlError, setUrlError] = useState('')
   const iframeRef = useRef(null)
+  // Ref sincronizada con 'url' — se lee desde dentro de handleAnalizar
+  // para comparar contra el valor MÁS ACTUAL al momento de terminar el
+  // análisis, no el valor capturado por closure al momento de empezarlo
+  // (si la persona edita el campo mientras corre, la variable 'url' del
+  // closure quedaría desactualizada respecto al estado real).
+  const urlRef = useRef(urlInicial)
+  useEffect(() => { urlRef.current = url }, [url])
+  // Igual que con la url, se necesita el modo ACTUAL al terminar — si
+  // cambió a 'html' mientras corría, ya no corresponde a la pieza.
+  const modoRef = useRef('url')
+  useEffect(() => { modoRef.current = modo }, [modo])
 
   // Si llegamos con una URL precargada (desde "Ver detalle" de una
   // pieza), disparar el análisis automáticamente al montar — solo una
@@ -81,6 +97,24 @@ export default function RevisionEmail() {
       if (modo === 'url') setHtml(htmlObtenido)
       setHtmlAnalizado(htmlObtenido)
       setResultados(resultadosObtenidos)
+
+      // Si llegamos desde la pieza de un pedido (entregableId presente)
+      // y, en este momento puntual, el modo sigue siendo 'url' con
+      // EXACTAMENTE la misma URL que la pieza tenía al llegar — se
+      // guarda el resumen actualizado en esa pieza. Si la persona
+      // cambió el campo, pasó a modo HTML, o reinició la pantalla
+      // mientras el análisis corría, esta condición ya no se cumple y
+      // no se guarda nada (sería actualizar la pieza equivocada).
+      if (entregableId && modoRef.current === 'url' && urlRef.current.trim() === urlInicial.trim()) {
+        const resumen = resumirResultados(resultadosObtenidos)
+        await supabase.from('entregable').update({
+          revision_pruebas_ok: resumen.ok,
+          revision_pruebas_total: resumen.total,
+          revision_severidad: resumen.severidad,
+          revision_link: identificadorPieza(urlRef.current),
+          revision_at: new Date().toISOString(),
+        }).eq('id', entregableId)
+      }
     } catch {
       // El error ya se comunica con el estado vacío (sin resultados) —
       // no hace falta un mensaje específico acá, RevisionEmail.jsx ya

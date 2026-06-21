@@ -4,6 +4,26 @@ import { CompararConTemplates } from '@/lib/revision/templates'
 import { ValidarDominioImagenes, ValidarClasesDefinidas, ValidarLegal, ValidarLinks, ValidarAltImagenes, ValidarEstructuraHTML, ValidarPesoHTML } from '@/lib/revision/generales'
 import { ValidarDimensionesImagenes, ValidarPesoImagenes } from '@/lib/revision/imagenes'
 
+// El dominio/subdominio de icommarketing.com puede variar entre quien
+// carga el link (icbc-info.icommarketing.com vs
+// icbc-info-ai.icommarketing.com, por ejemplo) aunque apunten a la
+// MISMA pieza real — lo que identifica de forma única a la pieza es el
+// query string (todo después del '?'), que trae cliente/campaña/pieza
+// codificados en Base64. Comparar el string completo de la URL daría
+// "links distintos" para la misma pieza real si cambia el dominio
+// visible, dejando pasar duplicados o disparando revisiones de más.
+// Usada tanto para validar duplicados (EntregablesSection.jsx) como
+// para detectar si una pieza cambió de link (mismo archivo y
+// RevisionEmail.jsx, al actualizar el resultado guardado).
+export function identificadorPieza(url) {
+  if (!url) return ''
+  try {
+    return new URL(url).search
+  } catch {
+    return url.trim()
+  }
+}
+
 // Lógica de revisión extraída de RevisionEmail.jsx (la herramienta de
 // "Revisión de emails") para poder reusarla también desde
 // EntregablesSection.jsx, donde se dispara automáticamente al

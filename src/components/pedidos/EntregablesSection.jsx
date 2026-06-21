@@ -5,24 +5,7 @@ import { CopyBtn } from '@/components/pedidos/CopyBtn'
 import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { correrRevisionCompleta, resumirResultados } from '@/lib/revision/ejecutarRevision'
-
-// El dominio/subdominio de icommarketing.com puede variar entre quien
-// carga el link (icbc-info.icommarketing.com vs
-// icbc-info-ai.icommarketing.com, por ejemplo) aunque apunten a la
-// MISMA pieza real — lo que identifica de forma única a la pieza es el
-// query string (todo después del '?'), que trae cliente/campaña/pieza
-// codificados en Base64. Comparar el string completo de la URL daría
-// "links distintos" para la misma pieza real si cambia el dominio
-// visible, dejando pasar duplicados o disparando revisiones de más.
-function identificadorPieza(url) {
-  if (!url) return ''
-  try {
-    return new URL(url).search
-  } catch {
-    return url.trim()
-  }
-}
+import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 
 function CopyAllBtn({ entregables }) {
   const [copied, setCopied] = useState(false)
@@ -181,7 +164,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
           )}
           {!revisionEnCurso && ent.revision_pruebas_total != null && (
             <button
-              onClick={() => onVerDetalle(ent.link_online)}
+              onClick={() => onVerDetalle(ent.link_online, ent.id)}
               className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
             >
               {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas — Ver detalle
@@ -216,9 +199,10 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
   // Navega a "Revisión de emails" con el link ya cargado, para ver el
   // detalle completo de qué falló — esa pantalla vuelve a correr la
   // revisión en vivo (no se persiste el detalle pesado en la base, ver
-  // migración 20260621000000).
-  function verDetalle(link) {
-    navigate('/app/revision', { state: { url: link } })
+  // migración 20260621000000) y, si la pieza sigue siendo la misma al
+  // terminar, actualiza el resumen guardado con el resultado nuevo.
+  function verDetalle(link, entregableId) {
+    navigate('/app/revision', { state: { url: link, entregableId } })
   }
 
   // Corre la revisión completa para una pieza puntual, actualizando su

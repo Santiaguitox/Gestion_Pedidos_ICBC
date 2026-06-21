@@ -144,7 +144,7 @@ export function EntregablesCard({ entregables }) {
                 </span>
               ) : (
                 <button
-                  onClick={() => navigate('/app/revision', { state: { url: ent.link_online } })}
+                  onClick={() => navigate('/app/revision', { state: { url: ent.link_online, entregableId: ent.id } })}
                   className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
                 >
                   {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas
@@ -211,7 +211,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </span>
             ) : (
               <button
-                onClick={e => { e.stopPropagation(); navigate('/app/revision', { state: { url: peorRevision.link_online } }) }}
+                onClick={e => { e.stopPropagation(); navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
                 className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
               >
                 {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
@@ -276,7 +276,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </span>
             ) : (
               <button
-                onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online } })}
+                onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
                 className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
               >
                 {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
