@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
 
@@ -145,6 +145,11 @@ function SidebarContent({ collapsed, setCollapsed, onNavClick, onPerfil }) {
           className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
           title={collapsed ? 'Revisión de emails' : undefined}>
           <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
+        </NavLink>
+        <NavLink to="/app/revision-bbdd" onClick={onNavClick}
+          className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+          title={collapsed ? 'Revisión de BBDD' : undefined}>
+          <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
         </NavLink>
       </nav>
 
