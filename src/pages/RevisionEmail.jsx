@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
 import { Search, Trash2, RotateCcw } from 'lucide-react'
+import '@/styles/RevisionEmail.css'
 
 export default function RevisionEmail() {
   const location = useLocation()
@@ -117,16 +118,33 @@ export default function RevisionEmail() {
       }
     } catch {
       // El error ya se comunica con el estado vacío (sin resultados) —
-      // no hace falta un mensaje específico acá, RevisionEmail.jsx ya
-      // mostraba este mismo comportamiento antes de la extracción.
+      // no hace falta un mensaje específico acá.
     }
 
     setProgreso('')
     setCargando(false)
   }
 
+  // Resumen liviano para la score bar — mismo cálculo que resumirResultados
+  // (lib/revision/ejecutarRevision.js), pero acá se necesita también la
+  // cuenta de advertencias por separado (ok/warn/error en vez de solo
+  // ok/total), así que se recalcula con el mismo criterio en vez de
+  // reusar esa función (pensada para guardar 3 valores en la base, no
+  // para alimentar esta barra visual de 3 colores).
+  function calcularScore(resultados) {
+    const claves = ['estructuraHTML', 'clasesCSS', 'legal', 'links', 'dominioImagenes', 'altImagenes', 'dimensiones', 'pesoImagenes', 'pesoHTML']
+    const bloques = claves.map(k => resultados[k]).filter(Boolean)
+    const bloqueTemplates = { ok: (resultados.resumenTemplates?.length ?? 0) === 0, advertencia: false }
+    const todos = [...bloques, bloqueTemplates]
+    const okN = todos.filter(b => b.ok).length
+    const warnN = todos.filter(b => !b.ok && b.advertencia).length
+    const errN = todos.filter(b => !b.ok && !b.advertencia).length
+    return { okN, warnN, errN, score: okN + warnN, total: todos.length }
+  }
+  const score = resultados ? calcularScore(resultados) : null
+
   return (
-    <div className="page-root">
+    <div className="page-root re-root">
 
       {/* Header */}
       <div>
@@ -134,120 +152,133 @@ export default function RevisionEmail() {
         <p className="page-subtitle">Validá la estructura, links, imágenes y legales de una pieza ICBC</p>
       </div>
 
-      {/* Input panel */}
-      <div className="panel">
-        <div className="panel-body" style={{ padding: '1.25rem', borderTop: 'none' }}>
+      {/* Panel de carga */}
+      <div className="re-load-panel">
 
-          {/* Switch modo */}
-          <div className="flex items-center gap-3 mb-5">
-            <span className={`text-sm ${modo === 'html' ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>
-              Pegar HTML
-            </span>
-            <button
-              onClick={() => { setModo(modo === 'html' ? 'url' : 'html'); setUrlError('') }}
-              className="revision-switch"
-              style={{ background: modo === 'url' ? 'var(--icbc-red)' : 'var(--border-strong)' }}>
-              <span
-                className="revision-switch-thumb"
-                style={{ left: modo === 'url' ? '23px' : '3px' }}
-              />
-            </button>
-            <span className={`text-sm ${modo === 'url' ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}>
-              Obtener desde URL
-            </span>
-          </div>
+        <div className="re-switch-row">
+          <span className={`re-switch-label ${modo === 'html' ? 'active' : ''}`}>Pegar HTML</span>
+          <button
+            onClick={() => { setModo(modo === 'html' ? 'url' : 'html'); setUrlError('') }}
+            className="re-switch"
+            style={{ background: modo === 'url' ? 'var(--accent-primary)' : 'var(--border-strong)' }}>
+            <span className="re-switch-thumb" style={{ left: modo === 'url' ? '21px' : '3px' }} />
+          </button>
+          <span className={`re-switch-label ${modo === 'url' ? 'active' : ''}`}>Obtener desde URL</span>
+        </div>
 
-          {/* Input */}
-          {modo === 'html' ? (
-            <div className="field">
-              <label className="field-label">HTML del email</label>
-              <div className="relative">
+        <div className="re-input-row">
+          <div className="re-input-col" style={{ position: 'relative' }}>
+            {modo === 'html' ? (
+              <>
+                <div className="re-input-field-label">HTML del email</div>
                 <textarea
+                  className="re-textarea"
                   value={html}
                   onChange={e => setHtml(e.target.value)}
                   placeholder="Pegá acá el HTML completo del email…"
-                  style={{ fontFamily: 'monospace', fontSize: '0.75rem', height: '8rem', resize: 'vertical', width: '100%' }}
                 />
                 {html && (
-                  <button onClick={() => setHtml('')}
-                    className="absolute top-2 right-2 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] rounded"
-                    title="Limpiar">
+                  <button onClick={() => setHtml('')} className="re-clear-btn" title="Limpiar">
                     <Trash2 size={13} />
                   </button>
                 )}
-              </div>
-            </div>
-          ) : (
-            <div className="field">
-              <label className="field-label">URL de la pieza</label>
-              <div className="relative">
+              </>
+            ) : (
+              <>
+                <div className="re-input-field-label">URL de la pieza</div>
                 <input
                   type="text"
                   value={url}
                   onChange={e => { setUrl(e.target.value); setUrlError('') }}
                   placeholder="https://icbc-info.icommarketing.com/…"
                   className={urlError ? 'input-error' : ''}
+                  style={{ width: '100%' }}
                 />
                 {url && (
-                  <button onClick={() => { setUrl(''); setUrlError('') }}
-                    className="absolute top-2 right-2 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] rounded"
-                    title="Limpiar">
+                  <button onClick={() => { setUrl(''); setUrlError('') }} className="re-clear-btn" title="Limpiar">
                     <Trash2 size={13} />
                   </button>
                 )}
-              </div>
-              {urlError && <p className="msg-error mt-1">{urlError}</p>}
-            </div>
-          )}
-
-          {/* Botones */}
-          <div className="flex items-center gap-3 mt-4">
-            <button
-              onClick={handleAnalizar}
-              disabled={cargando || (modo === 'html' ? !html.trim() : !url.trim())}
-              className="btn-primary"
-              style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-              <Search size={15} />
-              {cargando ? 'Analizando…' : 'Analizar'}
-            </button>
-            {resultados && (
-              <button onClick={handleReiniciar} className="btn-secondary" style={{ width: 'auto' }}>
-                <RotateCcw size={15} />
-              </button>
-            )}
-            {cargando && progreso && (
-              <span className="text-sm text-[var(--text-muted)]">{progreso}</span>
+                {urlError && <p className="msg-error" style={{ marginTop: 6 }}>{urlError}</p>}
+              </>
             )}
           </div>
 
+          <button
+            onClick={handleAnalizar}
+            disabled={cargando || (modo === 'html' ? !html.trim() : !url.trim())}
+            className="re-btn-analizar">
+            <Search size={15} />
+            {cargando ? 'Analizando…' : 'Analizar'}
+          </button>
+
+          {resultados && (
+            <button onClick={handleReiniciar} className="re-btn-reset" title="Empezar de nuevo">
+              <RotateCcw size={15} />
+            </button>
+          )}
+
+          {cargando && progreso && <span className="re-progreso-inline">{progreso}</span>}
         </div>
       </div>
 
-      {/* Resultados — layout en dos columnas en desktop, apiladas (resultados
-          primero, preview después) en mobile vía CSS, ver .revision-layout */}
-      {(resultados || cargando) && (
-        <div className="revision-layout flex gap-6 items-start w-full">
+      {/* Score bar */}
+      {score && !cargando && (
+        <div className="re-score-panel">
+          <div className="re-score-num">
+            <span>{score.score}</span>
+            <span>/ {score.total}</span>
+          </div>
+          <div className="re-score-bar-col">
+            <div className="re-score-bar-label">pruebas superadas</div>
+            <div className="re-score-track">
+              <div style={{ width: `${(score.okN / score.total) * 100}%`, background: 'var(--green-text)' }} />
+              <div style={{ width: `${(score.warnN / score.total) * 100}%`, background: 'var(--yellow-text)' }} />
+              <div style={{ width: `${(score.errN / score.total) * 100}%`, background: 'var(--accent-primary)' }} />
+            </div>
+          </div>
+          <div className="re-score-badges">
+            <span className="re-score-badge ok"><span className="dot" />{score.okN} OK</span>
+            <span className="re-score-badge warn"><span className="dot" />{score.warnN} advertencia{score.warnN !== 1 ? 's' : ''}</span>
+            <span className="re-score-badge err"><span className="dot" />{score.errN} error{score.errN !== 1 ? 'es' : ''}</span>
+          </div>
+        </div>
+      )}
 
-          {/* Columna izquierda: preview */}
-          <div className="revision-col-preview flex-shrink-0">
-            <p className="revision-col-label">Vista previa</p>
-            <div className="revision-preview-outer">
-              <iframe
-                ref={iframeRef}
-                srcDoc={htmlAnalizado}
-                title="Vista previa del email"
-                onLoad={handleIframeLoad}
-                className="revision-iframe"
-              />
+      {/* Resultados — layout en dos columnas en desktop, apiladas
+          (resultados primero, preview después) en mobile vía CSS */}
+      {(resultados || cargando) && (
+        <div className="re-layout">
+
+          {/* Preview */}
+          <div>
+            <p className="re-col-label">Vista previa</p>
+            <div className="re-preview-outer">
+              <div className="re-preview-titlebar">
+                <span className="dot" />
+                <span>Pieza renderizada</span>
+              </div>
+              {htmlAnalizado ? (
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={htmlAnalizado}
+                  title="Vista previa del email"
+                  onLoad={handleIframeLoad}
+                  className="re-iframe"
+                />
+              ) : (
+                <div className="re-preview-empty">Analizando…</div>
+              )}
             </div>
           </div>
 
-          {/* Columna derecha: resultados */}
-          <div className="revision-col-resultados flex-1 min-w-0">
+          {/* Resultados */}
+          <div>
+            <p className="re-col-label">Resultado del análisis</p>
             {cargando ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16">
-                <div className="revision-spinner" />
-                <span className="text-sm text-[var(--text-muted)]">{progreso || 'Analizando…'}</span>
+              <div className="re-spinner-wrap">
+                <div className="re-spinner" />
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{progreso || 'Analizando…'}</span>
               </div>
             ) : (
               resultados && <ResultadoPanel resultados={resultados} />

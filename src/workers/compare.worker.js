@@ -1,29 +1,22 @@
 // ════════════════════════════════════════════════════════════════════════
-// ARQUITECTURA: este worker compara dos bases de contactos potencialmente
-// enormes (cientos de miles a millones de filas, archivos de cientos de
-// MB cada uno) sin necesitar tener ninguna de las dos completas en RAM al
-// mismo tiempo. La clave es usar IndexedDB (almacenamiento en disco, no
-// en memoria) como estructura intermedia:
+// La carga de Base A y Base B (y los 3 botones de descarga: nuevos/madre/
+// perdidos) usan SIEMPRE el método simple y rápido de toda la vida — un
+// Set de emails en memoria, sin IndexedDB. Esto nunca tuvo problemas de
+// memoria ni de velocidad, así que no se complica.
 //
-// 1. INDEXAR cada archivo: se lee una vez completo, y por cada fila se
-//    guarda en IndexedDB un registro liviano { email, offset, length } —
-//    NO la fila completa, solo "dónde vive" esa línea dentro del archivo
-//    original. Esto es chico (decenas de bytes por contacto) sin importar
-//    cuántas columnas tenga la base.
-// 2. COMPARAR usando un cursor ordenado por email en ambos índices a la
-//    vez (técnica de "merge de dos punteros", como mezclar dos mazos de
-//    cartas ya ordenados) — en todo momento solo se tiene EN MEMORIA el
-//    registro actual de cada lado, nunca la base completa. Cuando los
-//    emails coinciden, ahí sí se van a buscar las dos líneas reales al
-//    archivo (usando el offset guardado) para comparar campo a campo, se
-//    comparan, y se descartan inmediatamente.
-// 3. Los resultados (solo contactos con cambios reales) se guardan
-//    también en IndexedDB, no en un array de RAM — la paginación y el
-//    filtro por campo consultan ahí.
+// El ÚNICO punto que necesita cuidado especial es "Cambios campo a campo"
+// (computeDiffs): ahí sí puede haber más de un millón de contactos en
+// común, y guardar la fila completa de cada uno en memoria (como hacía
+// la versión original) puede agotar la RAM con bases de varios cientos
+// de MB. Para eso hay DOS modos, y el usuario elige según el tamaño real
+// de sus bases:
 //
-// Esto mantiene el uso de RAM aproximadamente CONSTANTE sin importar si
-// la base tiene mil o diez millones de filas — lo único que crece con el
-// tamaño de la base es el tiempo de procesamiento, no la memoria.
+//  - MODO RÁPIDO: igual que la versión original (se comparan directo en
+//    memoria, sin pasar por disco). Rápido, pero puede fallar con bases
+//    muy grandes.
+//  - MODO SEGURO: usa IndexedDB para guardar el resultado a medida que
+//    se calcula (en vez de un array en RAM) — más lento de escribir,
+//    pero el uso de memoria no escala con la cantidad de contactos.
 // ════════════════════════════════════════════════════════════════════════
 
 function decodeLatin1(uint8array) {
@@ -67,19 +60,156 @@ function normalizeEmail(email) {
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
-// ─── IndexedDB: helpers básicos ──────────────────────────────────────────
+// Umbral a partir del cual se sugiere "modo seguro" para el cálculo de
+// diffs — por encima de esto, guardar todas las filas en memoria
+// empieza a ser riesgoso en máquinas con RAM modesta.
+const SAFE_MODE_THRESHOLD_MB = 150;
 
-function openDb(dbName) {
+// ─── Carga de archivo (rápida, de siempre) ───────────────────────────────
+// Lee el archivo completo una vez, guarda un Set de emails (liviano) Y,
+// de paso, el offset+length de cada línea (también liviano: 3 valores
+// chicos por fila, nada que ver con guardar la fila completa) — así el
+// modo seguro de diffs puede reusar exactamente esta misma carga sin
+// tener que leer el archivo una segunda vez.
+async function readFileLight(file, progressType) {
+  let headers = null, headerLine = '', emailCol = null, sep = ';';
+  let leftover = '', leftoverOffset = 0, isFirstChunk = true, encoding = null;
+  const fileSize = file.size;
+  let offset = 0;
+  const emailSet = new Set();
+  const positions = new Map(); // email -> { offset, length } — liviano
+  let totalRows = 0;
+  const encoder = new TextEncoder();
+
+  while (offset < fileSize) {
+    const slice = file.slice(offset, offset + CHUNK_SIZE);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    offset += bytes.length;
+    if (encoding === null) encoding = detectEncoding(bytes);
+    const progress = Math.round((offset / fileSize) * 100);
+    const text = leftover + decodeChunk(bytes, encoding);
+    const lines = text.split('\n');
+    leftover = lines.pop();
+
+    let cursor = leftoverOffset;
+    for (const rawLine of lines) {
+      const lineByteLen = encoder.encode(rawLine).length + 1; // +1 por el '\n'
+      const lineStart = cursor;
+      cursor += lineByteLen;
+
+      const line = rawLine.replace(/\r$/, '');
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (isFirstChunk && !headers) {
+        sep = trimmed.includes(';') ? ';' : ',';
+        headers = parseCSVLine(trimmed, sep).map(c => c.trim());
+        headerLine = line;
+        emailCol = detectCol(headers, [/email/i, /correo/i, /^e-mail$/i, /^mail$/i]);
+        isFirstChunk = false;
+        continue;
+      }
+      if (!headers) continue;
+      totalRows++;
+      const cols = parseCSVLine(trimmed, sep);
+      const idx = emailCol ? headers.indexOf(emailCol) : -1;
+      const emailVal = idx >= 0 ? normalizeEmail(cols[idx] ?? '') : '';
+      if (emailVal) {
+        emailSet.add(emailVal);
+        positions.set(emailVal, { offset: lineStart, length: encoder.encode(line).length });
+      }
+    }
+    leftoverOffset = cursor;
+    self.postMessage({ type: progressType, progress });
+  }
+
+  // Última línea, si el archivo no termina con salto de línea — sin
+  // esto, el último contacto del archivo nunca se procesaba (bug que ya
+  // habíamos encontrado y arreglado antes).
+  if (leftover.trim() && headers) {
+    const line = leftover.replace(/\r$/, '');
+    const trimmed = line.trim();
+    const cols = parseCSVLine(trimmed, sep);
+    const idx = emailCol ? headers.indexOf(emailCol) : -1;
+    const emailVal = idx >= 0 ? normalizeEmail(cols[idx] ?? '') : '';
+    totalRows++;
+    if (emailVal) {
+      emailSet.add(emailVal);
+      positions.set(emailVal, { offset: leftoverOffset, length: encoder.encode(line).length });
+    }
+  }
+
+  return { emailSet, positions, headerLine, headers, emailCol, sep, totalRows, file, encoding };
+}
+
+// Lee una línea puntual del archivo dado su offset+length, parseada como
+// { columna: valor }. Se usa tanto en modo rápido como en modo seguro.
+async function readRowAt(meta, offset, length) {
+  const slice = meta.file.slice(offset, offset + length);
+  const buffer = await slice.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const text = decodeChunk(bytes, meta.encoding).replace(/\r$/, '');
+  const cols = parseCSVLine(text, meta.sep);
+  const row = {};
+  meta.headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
+  return row;
+}
+
+function diffRows(rowA, rowB, commonCols) {
+  const fieldDiffs = [];
+  for (const col of commonCols) {
+    const valA = (rowA[col] ?? '').trim();
+    const valB = (rowB[col] ?? '').trim();
+    if (valA !== valB) fieldDiffs.push({ col, valA, valB });
+  }
+  return fieldDiffs;
+}
+
+// ─── MODO RÁPIDO — diffs en memoria, sin IndexedDB ───────────────────────
+async function computeDiffsFast(metaA, metaB, onProgress) {
+  const commonCols = metaA.headers.filter(h => metaB.headers.includes(h) && h !== metaA.emailCol);
+  const commonEmails = [];
+  for (const email of metaA.emailSet) if (metaB.emailSet.has(email)) commonEmails.push(email);
+
+  const diffs = [];
+  const colChangeSummary = {};
+  const total = Math.max(1, commonEmails.length);
+
+  for (let i = 0; i < commonEmails.length; i++) {
+    const email = commonEmails[i];
+    const posA = metaA.positions.get(email);
+    const posB = metaB.positions.get(email);
+    const [rowA, rowB] = await Promise.all([
+      readRowAt(metaA, posA.offset, posA.length),
+      readRowAt(metaB, posB.offset, posB.length),
+    ]);
+    const fieldDiffs = diffRows(rowA, rowB, commonCols);
+    if (fieldDiffs.length > 0) {
+      diffs.push({ email, diffs: fieldDiffs, fields: fieldDiffs.map(d => d.col) });
+      fieldDiffs.forEach(d => { colChangeSummary[d.col] = (colChangeSummary[d.col] || 0) + 1; });
+    }
+    if (i % 500 === 0) onProgress(Math.min(99, Math.round((i / total) * 100)));
+  }
+
+  onProgress(100);
+  const colChangeSorted = Object.entries(colChangeSummary).sort((x, y) => y[1] - x[1]).slice(0, 20);
+  return { diffs, colChangeSorted };
+}
+
+// ─── MODO SEGURO — diffs vía IndexedDB ───────────────────────────────────
+// Mismo cálculo que el modo rápido, pero el resultado se va guardando en
+// IndexedDB en vez de un array en RAM. Como readFileLight ya guardó
+// offset+length por fila, no hace falta releer/reindexar nada — solo
+// recorrer los emails en común y escribir en lotes.
+
+function openResultDb(dbName) {
   return new Promise((resolve, reject) => {
     const req = self.indexedDB.open(dbName, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains('rows')) {
-        db.createObjectStore('rows', { keyPath: 'email' });
-      }
       if (!db.objectStoreNames.contains('diffs')) {
-        const diffStore = db.createObjectStore('diffs', { keyPath: 'email' });
-        diffStore.createIndex('byField', 'fields', { multiEntry: true });
+        const store = db.createObjectStore('diffs', { keyPath: 'email' });
+        store.createIndex('byField', 'fields', { multiEntry: true });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -87,61 +217,13 @@ function openDb(dbName) {
   });
 }
 
-function deleteDb(dbName) {
+function deleteResultDb(dbName) {
   return new Promise((resolve) => {
     const req = self.indexedDB.deleteDatabase(dbName);
     req.onsuccess = () => resolve();
-    req.onerror = () => resolve(); // no bloquear el flujo por esto
+    req.onerror = () => resolve();
     req.onblocked = () => resolve();
   });
-}
-
-// Cursor "manual" que se puede avanzar de a un registro por vez desde un
-// bucle externo (necesario para el merge de dos punteros entre A y B).
-//
-// IMPORTANTE: las transacciones de IndexedDB se cierran automáticamente
-// en cuanto el código vuelve al event loop sin operaciones IDB
-// pendientes — si entre dos avances del cursor se hace un await a algo
-// que NO es IndexedDB (como leer una porción del archivo), la
-// transacción ya se cerró y el próximo cursor.continue() falla con
-// TransactionInactiveError. Por eso NO se puede simplemente "esperar"
-// con awaits intercalados entre operaciones de archivo — hay que leer en
-// LOTES con getAll()/getAllKeys() (transacciones cortas y completas en
-// un solo tick), guardar el lote en un array chico en memoria, y recién
-// ahí — con la transacción ya cerrada — hacer las operaciones de
-// archivo que hagan falta.
-function makeBatchedReader(db, storeName, batchSize) {
-  let buffer = [];
-  let bufferIdx = 0;
-  let lastKey = null; // última key leída, para pedir "lo que sigue"
-  let exhausted = false;
-
-  async function fetchNextBatch() {
-    if (exhausted) return;
-    const range = lastKey === null ? null : self.IDBKeyRange.lowerBound(lastKey, true);
-    const items = await new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const req = store.getAll(range, batchSize);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    buffer = items;
-    bufferIdx = 0;
-    if (items.length > 0) lastKey = items[items.length - 1].email;
-    if (items.length < batchSize) exhausted = true;
-  }
-
-  return {
-    // Carga el primer lote — debe llamarse antes de usar peek/advance.
-    async init() { await fetchNextBatch(); },
-    peek() { return bufferIdx < buffer.length ? buffer[bufferIdx] : null; },
-    isDone() { return bufferIdx >= buffer.length && exhausted; },
-    async advance() {
-      bufferIdx++;
-      if (bufferIdx >= buffer.length && !exhausted) await fetchNextBatch();
-    },
-  };
 }
 
 function idbPutBatch(db, storeName, items) {
@@ -155,240 +237,47 @@ function idbPutBatch(db, storeName, items) {
   });
 }
 
-// ─── Indexado: lee un archivo completo, guarda { email, offset, length } por fila ──
-
-async function indexFile(file, dbName, progressType) {
-  await deleteDb(dbName); // por si quedó una sesión anterior con el mismo nombre
-  const db = await openDb(dbName);
-  const encoder = new TextEncoder();
-
-  let headers = null, headerLine = '', emailCol = null, sep = ';';
-  let leftover = '', leftoverOffset = 0, isFirstChunk = true, encoding = null;
-  const fileSize = file.size;
-  let offset = 0;
-  let totalRows = 0;
-  let uniqueCount = 0;
-  // Set de emails en memoria — esto SÍ es liviano (solo strings de
-  // email, ~30-60MB incluso con 1M+ contactos), nada que ver con el
-  // problema de memoria original (que era guardar objetos con TODAS las
-  // columnas de cada fila). Se usa para los botones de descarga
-  // (nuevos/madre/perdidos), que ya funcionaban bien así antes y no
-  // tenían ningún problema de memoria — no hace falta complicarlos con
-  // IndexedDB, solo el cálculo de diffs campo a campo lo necesitaba.
-  const emailSet = new Set();
-
-  // Agrupa escrituras en lotes — pagar una transacción IndexedDB por
-  // cada fila individual sería muy lento con millones de filas.
-  let writeBuffer = [];
-  const FLUSH_EVERY = 2000;
-  async function flush() {
-    if (!writeBuffer.length) return;
-    const batch = writeBuffer;
-    writeBuffer = [];
-    await idbPutBatch(db, 'rows', batch);
-  }
-
-  while (offset < fileSize) {
-    const slice = file.slice(offset, offset + CHUNK_SIZE);
-    const buffer = await slice.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    offset += bytes.length;
-    if (encoding === null) encoding = detectEncoding(bytes);
-
-    const progress = Math.round((offset / fileSize) * 100);
-    const chunkText = decodeChunk(bytes, encoding);
-    const text = leftover + chunkText;
-    const lines = text.split('\n');
-    leftover = lines.pop();
-
-    // cursor: posición absoluta (en bytes del archivo) de la línea que
-    // se está procesando — se recalcula por longitud en bytes real
-    // (no por cantidad de caracteres JS) para que coincida exacto con
-    // los offsets que vamos a usar después con file.slice().
-    let cursor = leftoverOffset;
-
-    for (const rawLine of lines) {
-      const lineByteLen = encoder.encode(rawLine).length + 1; // +1 por el '\n'
-      const lineStart = cursor;
-      cursor += lineByteLen;
-
-      const line = rawLine.replace(/\r$/, '');
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      if (isFirstChunk && !headers) {
-        sep = trimmed.includes(';') ? ';' : ',';
-        headers = parseCSVLine(trimmed, sep).map(c => c.trim());
-        headerLine = line;
-        emailCol = detectCol(headers, [/email/i, /correo/i, /^e-mail$/i, /^mail$/i]);
-        isFirstChunk = false;
-        continue;
-      }
-      if (!headers) continue;
-      totalRows++;
-
-      const idx = emailCol ? headers.indexOf(emailCol) : -1;
-      if (idx < 0) continue;
-      const cols = parseCSVLine(trimmed, sep);
-      const emailVal = normalizeEmail(cols[idx] ?? '');
-      if (!emailVal) continue;
-
-      const byteLenInThisLine = encoder.encode(line).length; // sin \r\n
-      writeBuffer.push({ email: emailVal, offset: lineStart, length: byteLenInThisLine });
-      emailSet.add(emailVal);
-      uniqueCount++;
-      if (writeBuffer.length >= FLUSH_EVERY) await flush();
-    }
-
-    leftoverOffset = cursor; // la línea cortada (leftover) arranca acá
-    self.postMessage({ type: progressType, progress });
-  }
-
-  // Última línea, si el archivo no termina con salto de línea
-  if (leftover.trim() && headers) {
-    const line = leftover.replace(/\r$/, '');
-    const trimmed = line.trim();
-    const idx = emailCol ? headers.indexOf(emailCol) : -1;
-    if (idx >= 0) {
-      const cols = parseCSVLine(trimmed, sep);
-      const emailVal = normalizeEmail(cols[idx] ?? '');
-      if (emailVal) {
-        const byteLen = encoder.encode(line).length;
-        writeBuffer.push({ email: emailVal, offset: leftoverOffset, length: byteLen });
-        emailSet.add(emailVal);
-        uniqueCount++;
-        totalRows++;
-      }
-    }
-  }
-  await flush();
-
-  return { db, dbName, headerLine, headers, emailCol, sep, totalRows, uniqueCount, file, encoding, emailSet };
-}
-
-// Lee una línea puntual del archivo original dado su offset+length
-// (guardado al indexar), y la devuelve ya parseada como { columna: valor }.
-async function readRowAt(meta, offset, length) {
-  const slice = meta.file.slice(offset, offset + length);
-  const buffer = await slice.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const text = decodeChunk(bytes, meta.encoding).replace(/\r$/, '');
-  const cols = parseCSVLine(text, meta.sep);
-  const row = {};
-  meta.headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
-  return row;
-}
-
-// ─── Comparación con merge de dos punteros sobre los índices ordenados ──
-// (IndexedDB devuelve las claves en orden ascendente natural por
-// defecto, así que ambos cursores avanzan ordenados por email — esto es
-// lo que hace posible el merge sin tener que cargar nada completo.)
-
-// Stats generales (nuevos/madre/perdidos) — se calculan directo sobre
-// los Sets de emails en memoria (igual que en la versión original, sin
-// problema de memoria con esto), sin necesidad de pasar por IndexedDB.
-function computeStats(metaA, metaB) {
-  const emailsA = metaA.emailSet;
-  const emailsB = metaB.emailSet;
-  let nuevosCount = 0, madreCount = 0, perdidosCount = 0;
-  for (const email of emailsB) { if (emailsA.has(email)) madreCount++; else nuevosCount++; }
-  for (const email of emailsA) { if (!emailsB.has(email)) perdidosCount++; }
-  return {
-    uniqueA: metaA.uniqueCount, uniqueB: metaB.uniqueCount,
-    totalA: metaA.totalRows, totalB: metaB.totalRows,
-    nuevosCount, madreCount, perdidosCount,
-  };
-}
-
-async function computeDiffsIndexed(metaA, metaB, resultDb, onProgress) {
+async function computeDiffsSafe(metaA, metaB, resultDb, onProgress) {
   const commonCols = metaA.headers.filter(h => metaB.headers.includes(h) && h !== metaA.emailCol);
-  const BATCH = 5000;
+  const commonEmails = [];
+  for (const email of metaA.emailSet) if (metaB.emailSet.has(email)) commonEmails.push(email);
 
-  const curA = makeBatchedReader(metaA.db, 'rows', BATCH);
-  const curB = makeBatchedReader(metaB.db, 'rows', BATCH);
-  await curA.init();
-  await curB.init();
-
-  // No tenemos un total exacto de pares sin un recorrido extra — se
-  // estima el progreso contra la suma de ambas bases (suficiente para
-  // una barra de progreso, no necesita ser perfecto).
-  const totalEstimado = Math.max(1, metaA.uniqueCount + metaB.uniqueCount);
-  let pasos = 0;
-  let totalChanged = 0;
+  const total = Math.max(1, commonEmails.length);
   const colChangeSummary = {};
   let writeBuffer = [];
   const FLUSH_EVERY = 500;
 
-  async function flushDiffs() {
+  async function flush() {
     if (!writeBuffer.length) return;
     const batch = writeBuffer;
     writeBuffer = [];
     await idbPutBatch(resultDb, 'diffs', batch);
   }
 
-  function reportProgress() {
-    pasos++;
-    if (pasos % 500 === 0) {
-      onProgress(Math.min(99, Math.round((pasos / totalEstimado) * 100)));
+  for (let i = 0; i < commonEmails.length; i++) {
+    const email = commonEmails[i];
+    const posA = metaA.positions.get(email);
+    const posB = metaB.positions.get(email);
+    const [rowA, rowB] = await Promise.all([
+      readRowAt(metaA, posA.offset, posA.length),
+      readRowAt(metaB, posB.offset, posB.length),
+    ]);
+    const fieldDiffs = diffRows(rowA, rowB, commonCols);
+    if (fieldDiffs.length > 0) {
+      writeBuffer.push({ email, diffs: fieldDiffs, fields: fieldDiffs.map(d => d.col) });
+      fieldDiffs.forEach(d => { colChangeSummary[d.col] = (colChangeSummary[d.col] || 0) + 1; });
+      if (writeBuffer.length >= FLUSH_EVERY) await flush();
     }
+    if (i % 500 === 0) onProgress(Math.min(99, Math.round((i / total) * 100)));
   }
 
-  while (!curA.isDone() || !curB.isDone()) {
-    if (curA.isDone()) { reportProgress(); await curB.advance(); continue; }
-    if (curB.isDone()) { reportProgress(); await curA.advance(); continue; }
-
-    const a = curA.peek(), b = curB.peek();
-
-    if (a.email === b.email) {
-      reportProgress();
-      // En este punto NO hay ninguna transacción IndexedDB abierta (el
-      // lote ya se leyó completo antes), así que es seguro hacer
-      // operaciones async de archivo acá sin riesgo de
-      // TransactionInactiveError.
-      const [rowA, rowB] = await Promise.all([
-        readRowAt(metaA, a.offset, a.length),
-        readRowAt(metaB, b.offset, b.length),
-      ]);
-
-      const fieldDiffs = [];
-      for (const col of commonCols) {
-        const valA = (rowA[col] ?? '').trim();
-        const valB = (rowB[col] ?? '').trim();
-        if (valA !== valB) fieldDiffs.push({ col, valA, valB });
-      }
-      if (fieldDiffs.length > 0) {
-        totalChanged++;
-        writeBuffer.push({
-          email: a.email,
-          diffs: fieldDiffs,
-          fields: fieldDiffs.map(d => d.col), // para el índice multiEntry 'byField'
-        });
-        fieldDiffs.forEach(d => { colChangeSummary[d.col] = (colChangeSummary[d.col] || 0) + 1; });
-        if (writeBuffer.length >= FLUSH_EVERY) await flushDiffs();
-      }
-
-      await curA.advance();
-      await curB.advance();
-    } else if (a.email < b.email) {
-      reportProgress();
-      await curA.advance();
-    } else {
-      reportProgress();
-      await curB.advance();
-    }
-  }
-
-  await flushDiffs();
+  await flush();
   onProgress(100);
-
   const colChangeSorted = Object.entries(colChangeSummary).sort((x, y) => y[1] - x[1]).slice(0, 20);
-  return { totalChanged, colChangeSorted };
+  return { totalChanged: commonEmails.length, colChangeSorted };
 }
 
-// Pagina (y opcionalmente filtra por campo) sobre los diffs ya guardados
-// en IndexedDB — nunca carga todos los diffs en RAM, solo la página
-// pedida.
-function getDiffsPage(resultDb, page, pageSize, fieldFilter) {
+function getDiffsPageSafe(resultDb, page, pageSize, fieldFilter) {
   return new Promise((resolve, reject) => {
     const tx = resultDb.transaction('diffs', 'readonly');
     const store = tx.objectStore('diffs');
@@ -405,21 +294,10 @@ function getDiffsPage(resultDb, page, pageSize, fieldFilter) {
       const cursorReq = source.openCursor(range);
       cursorReq.onsuccess = () => {
         const cursor = cursorReq.result;
-        if (!cursor) {
-          resolve({ rows, page, totalFiltered, fieldFilter: fieldFilter || null });
-          return;
-        }
-        if (skipped < toSkip) {
-          skipped++;
-          cursor.continue();
-          return;
-        }
-        if (rows.length < pageSize) {
-          rows.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve({ rows, page, totalFiltered, fieldFilter: fieldFilter || null });
-        }
+        if (!cursor) { resolve({ rows, page, totalFiltered, fieldFilter: fieldFilter || null }); return; }
+        if (skipped < toSkip) { skipped++; cursor.continue(); return; }
+        if (rows.length < pageSize) { rows.push(cursor.value); cursor.continue(); }
+        else resolve({ rows, page, totalFiltered, fieldFilter: fieldFilter || null });
       };
       cursorReq.onerror = () => reject(cursorReq.error);
     };
@@ -427,10 +305,16 @@ function getDiffsPage(resultDb, page, pageSize, fieldFilter) {
   });
 }
 
-// Lee un archivo en streaming y devuelve solo las líneas que pasan el
-// filtro — usa el Set de emails en memoria (liviano, sin problema de
-// memoria con bases grandes), igual que en la versión original. Se usa
-// para los 3 botones de descarga (nuevos/madre/perdidos).
+// Pagina sobre el resultado del modo rápido (array en RAM) — mismo
+// formato de respuesta que el modo seguro, para que el frontend no
+// tenga que distinguir cuál modo se usó.
+function getDiffsPageFast(diffsArray, page, pageSize, fieldFilter) {
+  const filtered = fieldFilter ? diffsArray.filter(r => r.fields.includes(fieldFilter)) : diffsArray;
+  const rows = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  return { rows, page, totalFiltered: filtered.length, fieldFilter: fieldFilter || null };
+}
+
+// ─── Descargas (nuevos / madre / perdidos) — siempre con el Set liviano ──
 async function streamFilter(meta, filterFn, progressBase, progressRange) {
   let leftover = '', isFirstChunk = true, offset = 0;
   const fileSize = meta.file.size;
@@ -472,28 +356,50 @@ async function streamFilter(meta, filterFn, progressBase, progressRange) {
   return lines;
 }
 
+function computeStats(metaA, metaB) {
+  const emailsA = metaA.emailSet;
+  const emailsB = metaB.emailSet;
+  let nuevosCount = 0, madreCount = 0, perdidosCount = 0;
+  for (const email of emailsB) { if (emailsA.has(email)) madreCount++; else nuevosCount++; }
+  for (const email of emailsA) { if (!emailsB.has(email)) perdidosCount++; }
+  return {
+    uniqueA: emailsA.size, uniqueB: emailsB.size,
+    totalA: metaA.totalRows, totalB: metaB.totalRows,
+    nuevosCount, madreCount, perdidosCount,
+  };
+}
+
 let storedA = null;
 let storedB = null;
 let resultDb = null;
+let fastDiffsResult = null; // array en RAM, solo cuando se usó modo rápido
 
 self.onmessage = async (e) => {
   const { type } = e.data;
 
   if (type === 'load_a') {
     try {
-      storedA = await indexFile(e.data.file, 'rb_compare_a', 'progress_a');
-      self.postMessage({ type: 'loaded_a', totalRows: storedA.totalRows, uniqueEmails: storedA.uniqueCount });
+      storedA = await readFileLight(e.data.file, 'progress_a');
+      const sizeMb = Math.round(storedA.file.size / (1024 * 1024));
+      self.postMessage({
+        type: 'loaded_a', totalRows: storedA.totalRows, uniqueEmails: storedA.emailSet.size,
+        sizeMb, suggestSafeMode: sizeMb >= SAFE_MODE_THRESHOLD_MB,
+      });
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
 
   } else if (type === 'load_b') {
     try {
-      storedB = await indexFile(e.data.file, 'rb_compare_b', 'progress_b');
-      self.postMessage({ type: 'loaded_b', totalRows: storedB.totalRows, uniqueEmails: storedB.uniqueCount });
+      storedB = await readFileLight(e.data.file, 'progress_b');
+      const sizeMb = Math.round(storedB.file.size / (1024 * 1024));
+      self.postMessage({
+        type: 'loaded_b', totalRows: storedB.totalRows, uniqueEmails: storedB.emailSet.size,
+        sizeMb, suggestSafeMode: sizeMb >= SAFE_MODE_THRESHOLD_MB,
+      });
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
 
   } else if (type === 'compare_stats') {
     try {
-      const stats = await computeStats(storedA, storedB);
+      const stats = computeStats(storedA, storedB);
       self.postMessage({ type: 'stats_done', stats });
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
 
@@ -516,19 +422,33 @@ self.onmessage = async (e) => {
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
 
   } else if (type === 'compute_diffs') {
+    // e.data.mode: 'fast' | 'safe' — lo elige el usuario en el frontend
+    // tras ver el aviso de tamaño.
     try {
-      await deleteDb('rb_compare_diffs');
-      resultDb = await openDb('rb_compare_diffs');
-      const result = await computeDiffsIndexed(storedA, storedB, resultDb, (progress) => {
-        self.postMessage({ type: 'diffs_progress', progress });
-      });
-      self.postMessage({ type: 'diffs_done', totalChanged: result.totalChanged, colChangeSorted: result.colChangeSorted });
+      if (e.data.mode === 'safe') {
+        fastDiffsResult = null;
+        await deleteResultDb('rb_compare_diffs');
+        resultDb = await openResultDb('rb_compare_diffs');
+        const result = await computeDiffsSafe(storedA, storedB, resultDb, (progress) => {
+          self.postMessage({ type: 'diffs_progress', progress });
+        });
+        self.postMessage({ type: 'diffs_done', totalChanged: result.totalChanged, colChangeSorted: result.colChangeSorted, mode: 'safe' });
+      } else {
+        resultDb = null;
+        const result = await computeDiffsFast(storedA, storedB, (progress) => {
+          self.postMessage({ type: 'diffs_progress', progress });
+        });
+        fastDiffsResult = result.diffs;
+        self.postMessage({ type: 'diffs_done', totalChanged: result.diffs.length, colChangeSorted: result.colChangeSorted, mode: 'fast' });
+      }
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
 
   } else if (type === 'get_diffs_page') {
     try {
       const { page, pageSize, fieldFilter } = e.data;
-      const result = await getDiffsPage(resultDb, page, pageSize, fieldFilter);
+      const result = resultDb
+        ? await getDiffsPageSafe(resultDb, page, pageSize, fieldFilter)
+        : getDiffsPageFast(fastDiffsResult || [], page, pageSize, fieldFilter);
       self.postMessage({ type: 'diffs_page_done', ...result });
     } catch (err) { self.postMessage({ type: 'error', message: err.message }); }
   }

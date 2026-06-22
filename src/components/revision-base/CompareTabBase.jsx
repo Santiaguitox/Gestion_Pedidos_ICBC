@@ -62,8 +62,9 @@ export default function CompareTabBase() {
   // Diffs (solo contactos con cambios reales — se calculan una vez,
   // completos, y se paginan/filtran localmente sin volver a leer los
   // archivos)
-  const [diffsPhase, setDiffsPhase] = useState('idle') // idle | computing | done
+  const [diffsPhase, setDiffsPhase] = useState('idle') // idle | choosing_mode | computing | done
   const [diffsProgress, setDiffsProgress] = useState(0)
+  const [diffsMode, setDiffsMode] = useState(null) // 'fast' | 'safe', el que efectivamente se usó
   const [totalChanged, setTotalChanged] = useState(0)
   const [colChangeSorted, setColChangeSorted] = useState([])
   const [fieldFilter, setFieldFilter] = useState(null)
@@ -104,6 +105,7 @@ export default function CompareTabBase() {
     else if (msg.type === 'diffs_done') {
       setTotalChanged(msg.totalChanged)
       setColChangeSorted(msg.colChangeSorted)
+      setDiffsMode(msg.mode)
       setDiffsPhase('done')
       requestDiffsPage(0, null)
     }
@@ -145,11 +147,26 @@ export default function CompareTabBase() {
     getWorker().postMessage({ type: 'compare_stats' })
   }
 
+  // Si cualquiera de las 2 bases es grande, se le pregunta al usuario
+  // qué modo prefiere antes de arrancar — en vez de decidir por él. Si
+  // ninguna es grande, se va directo a modo rápido (el de siempre, sin
+  // fricción para el caso común).
+  const needsModeChoice = infoA?.suggestSafeMode || infoB?.suggestSafeMode
+
   function startComputeDiffs() {
+    if (needsModeChoice) {
+      setDiffsPhase('choosing_mode')
+    } else {
+      runComputeDiffs('fast')
+    }
+  }
+
+  function runComputeDiffs(mode) {
     setDiffsPhase('computing')
     setDiffsProgress(0)
     setFieldFilter(null)
-    getWorker().postMessage({ type: 'compute_diffs' })
+    setDiffsMode(mode)
+    getWorker().postMessage({ type: 'compute_diffs', mode })
   }
 
   function requestDiffsPage(page, filter) {
@@ -191,7 +208,7 @@ export default function CompareTabBase() {
           {stateA === 'loaded' && (
             <div className="rb-compare-loaded">
               <div className="rb-compare-loaded-name">{fileNameA}</div>
-              <div className="rb-compare-loaded-stats"><span><b>{fmt(infoA.totalRows)}</b> filas</span><span><b>{fmt(infoA.uniqueEmails)}</b> emails únicos</span></div>
+              <div className="rb-compare-loaded-stats"><span><b>{fmt(infoA.totalRows)}</b> filas</span><span><b>{fmt(infoA.uniqueEmails)}</b> emails únicos</span><span>{infoA.sizeMb} MB</span></div>
               <button className="rb-btn-change" onClick={() => { setStateA('idle'); setInfoA(null); setStats(null); setDiffsPhase('idle') }}>cambiar</button>
             </div>
           )}
@@ -210,7 +227,7 @@ export default function CompareTabBase() {
           {stateB === 'loaded' && (
             <div className="rb-compare-loaded">
               <div className="rb-compare-loaded-name">{fileNameB}</div>
-              <div className="rb-compare-loaded-stats"><span><b>{fmt(infoB.totalRows)}</b> filas</span><span><b>{fmt(infoB.uniqueEmails)}</b> emails únicos</span></div>
+              <div className="rb-compare-loaded-stats"><span><b>{fmt(infoB.totalRows)}</b> filas</span><span><b>{fmt(infoB.uniqueEmails)}</b> emails únicos</span><span>{infoB.sizeMb} MB</span></div>
               <button className="rb-btn-change" onClick={() => { setStateB('idle'); setInfoB(null); setStats(null); setDiffsPhase('idle') }}>cambiar</button>
             </div>
           )}
@@ -265,14 +282,53 @@ export default function CompareTabBase() {
 
             {showDiffs && (
               <>
+                {diffsPhase === 'choosing_mode' && (
+                  <div style={{ padding: '20px 18px' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
+                      {(() => {
+                        const grandeA = infoA?.suggestSafeMode
+                        const grandeB = infoB?.suggestSafeMode
+                        const cual = grandeA && grandeB ? 'Las dos bases son'
+                          : grandeA ? `La base A (${fmt(infoA.sizeMb)} MB) es`
+                          : `La base B (${fmt(infoB.sizeMb)} MB) es`
+                        return `${cual} bastante pesada. Elegí cómo calcular los cambios campo a campo:`
+                      })()}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <button
+                        className="rb-btn-ghost"
+                        style={{ flex: '1 1 200px', flexDirection: 'column', alignItems: 'flex-start', height: 'auto', padding: '14px 16px', gap: 4 }}
+                        onClick={() => runComputeDiffs('fast')}
+                      >
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Modo rápido</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'normal', textAlign: 'left' }}>
+                          El más veloz de los dos. Con bases muy pesadas como esta, existe el riesgo de que el navegador se quede sin memoria y se cierre la pestaña — si pasa, solo hay que volver a entrar y cargar las bases otra vez, no se pierde nada guardado.
+                        </span>
+                      </button>
+                      <button
+                        className="rb-btn-ghost"
+                        style={{ flex: '1 1 200px', flexDirection: 'column', alignItems: 'flex-start', height: 'auto', padding: '14px 16px', gap: 4, borderColor: 'var(--accent-primary)' }}
+                        onClick={() => runComputeDiffs('safe')}
+                      >
+                        <span style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>Modo seguro</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'normal', textAlign: 'left' }}>
+                          Puede tardar notablemente más (varios minutos con bases grandes), pero nunca se queda sin memoria — la opción recomendada si no tenés apuro.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {diffsPhase === 'computing' && (
                   <div style={{ padding: '24px 18px' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Comparando campo a campo…</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        Comparando campo a campo{diffsMode === 'safe' ? ' (modo seguro)' : ' (modo rápido)'}…
+                      </span>
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--accent-primary)' }}>{diffsProgress}%</span>
                     </div>
                     <div className="rb-progress-track"><div className="rb-progress-fill" style={{ width: `${diffsProgress}%` }} /></div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>Recorriendo {fmt(stats.madreCount)} contactos en común — puede tardar con bases grandes.</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>Recorriendo {fmt(stats.madreCount)} contactos en común.</div>
                   </div>
                 )}
 

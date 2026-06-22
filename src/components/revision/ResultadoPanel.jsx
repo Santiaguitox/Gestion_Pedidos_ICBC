@@ -1,105 +1,134 @@
-function ResultadoBloque({ resultado, delay, children }) {
+import { Check, AlertTriangle, X } from 'lucide-react'
+
+function ResultadoCard({ resultado, delay, children }) {
   if (!resultado) return null
   const esAdvertencia = resultado.advertencia && !resultado.ok
+  const estado = resultado.ok ? 'ok' : esAdvertencia ? 'warn' : 'error'
+  const Icon = estado === 'ok' ? Check : estado === 'warn' ? AlertTriangle : X
+
   return (
-    <div className={`revision-bloque ${resultado.ok ? 'revision-bloque-ok' : esAdvertencia ? 'revision-bloque-warn' : 'revision-bloque-error'}`}
-      style={{ animationDelay: `${delay}ms` }}>
-      <div className={`revision-bloque-titulo ${resultado.ok ? 'revision-titulo-ok' : esAdvertencia ? 'revision-titulo-warn' : 'revision-titulo-error'}`}>
-        <span className="revision-bloque-icon">{resultado.ok ? '✓' : esAdvertencia ? '⚠' : '✗'}</span>
-        {resultado.tipo}
+    <div className={`re-card ${estado}`} style={{ animationDelay: `${delay}ms` }}>
+      <div className="re-card-body">
+        <div className="re-card-title"><span className="re-card-num">{resultado.numero}</span>{resultado.tipo}</div>
+        <div className="re-card-detail">{resultado.detalle}</div>
+        {children}
       </div>
-      <div className="revision-bloque-detalle">{resultado.detalle}</div>
-      {children}
+      <span className="re-card-icon"><Icon size={15} strokeWidth={estado === 'warn' ? 2.3 : 3} /></span>
     </div>
   )
 }
 
-function CheckList({ checks }) {
+function SubcheckList({ checks }) {
   if (!checks?.length) return null
   return (
-    <div className="revision-checks">
+    <div className="re-subchecks">
       {checks.map((c, i) => (
-        <div key={i} className={`revision-check ${c.ok ? 'revision-check-ok' : 'revision-check-error'}`}>
-          {c.ok ? '✓' : '✗'} {c.detalle}
-        </div>
+        <span key={i} className="re-subcheck"><Check size={12} strokeWidth={3} />{c.detalle}</span>
       ))}
     </div>
   )
 }
 
-function AdvertenciaList({ advertencias }) {
-  if (!advertencias?.length) return null
+// Lista de items secundarios dentro de una card (ej: "Detalle menor" en
+// Links, "Requiere atención" en Alt de imágenes, imágenes pesadas
+// ordenadas en Peso de imágenes) — el color sigue la severidad real de
+// cada caso, no siempre es ámbar.
+function ItemsList({ label, items, color = 'var(--yellow-text)' }) {
+  if (!items?.length) return null
   return (
-    <div className="revision-checks">
-      <div className="revision-check-group-label">Detalle menor</div>
-      {advertencias.map((a, i) => (
-        <div key={i} className="revision-check revision-check-warn">⚠ {a.detalle}</div>
-      ))}
+    <div className="re-items-block">
+      <div className="re-items-label" style={{ color }}>{label}</div>
+      <div className="re-items-list">
+        {items.map((it, i) => (
+          <div key={i} className="re-item-row">
+            <span className="re-item-dot" style={{ background: color }} />
+            {typeof it === 'string' ? it : it.detalle}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
 export default function ResultadoPanel({ resultados }) {
   return (
-    <div className="flex flex-col gap-0">
-      <p className="revision-results-label">Análisis general</p>
+    <div className="re-cards">
 
-      <ResultadoBloque resultado={resultados.estructuraHTML} delay={0}>
-        <CheckList checks={resultados.estructuraHTML.checks} />
-      </ResultadoBloque>
+      <ResultadoCard resultado={{ ...resultados.estructuraHTML, numero: '01' }} delay={0}>
+        <SubcheckList checks={resultados.estructuraHTML?.checks?.filter(c => c.ok)} />
+        <ItemsList label="Requiere atención" items={resultados.estructuraHTML?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
 
-      <ResultadoBloque resultado={resultados.clasesCSS} delay={100} />
+      <ResultadoCard resultado={{ ...resultados.clasesCSS, numero: '02' }} delay={80} />
 
-      <ResultadoBloque resultado={resultados.legal} delay={200}>
-        <CheckList checks={resultados.legal.checks} />
-      </ResultadoBloque>
+      <ResultadoCard resultado={{ ...resultados.legal, numero: '03' }} delay={160}>
+        <SubcheckList checks={resultados.legal?.checks?.filter(c => c.ok)} />
+        <ItemsList label="Requiere atención" items={resultados.legal?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
 
-      <ResultadoBloque resultado={resultados.links} delay={300}>
-        {resultados.links.totalRevisados > 0 && (
-          <div className="revision-check revision-check-ok" style={{ marginTop: '0.375rem' }}>
-            ✓ {resultados.links.correctos} de {resultados.links.totalRevisados} links correctos
+      <ResultadoCard resultado={{ ...resultados.links, numero: '04' }} delay={240}>
+        <ItemsList label="Requiere atención" items={resultados.links?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList label="Detalle menor" items={resultados.links?.advertencias} color="var(--yellow-text)" />
+      </ResultadoCard>
+
+      <ResultadoCard resultado={{ ...resultados.dominioImagenes, numero: '05' }} delay={320}>
+        <ItemsList label="Requiere atención" items={resultados.dominioImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
+
+      <ResultadoCard resultado={{ ...resultados.altImagenes, numero: '06' }} delay={400}>
+        <ItemsList label="Requiere atención" items={resultados.altImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
+
+      <ResultadoCard resultado={{ ...resultados.dimensiones, numero: '07' }} delay={480}>
+        <ItemsList label="Requiere atención" items={resultados.dimensiones?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
+
+      <ResultadoCard resultado={{ ...resultados.pesoImagenes, numero: '08' }} delay={560}>
+        <ItemsList label="Ordenadas por peso" items={resultados.pesoImagenes?.checks} color="var(--accent-primary)" />
+      </ResultadoCard>
+
+      <ResultadoCard resultado={{ ...resultados.pesoHTML, numero: '09' }} delay={640} />
+
+      {/* Estructuras obsoletas — siempre se muestra como card propia
+          (no usa ResultadoCard porque su lógica visual es distinta: es
+          roja apenas hay 1+ coincidencias, sin estado "warn" intermedio,
+          y puede listar varias plantillas distintas, no un solo detalle). */}
+      {(() => {
+        const templates = resultados.resumenTemplates ?? []
+        const hayObsoletas = templates.length > 0
+        return (
+          <div className={hayObsoletas ? 're-obsoleta-card' : 're-card ok'} style={{ animationDelay: '720ms' }}>
+            {hayObsoletas ? (
+              <div className="re-obsoleta-head">
+                <div className="re-obsoleta-body">
+                  <div className="re-obsoleta-title"><span className="re-card-num">10</span>Estructuras obsoletas detectadas</div>
+                  <div className="re-obsoleta-detail">
+                    Coincide con {templates.length === 1 ? 'una plantilla obsoleta conocida' : `${templates.length} plantillas obsoletas conocidas`}
+                  </div>
+                  {templates.map((t, i) => (
+                    <div key={i} className="re-obsoleta-detail-box">
+                      <div className="re-obsoleta-tpl-name">Plantilla: <code>{t.nombre}</code></div>
+                      {t.errores.map((e, j) => (
+                        <div key={j} className="re-obsoleta-tpl-detail"><strong>{e.tipo}:</strong> {e.detalle}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <span className="re-obsoleta-badge">Error grave</span>
+              </div>
+            ) : (
+              <>
+                <div className="re-card-body">
+                  <div className="re-card-title"><span className="re-card-num">10</span>Estructuras obsoletas detectadas</div>
+                  <div className="re-card-detail">No se detectaron coincidencias con plantillas obsoletas</div>
+                </div>
+                <span className="re-card-icon"><Check size={15} strokeWidth={3} /></span>
+              </>
+            )}
           </div>
-        )}
-        <CheckList checks={resultados.links.checks} />
-        <AdvertenciaList advertencias={resultados.links.advertencias} />
-      </ResultadoBloque>
+        )
+      })()}
 
-      <ResultadoBloque resultado={resultados.dominioImagenes} delay={400}>
-        <CheckList checks={resultados.dominioImagenes.checks} />
-      </ResultadoBloque>
-
-      <ResultadoBloque resultado={resultados.altImagenes} delay={500}>
-        <CheckList checks={resultados.altImagenes.checks} />
-      </ResultadoBloque>
-
-      <ResultadoBloque resultado={resultados.dimensiones} delay={600}>
-        <CheckList checks={resultados.dimensiones.checks} />
-      </ResultadoBloque>
-
-      <ResultadoBloque resultado={resultados.pesoImagenes} delay={700}>
-        {resultados.pesoImagenes?.checks?.length > 0 && (
-          <>
-            <div className="revision-check-group-label">Imágenes más pesadas</div>
-            <CheckList checks={resultados.pesoImagenes.checks} />
-          </>
-        )}
-      </ResultadoBloque>
-
-      <ResultadoBloque resultado={resultados.pesoHTML} delay={800} />
-
-      {resultados.resumenTemplates?.length > 0 && (
-        <>
-          <p className="revision-section-label" style={{ marginTop: '1.25rem' }}>Estructuras obsoletas detectadas</p>
-          {resultados.resumenTemplates.map((t, i) => (
-            <div key={i} className="revision-bloque revision-bloque-error" style={{ animationDelay: `${900 + i * 100}ms` }}>
-              <div className="revision-bloque-titulo revision-titulo-error"><span className="revision-bloque-icon">✗</span>{t.nombre}</div>
-              {t.errores.map((e, j) => (
-                <div key={j} className="revision-bloque-detalle"><span className="font-medium">{e.tipo}:</span> {e.detalle}</div>
-              ))}
-            </div>
-          ))}
-        </>
-      )}
     </div>
   )
 }
