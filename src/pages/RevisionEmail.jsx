@@ -57,7 +57,13 @@ export default function RevisionEmail() {
     try {
       const h = iframe.contentDocument?.body?.scrollHeight
       if (h) iframe.style.height = h + 'px'
-    } catch {}
+    } catch {
+      // Acceder a contentDocument puede tirar un error de seguridad
+      // cross-origin en algunos navegadores aunque el contenido sea
+      // srcDoc local — si falla, el iframe simplemente no se
+      // auto-ajusta esa vez (no es crítico, el contenido sigue siendo
+      // visible con el alto que ya tenía).
+    }
   }
 
   async function handleAnalizar() {

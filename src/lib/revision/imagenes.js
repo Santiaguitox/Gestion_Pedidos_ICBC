@@ -134,6 +134,12 @@ export async function ValidarPesoImagenes(doc, cacheDatos) {
       checks,
     }
   } catch {
+    // Si algo falla acá (proxy caído, respuesta inesperada, etc.) se
+    // marca ok:true a propósito — no se puede confirmar si las
+    // imágenes pesan de más, pero tampoco hay evidencia de que sea un
+    // problema real de LA PIEZA. Bloquear o marcar error esta prueba
+    // por una falla de infraestructura (no del HTML en sí) generaría
+    // falsos negativos confusos para quien está revisando la pieza.
     return {
       ok: true,
       tipo: 'Peso de imágenes',

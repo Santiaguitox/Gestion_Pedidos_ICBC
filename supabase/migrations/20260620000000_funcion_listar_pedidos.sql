@@ -75,7 +75,30 @@ declare
 begin
   return query
   with base as (
-    select p.*
+    select p.*,
+      -- Solo tiene sentido cuando hay búsqueda activa (p_busqueda no
+      -- nulo) — indica en qué campo "pegó" la coincidencia, para que
+      -- el cliente (ver BuscadorGlobal.jsx) pueda mostrar un ícono
+      -- distinto según el tipo. Se evalúa en el mismo orden que el
+      -- WHERE de más abajo: asunto primero, después tags, después
+      -- pieza/link, después nombre de persona asignada — si matchea
+      -- por más de uno a la vez, se prioriza el primero de esta lista.
+      (case
+        when p_busqueda is null then null
+        when p.asunto ilike '%' || p_busqueda || '%' then 'asunto'
+        when exists (select 1 from unnest(p.tags) t where t ilike '%' || p_busqueda || '%') then 'tag'
+        when exists (
+          select 1 from public.entregable e
+          where e.pedido_id = p.id
+            and (e.nombre_pieza ilike '%' || p_busqueda || '%' or e.link_online ilike '%' || p_busqueda || '%')
+        ) then 'pieza'
+        when exists (
+          select 1 from public.pedido_asignados pa3
+          join public.profiles pr3 on pr3.id = pa3.user_id
+          where pa3.pedido_id = p.id and pr3.full_name ilike '%' || p_busqueda || '%'
+        ) then 'persona'
+        else null
+      end) as coincidencia_en
     from public.pedidos p
     where p.deleted_at is null
       and (p_solo_id is null or p.id = p_solo_id)
@@ -101,6 +124,11 @@ begin
             select 1 from public.entregable e
             where e.pedido_id = p.id
               and (e.nombre_pieza ilike '%' || p_busqueda || '%' or e.link_online ilike '%' || p_busqueda || '%')
+          )
+          or exists (
+            select 1 from public.pedido_asignados pa3
+            join public.profiles pr3 on pr3.id = pa3.user_id
+            where pa3.pedido_id = p.id and pr3.full_name ilike '%' || p_busqueda || '%'
           )
         ))
         or
@@ -140,6 +168,7 @@ begin
         'tipo', pg.tipo,
         'estados', pg.estados,
         'tags', pg.tags,
+        'coincidencia_en', pg.coincidencia_en,
         'fecha_limite', pg.fecha_limite,
         'created_by', pg.created_by,
         'created_at', pg.created_at,
@@ -153,7 +182,7 @@ begin
         'pedido_asignados', (
           select coalesce(jsonb_agg(jsonb_build_object(
             'user_id', pa.user_id,
-            'profiles', jsonb_build_object('id', pr.id, 'full_name', pr.full_name, 'role', pr.role)
+            'profiles', jsonb_build_object('id', pr.id, 'full_name', pr.full_name, 'role', pr.role, 'avatar_color', pr.avatar_color)
           )), '[]'::jsonb)
           from public.pedido_asignados pa
           join public.profiles pr on pr.id = pa.user_id

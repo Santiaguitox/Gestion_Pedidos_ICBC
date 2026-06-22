@@ -20,6 +20,10 @@ export function identificadorPieza(url) {
   try {
     return new URL(url).search
   } catch {
+    // Si la URL no es válida (caso raro, pero posible con datos
+    // viejos o pegados a mano), usar el string crudo como fallback —
+    // sigue sirviendo para comparar duplicados, aunque sea menos
+    // preciso que comparar por query string.
     return url.trim()
   }
 }

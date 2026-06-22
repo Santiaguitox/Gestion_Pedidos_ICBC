@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
+import BuscadorGlobal from '@/components/layout/BuscadorGlobal'
 
 function NotifToast({ toast, onDismiss, onNavigate }) {
   if (!toast) return null
@@ -180,12 +181,29 @@ function SidebarContent({ collapsed, setCollapsed, onNavClick, onPerfil }) {
 
 export default function AppLayout() {
   const { theme } = useTheme()
+  const { role } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [showCambiarPassword, setShowCambiarPassword] = useState(false)
   const [showPerfil, setShowPerfil] = useState(false)
+  const [showBuscador, setShowBuscador] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
+
+  // Atajo global Cmd+K (Mac) / Ctrl+K (Windows/Linux) — funciona desde
+  // cualquier pantalla de la app, no solo desde un input específico.
+  // Se ignora si ya hay otro modal abierto (perfil, cambiar contraseña)
+  // para no superponer dos overlays a la vez.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        if (!showCambiarPassword && !showPerfil) setShowBuscador(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showCambiarPassword, showPerfil])
 
   // El drawer se cierra desde el onClick de cada NavLink (onNavClick, ver
   // SidebarContent más abajo) — no hace falta un efecto aparte. Mientras
@@ -219,9 +237,14 @@ export default function AppLayout() {
             <span className="text-[var(--text-muted)] font-light">×</span>
             <span className="text-[var(--icomm-violet)]">icomm</span>
           </div>
-          <button onClick={() => setDrawerOpen(true)} className="mobile-hamburger">
-            <Menu size={20} />
-          </button>
+          <div className="mobile-topbar-actions">
+            <button onClick={() => setShowBuscador(true)} className="mobile-search-btn" title="Buscar">
+              <Search size={19} />
+            </button>
+            <button onClick={() => setDrawerOpen(true)} className="mobile-hamburger">
+              <Menu size={20} />
+            </button>
+          </div>
         </div>
 
         <main className="main-content">
@@ -232,6 +255,7 @@ export default function AppLayout() {
       <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/app/pedidos/${pedidoId}`)} />
       <FeedbackToast feedback={feedback} onDismiss={dismissFeedback} />
       {showPerfil && <PerfilUsuario onClose={() => setShowPerfil(false)} />}
+      <BuscadorGlobal open={showBuscador} onClose={() => setShowBuscador(false)} role={role} />
     </div>
   )
 }
