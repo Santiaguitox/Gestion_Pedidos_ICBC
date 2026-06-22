@@ -131,6 +131,13 @@ export default function RevisionEmail() {
   // ok/total), así que se recalcula con el mismo criterio en vez de
   // reusar esa función (pensada para guardar 3 valores en la base, no
   // para alimentar esta barra visual de 3 colores).
+  //
+  // 'detalleMenorN' es un contador EXTRA, aparte de ok/warn/error: cuenta
+  // las advertencias de "Links" (ej: falta target="_blank") que no hacen
+  // fallar la prueba en sí (Links puede seguir siendo ok:true con
+  // detalles menores) — no afecta el cálculo de pruebas superadas ni a
+  // resumirResultados (que sigue intacta, esto es solo informativo en
+  // esta pantalla).
   function calcularScore(resultados) {
     const claves = ['estructuraHTML', 'clasesCSS', 'legal', 'links', 'dominioImagenes', 'altImagenes', 'dimensiones', 'pesoImagenes', 'pesoHTML']
     const bloques = claves.map(k => resultados[k]).filter(Boolean)
@@ -139,7 +146,8 @@ export default function RevisionEmail() {
     const okN = todos.filter(b => b.ok).length
     const warnN = todos.filter(b => !b.ok && b.advertencia).length
     const errN = todos.filter(b => !b.ok && !b.advertencia).length
-    return { okN, warnN, errN, score: okN + warnN, total: todos.length }
+    const detalleMenorN = resultados.links?.advertencias?.length ?? 0
+    return { okN, warnN, errN, detalleMenorN, score: okN + warnN, total: todos.length }
   }
   const score = resultados ? calcularScore(resultados) : null
 
@@ -179,7 +187,7 @@ export default function RevisionEmail() {
                 />
                 {html && (
                   <button onClick={() => setHtml('')} className="re-clear-btn" title="Limpiar">
-                    <Trash2 size={13} />
+                    <Trash2 size={20} />
                   </button>
                 )}
               </>
@@ -196,7 +204,7 @@ export default function RevisionEmail() {
                 />
                 {url && (
                   <button onClick={() => { setUrl(''); setUrlError('') }} className="re-clear-btn" title="Limpiar">
-                    <Trash2 size={13} />
+                    <Trash2 size={20} />
                   </button>
                 )}
                 {urlError && <p className="msg-error" style={{ marginTop: 6 }}>{urlError}</p>}
@@ -217,8 +225,6 @@ export default function RevisionEmail() {
               <RotateCcw size={15} />
             </button>
           )}
-
-          {cargando && progreso && <span className="re-progreso-inline">{progreso}</span>}
         </div>
       </div>
 
@@ -241,6 +247,9 @@ export default function RevisionEmail() {
             <span className="re-score-badge ok"><span className="dot" />{score.okN} OK</span>
             <span className="re-score-badge warn"><span className="dot" />{score.warnN} advertencia{score.warnN !== 1 ? 's' : ''}</span>
             <span className="re-score-badge err"><span className="dot" />{score.errN} error{score.errN !== 1 ? 'es' : ''}</span>
+            {score.detalleMenorN > 0 && (
+              <span className="re-score-badge minor"><span className="dot" />{score.detalleMenorN} detalle{score.detalleMenorN !== 1 ? 's' : ''} menor{score.detalleMenorN !== 1 ? 'es' : ''}</span>
+            )}
           </div>
         </div>
       )}
@@ -258,17 +267,19 @@ export default function RevisionEmail() {
                 <span className="dot" />
                 <span>Pieza renderizada</span>
               </div>
-              {htmlAnalizado ? (
-                <iframe
-                  ref={iframeRef}
-                  srcDoc={htmlAnalizado}
-                  title="Vista previa del email"
-                  onLoad={handleIframeLoad}
-                  className="re-iframe"
-                />
-              ) : (
-                <div className="re-preview-empty">Analizando…</div>
-              )}
+              <div className="re-preview-body">
+                {htmlAnalizado ? (
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={htmlAnalizado}
+                    title="Vista previa del email"
+                    onLoad={handleIframeLoad}
+                    className="re-iframe"
+                  />
+                ) : (
+                  <div className="re-preview-empty">Analizando…</div>
+                )}
+              </div>
             </div>
           </div>
 
