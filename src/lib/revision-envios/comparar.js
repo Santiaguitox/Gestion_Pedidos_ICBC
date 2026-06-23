@@ -142,7 +142,123 @@ export function compararCampos(headersRaw, htmlRaw) {
 // archivo de contactos (con emails reales) jamás se carga a memoria más
 // allá de ese pedacito inicial, y nunca se envía a ningún servidor —
 // todo corre en el navegador.
+//
+// Excepción: .xlsx — el formato ZIP interno de Excel no permite leer
+// solo los primeros bytes de forma confiable (los metadatos de columnas
+// están en una posición variable dentro del ZIP). Se lee el archivo
+// completo en memoria pero se extrae SOLO la primera fila y se descarta
+// todo lo demás inmediatamente. El comportamiento de privacidad es
+// idéntico al de csv/txt: nunca se persiste ni se envía nada.
 const HEADER_SAMPLE_BYTES = 8192
+
+// Lee la primera fila de un .xlsx sin librerías externas.
+// Un xlsx es un ZIP que contiene XMLs — la hoja activa se referencia
+// en xl/workbook.xml y sus datos están en xl/worksheets/sheet1.xml
+// (o el número que corresponda). Solo se parsea la primera fila (<row>)
+// y se descarta todo lo demás. Los valores de texto en xlsx van en una
+// tabla compartida (xl/sharedStrings.xml) referenciada por índice,
+// así que hay que leer ambos archivos para resolver los strings.
+async function leerHeaderXlsx(file) {
+  // Descomprime el ZIP usando DecompressionStream nativa del browser
+  async function extraerArchivo(zipBuffer, nombreBuscado) {
+    const view = new DataView(zipBuffer)
+    let offset = 0
+    while (offset < zipBuffer.byteLength - 4) {
+      const sig = view.getUint32(offset, true)
+      if (sig !== 0x04034b50) break // Local file header signature
+      const flags      = view.getUint16(offset + 6, true)
+      const compressed = view.getUint16(offset + 8, true)
+      const compSize   = view.getUint32(offset + 18, true)
+      const uncompSize = view.getUint32(offset + 22, true)
+      const nameLen    = view.getUint16(offset + 26, true)
+      const extraLen   = view.getUint16(offset + 28, true)
+      const nameBytes  = new Uint8Array(zipBuffer, offset + 30, nameLen)
+      const nombre     = new TextDecoder().decode(nameBytes)
+      const dataOffset = offset + 30 + nameLen + extraLen
+
+      if (nombre === nombreBuscado) {
+        const compData = new Uint8Array(zipBuffer, dataOffset, compSize)
+        if (compressed === 8) {
+          // Deflate — usar DecompressionStream nativa
+          const ds = new DecompressionStream('deflate-raw')
+          const writer = ds.writable.getWriter()
+          writer.write(compData)
+          writer.close()
+          const chunks = []
+          const reader = ds.readable.getReader()
+          let done = false
+          while (!done) {
+            const { value, done: d } = await reader.read()
+            if (value) chunks.push(value)
+            done = d
+          }
+          const total = chunks.reduce((s, c) => s + c.length, 0)
+          const out = new Uint8Array(total)
+          let pos = 0
+          for (const c of chunks) { out.set(c, pos); pos += c.length }
+          return new TextDecoder('utf-8').decode(out)
+        } else {
+          // Sin compresión
+          return new TextDecoder('utf-8').decode(new Uint8Array(zipBuffer, dataOffset, uncompSize))
+        }
+      }
+      offset = dataOffset + compSize
+    }
+    return null
+  }
+
+  const buffer = await file.arrayBuffer()
+
+  // 1. Leer workbook.xml para encontrar qué archivo corresponde a sheet1
+  const workbookXml = await extraerArchivo(buffer, 'xl/workbook.xml')
+  if (!workbookXml) throw new Error('Archivo xlsx inválido o corrupto.')
+
+  // Buscar el nombre del archivo de la primera hoja en xl/worksheets/
+  const wbDoc = new DOMParser().parseFromString(workbookXml, 'text/xml')
+  const sheetEl = wbDoc.querySelector('sheet')
+  const sheetId = sheetEl?.getAttribute('sheetId') ?? '1'
+  const sheetFile = `xl/worksheets/sheet${sheetId}.xml`
+
+  // 2. Leer sharedStrings (puede no existir si todos los valores son numéricos)
+  const ssXml = await extraerArchivo(buffer, 'xl/sharedStrings.xml')
+  const sharedStrings = []
+  if (ssXml) {
+    const ssDoc = new DOMParser().parseFromString(ssXml, 'text/xml')
+    ssDoc.querySelectorAll('si').forEach(si => {
+      // Concatenar todos los <t> dentro del <si> (puede haber varios en texto enriquecido)
+      const texto = Array.from(si.querySelectorAll('t')).map(t => t.textContent).join('')
+      sharedStrings.push(texto)
+    })
+  }
+
+  // 3. Leer la hoja y extraer solo la primera fila
+  const sheetXml = await extraerArchivo(buffer, sheetFile)
+  if (!sheetXml) throw new Error('No se encontró la hoja de datos en el archivo.')
+
+  const sheetDoc = new DOMParser().parseFromString(sheetXml, 'text/xml')
+  const primeraFila = sheetDoc.querySelector('row')
+  if (!primeraFila) throw new Error('El archivo no tiene datos en la primera fila.')
+
+  const headers = []
+  primeraFila.querySelectorAll('c').forEach(cell => {
+    const tipo = cell.getAttribute('t')
+    const vEl  = cell.querySelector('v')
+    if (!vEl) return
+    let valor = ''
+    if (tipo === 's') {
+      // Shared string — resolver por índice
+      valor = sharedStrings[parseInt(vEl.textContent, 10)] ?? ''
+    } else if (tipo === 'str' || tipo === 'inlineStr') {
+      valor = cell.querySelector('t')?.textContent ?? vEl.textContent
+    } else {
+      valor = vEl.textContent
+    }
+    if (valor.trim()) headers.push(valor.trim())
+  })
+
+  if (!headers.length) throw new Error('No se encontraron columnas en la primera fila.')
+  return { headerLine: headers.join(';'), headers, filas: [] }
+}
 
 function decodeLatin1(uint8array) {
   let str = ''
@@ -174,6 +290,8 @@ const FILAS_MUESTRA = 3
 // base). El resto del archivo (más allá de esas pocas líneas) nunca se
 // lee ni se carga a memoria en ningún momento.
 export async function leerMuestraDeArchivo(file) {
+  const ext = file.name.split('.').pop().toLowerCase()
+  if (ext === 'xlsx') return leerHeaderXlsx(file)
   const slice = file.slice(0, HEADER_SAMPLE_BYTES)
   const buffer = await slice.arrayBuffer()
   const bytes = new Uint8Array(buffer)

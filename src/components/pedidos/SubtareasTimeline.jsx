@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { SuccessModal } from '@/components/pedidos/SuccessModal'
 import { SheetDisenoModal } from '@/components/pedidos/SheetDisenoModal'
+import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 import { Plus, Trash2, Check, FileSpreadsheet } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -11,6 +12,18 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
   const [asignadoA, setAsignadoA] = useState('')
   const [sheetDiseno, setSheetDiseno] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
+
+  // Color por área de equipo — las áreas reales son las definidas en
+  // Usuarios.jsx (AREAS_EQUIPO): PM, Diseño, Programación, Comercial,
+  // Otro/sin área. Mismo criterio visual que ya usa el resto de la app
+  // (chip con fondo tintado al 12% + texto del color sólido).
+  function colorArea(area) {
+    if (area === 'Diseño') return { fg: '#1A2EE6', bg: 'rgba(26,46,230,0.1)' }
+    if (area === 'Programación') return { fg: '#5B4EE8', bg: 'rgba(91,78,232,0.1)' }
+    if (area === 'PM') return { fg: '#10B981', bg: 'rgba(16,185,129,0.1)' }
+    if (area === 'Comercial') return { fg: '#F59E0B', bg: 'rgba(245,158,11,0.1)' }
+    return { fg: '#6B7080', bg: 'rgba(107,112,128,0.1)' }
+  }
 
   function handleAgregar() {
     if (!descripcion.trim()) return
@@ -89,8 +102,19 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
               </div>
               {s.profiles && (
                 <div className="subtarea-asignado">
-                  <span className="avatar-xs-secondary">{s.profiles.full_name?.[0]?.toUpperCase()}</span>
+                  <span
+                    className="avatar-xs-secondary"
+                    style={{ background: s.profiles.avatar_color || colorAvatar(s.profiles.id) }}
+                  >
+                    {iniciales(s.profiles.full_name)}
+                  </span>
                   <span className="subtarea-asignado-nombre">{s.profiles.full_name}</span>
+                  {(() => {
+                    const area = usuariosConArea.find(u => u.id === s.asignado_a)?.area_equipo
+                    if (!area) return null
+                    const c = colorArea(area)
+                    return <span className="subtarea-area-chip" style={{ color: c.fg, background: c.bg }}>{area}</span>
+                  })()}
                 </div>
               )}
               {canEdit && s.asignado_a && esDiseno(s.asignado_a) && s.completada && (

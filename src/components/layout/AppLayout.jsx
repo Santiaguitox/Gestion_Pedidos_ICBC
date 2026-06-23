@@ -7,6 +7,7 @@ import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, Che
 import { ROLES } from '@/lib/constants'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
 import BuscadorGlobal from '@/components/layout/BuscadorGlobal'
+import { LogoRotator } from '@/components/layout/LogoRotator'
 
 function NotifToast({ toast, onDismiss, onNavigate }) {
   if (!toast) return null
@@ -62,7 +63,7 @@ function FeedbackToast({ feedback, onDismiss }) {
   )
 }
 
-function SidebarContent({ collapsed, setCollapsed, onNavClick, onPerfil }) {
+function SidebarContent({ collapsed, onNavClick, onPerfil }) {
   const { profile, role, signOut } = useAuth()
   const { theme, toggle } = useTheme()
   const { unreadCount } = useNotificaciones()
@@ -72,21 +73,9 @@ function SidebarContent({ collapsed, setCollapsed, onNavClick, onPerfil }) {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border)]"
+      <div className="flex items-center justify-center border-b border-[var(--border)]"
         style={{ padding: '1.25rem 1rem', minHeight: '70px' }}>
-        {!collapsed && (
-          <div className="sidebar-logo">
-            <span className="text-[var(--icbc-red)]">ICBC</span>
-            <span className="text-[var(--text-muted)] font-light">×</span>
-            <span className="text-[var(--icomm-violet)]">icomm</span>
-          </div>
-        )}
-        {setCollapsed && (
-          <button onClick={() => setCollapsed(v => !v)}
-            className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shrink-0">
-            <ChevronLeft size={18} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }} />
-          </button>
-        )}
+        <LogoRotator variant={collapsed ? 'mobile' : 'full'} />
       </div>
 
       {/* Nav */}
@@ -220,16 +209,33 @@ export default function AppLayout() {
 
       {/* Sidebar desktop */}
       <aside
-        className={`sidebar-desktop flex flex-col shrink-0 overflow-hidden border-r border-[var(--border)] bg-[var(--bg-surface)] ${collapsed ? 'sidebar-collapsed' : ''}`}
+        className={`sidebar-desktop flex flex-col shrink-0 border-r border-[var(--border)] bg-[var(--bg-surface)] ${collapsed ? 'sidebar-collapsed' : ''}`}
         style={{ width: collapsed ? '72px' : '220px', transition: 'width 200ms ease' }}
       >
-        <SidebarContent collapsed={collapsed} setCollapsed={setCollapsed} onNavClick={null} onPerfil={() => setShowPerfil(true)} />
+        <SidebarContent collapsed={collapsed} onNavClick={null} onPerfil={() => setShowPerfil(true)} />
       </aside>
+
+      {/* Chevron de colapsar — vive FUERA del <aside> a propósito, con
+          position:fixed (no recortado por el overflow:hidden del
+          sidebar ni del contenedor general), flotando sobre el borde
+          derecho. Antes vivía adentro del header, al lado del logo de
+          texto — con el logo rotador nuevo (más ancho que el texto que
+          tenía antes) ya no había buen lugar ahí sin que se pisaran.
+          'left' se recalcula según el ancho real del sidebar en cada
+          estado, sincronizado con la misma transición de 200ms. */}
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        className="sidebar-collapse-toggle"
+        style={{ left: collapsed ? '72px' : '220px' }}
+        title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+      >
+        <ChevronLeft size={15} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }} />
+      </button>
 
       {/* Drawer mobile */}
       <div className={`drawer-overlay ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
       <aside className={`sidebar-drawer ${drawerOpen ? 'open' : ''}`}>
-        <SidebarContent collapsed={false} setCollapsed={null} onNavClick={() => setDrawerOpen(false)} onPerfil={() => setShowPerfil(true)} />
+        <SidebarContent collapsed={false} onNavClick={() => setDrawerOpen(false)} onPerfil={() => setShowPerfil(true)} />
       </aside>
 
       {/* Contenido */}
@@ -238,9 +244,7 @@ export default function AppLayout() {
         {/* Topbar mobile */}
         <div className="mobile-topbar">
           <div className="mobile-topbar-logo">
-            <span className="text-[var(--icbc-red)]">ICBC</span>
-            <span className="text-[var(--text-muted)] font-light">×</span>
-            <span className="text-[var(--icomm-violet)]">icomm</span>
+            <LogoRotator variant="mobile" />
           </div>
           <div className="mobile-topbar-actions">
             <button onClick={() => setShowBuscador(true)} className="mobile-search-btn" title="Buscar">

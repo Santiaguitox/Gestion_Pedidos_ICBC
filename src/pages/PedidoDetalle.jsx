@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
@@ -11,14 +12,16 @@ import { useInstancias } from '@/hooks/useInstancias'
 import { Badge } from '@/components/ui/Badge'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import PedidoForm from '@/components/pedidos/PedidoForm'
-import { Section } from '@/components/pedidos/Section'
+import { DetalleAcordeon } from '@/components/pedidos/DetalleAcordeon'
+import { DetalleInfoBloques } from '@/components/pedidos/DetalleInfoBloques'
 import { EstadoPopover } from '@/components/pedidos/EstadoPopover'
 import { SubtareasTimeline } from '@/components/pedidos/SubtareasTimeline'
 import { EntregablesSection } from '@/components/pedidos/EntregablesSection'
+import { BaseDatosSection } from '@/components/pedidos/BaseDatosSection'
 import { PedidoHistorial } from '@/components/pedidos/PedidoHistorial'
 import { SheetModal } from '@/components/pedidos/SheetModal'
 import { SuccessModal } from '@/components/pedidos/SuccessModal'
-import { ArrowLeft, Edit, Trash2, Clock, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Clock, FileSpreadsheet, CheckSquare, FileText, Info, Database } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -31,6 +34,7 @@ export default function PedidoDetalle() {
   const { role, user } = useAuth()
   const { showSuccess, showError } = useNotificaciones()
   const { actualizarPedido, eliminarPedido } = usePedidos()
+  const isMobile = useIsMobile()
   const [pedido, setPedido] = useState(null)
   const [loading, setLoading] = useState(true)
   const [editando, setEditando] = useState(false)
@@ -53,7 +57,12 @@ export default function PedidoDetalle() {
   const queryPedido = useCallback(async () => {
     const { data } = await supabase
       .from('pedidos')
-      .select('*, pedido_asignados(user_id, profiles(id,full_name)), subtareas(*, profiles:asignado_a(full_name)), entregable(*)')
+      // avatar_color: agregado para que los avatares de "Asignados" usen
+      // el color real configurado por cada usuario, igual criterio que
+      // ya aplica en Calendario / PedidoCard / el buscador global —
+      // antes esta query no lo traía y el avatar quedaba siempre con el
+      // color de fallback.
+      .select('*, pedido_asignados(user_id, profiles(id,full_name,avatar_color)), subtareas(*, profiles:asignado_a(id,full_name,avatar_color)), entregable(*), pedido_base(*)')
       .eq('id', id).single()
     return data
   }, [id])
@@ -132,6 +141,7 @@ export default function PedidoDetalle() {
   const tipo = tipos.find(t => t.value === pedido.tipo)
   const estadosActivos = estados.filter(e => (pedido.estados ?? []).includes(e.value))
   const entregables = Array.isArray(pedido.entregable) ? pedido.entregable : pedido.entregable ? [pedido.entregable] : []
+  const bases = Array.isArray(pedido.pedido_base) ? pedido.pedido_base : pedido.pedido_base ? [pedido.pedido_base] : []
   const subtareas = pedido.subtareas ?? []
   const canEdit = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
   const canEditPedido = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN || role === ROLES.COLABORADOR
@@ -139,10 +149,18 @@ export default function PedidoDetalle() {
   const canWrite = role !== ROLES.VIEWER
   const isSuperAdmin = role === ROLES.SUPER_ADMIN
   const subtareasCompletadas = subtareas.filter(s => s.completada).length
+  const pctSubtareas = subtareas.length > 0 ? Math.round((subtareasCompletadas / subtareas.length) * 100) : 0
+  const pctCompleto = pctSubtareas === 100 && subtareas.length > 0
+
+  // El botón "Registrar en Sheet" del pedido completo ahora vive en el
+  // header (junto a "Actualizar estado"), no suelto al final de la
+  // página como antes — el rediseño le da más protagonismo, ya que es
+  // una acción importante del flujo de cierre de un pedido.
+  const mostrarRegistrarSheet = canEdit && pedido.estados?.includes('finalizado')
 
   return (
-    <div className="detalle-root">
-      <div className="detalle-topbar">
+    <div className="det-root">
+      <div className="det-topbar">
         <button onClick={() => navigate(backTo)} className="btn-back">
           <ArrowLeft size={16} />Volver a {backLabel}
         </button>
@@ -158,118 +176,110 @@ export default function PedidoDetalle() {
         )}
       </div>
 
-      <div className="detalle-header">
+      {/* Header */}
+      <div className="det-header">
         <div className="detalle-meta-row">
           {prio && <Badge label={prio.label} color={prio.color} />}
           {tipo && <span className="detalle-tipo">{tipo.label}</span>}
+          <span style={{ color: 'var(--border-strong)' }}>·</span>
           <span className="detalle-fecha">
-            {format(new Date(pedido.created_at), "d 'de' MMMM yyyy", { locale: es })}
+            Creado el {format(new Date(pedido.created_at), "d 'de' MMMM yyyy", { locale: es })}
           </span>
         </div>
-        <h1 className="detalle-title">{pedido.asunto}</h1>
-        {pedido.descripcion && <p className="detalle-descripcion">{pedido.descripcion}</p>}
-        <div className="detalle-estados-row">
+        <h1 className="det-title">{pedido.asunto}</h1>
+        {pedido.descripcion && <p className="det-descripcion">{pedido.descripcion}</p>}
+        <div className="det-estados-row">
           {estadosActivos.length === 0
             ? <span className="detalle-sin-estado">Sin estado asignado</span>
             : estadosActivos.map(e => <Badge key={e.value} label={e.label} color={e.color} />)
           }
           <EstadoPopover pedido={pedido} id={id} role={role} user={user} onUpdate={fetchPedido} estados={estados} />
+          {mostrarRegistrarSheet && (
+            <button onClick={() => setShowSheet(true)} className="det-btn-sheet">
+              <FileSpreadsheet size={16} />Registrar pedido en Sheet
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="detalle-info-grid">
-        <div className="info-card">
-          <p className="info-card-label">Asignados</p>
-          {pedido.pedido_asignados?.length === 0
-            ? <p className="info-card-empty">Nadie asignado</p>
-            : pedido.pedido_asignados?.map(a => (
-              <div key={a.user_id} className="asignado-row">
-                <span className="avatar-sm">{a.profiles?.full_name?.[0]?.toUpperCase()}</span>
-                {a.profiles?.full_name}
-              </div>
-            ))
-          }
-        </div>
-        {pedido.fecha_limite && (
-          <div className="info-card">
-            <p className="info-card-label">Fecha límite</p>
-            <p className="info-card-value">
-              {format(new Date(pedido.fecha_limite + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
-            </p>
+      {/* Mobile: "Detalles del pedido" como 4to acordeón, primero — en
+          desktop esta misma info va en el riel sticky de la derecha
+          (ver más abajo), nunca se duplican los dos a la vez. */}
+      {isMobile && (
+        <DetalleAcordeon
+          icon={<Info size={17} />} iconColor="var(--text-secondary)" iconBg="var(--bg-hover)"
+          title="Detalles del pedido" defaultOpen={false}
+        >
+          <div className="det-info-mobile-grid">
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} />
           </div>
-        )}
-        {pedido.tags?.length > 0 && (
-          <div className="info-card">
-            <p className="info-card-label">Tags</p>
-            <div className="flex flex-wrap gap-[0.375rem]">
-              {pedido.tags.map(t => <span key={t} className="tag-item">{t}</span>)}
-            </div>
-          </div>
-        )}
-        {pedido.instancia && (
-          <div className="info-card">
-            <p className="info-card-label">Instancia</p>
-            {(() => {
-              const inst = instancias.find(i => i.value === pedido.instancia)
-              return inst
-                ? <div style={{ display: 'inline-flex' }}><Badge label={inst.label} color={inst.color} size="sm" /></div>
-                : <p className="info-card-value">{pedido.instancia}</p>
-            })()}
-          </div>
-        )}
-        {pedido.tipo_envio && (
-          <div className="info-card">
-            <p className="info-card-label">Tipo de envío</p>
-            <p className="info-card-value">
-              {pedido.tipo_envio === 'otro' ? pedido.tipo_envio_otro || 'Otro' : pedido.tipo_envio === 'test' ? 'Test' : 'Real'}
-            </p>
-          </div>
-        )}
-        {pedido.cantidad_envios != null && (
-          <div className="info-card">
-            <p className="info-card-label">Cantidad de envíos</p>
-            <p className="info-card-value">{pedido.cantidad_envios}</p>
-          </div>
-        )}
-        {(pedido.fecha_programacion || pedido.hora_programacion) && (
-          <div className="info-card">
-            <p className="info-card-label">Programación</p>
-            <p className="info-card-value">
-              {pedido.fecha_programacion && format(new Date(pedido.fecha_programacion + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
-              {pedido.hora_programacion && ` a las ${pedido.hora_programacion}`}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <Section title="Subtareas" defaultOpen={true}
-        badge={subtareas.length > 0 ? `${subtareasCompletadas}/${subtareas.length}` : null}>
-        <SubtareasTimeline
-          subtareas={subtareas} canWrite={canWrite} canEdit={canEdit}
-          usuarios={usuarios} usuariosConArea={usuariosConArea}
-          onToggle={toggleSubtarea} onEliminar={eliminarSubtarea} onAgregar={agregarSubtarea}
-          pedido={pedido} showError={showError}
-        />
-      </Section>
-
-      <Section title="Piezas entregables" defaultOpen={true}
-        badge={entregables.length > 0 ? entregables.length : null}>
-        <EntregablesSection pedidoId={id} entregables={entregables} canWrite={canWrite}
-          isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm} />
-      </Section>
-
-      <Section title="Historial de actividad" icon={<Clock size={15} />} defaultOpen={false}>
-        <PedidoHistorial pedidoId={id} />
-      </Section>
-
-      {canEdit && pedido.estados?.includes('finalizado') && (
-        <div className="flex justify-end">
-          <button onClick={() => setShowSheet(true)}
-            className="btn-primary flex items-center gap-2" style={{ width: 'auto' }}>
-            <FileSpreadsheet size={16} />Registrar en Sheet
-          </button>
-        </div>
+        </DetalleAcordeon>
       )}
+
+      <div className="det-grid">
+        <div className="det-tools">
+
+          <DetalleAcordeon
+            icon={<CheckSquare size={18} />} iconColor="var(--accent-primary)" iconBg="var(--red-bg)"
+            title="Subtareas"
+            badge={subtareas.length > 0 ? `${subtareasCompletadas}/${subtareas.length}` : null}
+            badgeColor={pctCompleto ? '#10B981' : 'var(--text-secondary)'}
+            badgeBg={pctCompleto ? 'var(--green-bg)' : 'var(--bg-hover)'}
+            defaultOpen={true}
+          >
+            <SubtareasTimeline
+              subtareas={subtareas} canWrite={canWrite} canEdit={canEdit}
+              usuarios={usuarios} usuariosConArea={usuariosConArea}
+              onToggle={toggleSubtarea} onEliminar={eliminarSubtarea} onAgregar={agregarSubtarea}
+              pedido={pedido} showError={showError}
+            />
+          </DetalleAcordeon>
+
+          <DetalleAcordeon
+            icon={<FileText size={18} />} iconColor="#1A2EE6" iconBg="var(--badge-bg)"
+            title="Piezas entregables"
+            badge={entregables.length > 0 ? entregables.length : null}
+            badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
+            defaultOpen={true}
+          >
+            <EntregablesSection pedidoId={id} entregables={entregables} canWrite={canWrite}
+              isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm} />
+          </DetalleAcordeon>
+
+          <DetalleAcordeon
+            icon={<Database size={18} />} iconColor="#10B981" iconBg="rgba(16,185,129,0.1)"
+            title="Base de datos"
+            badge={bases.length > 0 ? bases.length : null}
+            badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
+            defaultOpen={bases.length > 0 || canWrite}
+          >
+            <BaseDatosSection
+              pedidoId={id}
+              bases={bases}
+              canWrite={canWrite}
+              onUpdate={fetchPedido}
+              entregables={entregables}
+            />
+          </DetalleAcordeon>
+
+          <DetalleAcordeon
+            icon={<Clock size={18} />} iconColor="var(--text-secondary)" iconBg="var(--bg-hover)"
+            title="Historial de actividad"
+            defaultOpen={false}
+          >
+            <PedidoHistorial pedidoId={id} />
+          </DetalleAcordeon>
+
+        </div>
+
+        {/* Riel de info — solo en desktop, sticky a la derecha. En
+            mobile esta misma info ya se mostró arriba como acordeón. */}
+        {!isMobile && (
+          <div className="det-info-rail">
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} />
+          </div>
+        )}
+      </div>
 
       {editando && <PedidoForm pedido={pedido} onSave={handleEdit} onCancel={() => setEditando(false)} />}
       {showSheet && <SheetModal pedido={pedido} entregables={entregables} onClose={() => setShowSheet(false)} onConfirm={handleRegistrarSheet} />}

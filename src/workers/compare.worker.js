@@ -19,44 +19,7 @@
 //    pero el uso de memoria no escala con la cantidad de contactos.
 // ════════════════════════════════════════════════════════════════════════
 
-function decodeLatin1(uint8array) {
-  let str = '';
-  for (let i = 0; i < uint8array.length; i++) str += String.fromCharCode(uint8array[i]);
-  return str;
-}
-
-function detectEncoding(bytes) {
-  const sample = bytes.slice(0, 4096);
-  const testUtf8 = new TextDecoder('utf-8').decode(sample);
-  return testUtf8.includes('\uFFFD') ? 'latin1' : 'utf8';
-}
-
-function decodeChunk(bytes, encoding) {
-  return encoding === 'utf8' ? new TextDecoder('utf-8').decode(bytes) : decodeLatin1(bytes);
-}
-
-function parseCSVLine(line, sep) {
-  const result = [];
-  let current = '', inQuotes = false, i = 0;
-  while (i < line.length) {
-    const ch = line[i];
-    if (ch === '"' && !inQuotes && current === '') { inQuotes = true; }
-    else if (ch === '"' && inQuotes) { if (line[i + 1] === '"') { current += '"'; i++; } else inQuotes = false; }
-    else if (ch === sep && !inQuotes) { result.push(current); current = ''; }
-    else { current += ch; }
-    i++;
-  }
-  result.push(current);
-  return result;
-}
-
-function detectCol(headers, patterns) {
-  return headers.find(h => patterns.some(p => p.test(h))) || null;
-}
-
-function normalizeEmail(email) {
-  return email.normalize('NFC').toLowerCase().trim();
-}
+import { decodeLatin1, detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -334,8 +297,15 @@ async function streamFilter(meta, filterFn, progressBase, progressRange) {
       const line = rawLine.replace(/\r$/, '');
       const trimmed = line.trim();
       if (!trimmed) continue;
-      if (isFirstChunk && trimmed === meta.headerLine.trim()) { isFirstChunk = false; continue; }
-      if (isFirstChunk) isFirstChunk = false;
+      // La primera línea no vacía SIEMPRE es el header — se salta por
+      // posición, no por comparación de contenido. Antes se comparaba
+      // trimmed contra meta.headerLine.trim(), pero eso es frágil: un
+      // BOM al inicio del archivo (común en CSV exportados de Excel) o
+      // cualquier diferencia sutil de encoding entre la carga inicial y
+      // esta segunda lectura podía hacer que la comparación nunca
+      // matcheara, dejando que el header se procesara como si fuera una
+      // fila de datos real.
+      if (isFirstChunk) { isFirstChunk = false; continue; }
 
       const cols = parseCSVLine(trimmed, meta.sep);
       const idx = meta.emailCol ? meta.headers.indexOf(meta.emailCol) : -1;

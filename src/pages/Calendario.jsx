@@ -7,32 +7,8 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay,
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { GrupoLabel } from '@/components/ui/GrupoLabel'
-
-// Hook real (a diferencia de la versión anterior, que solo leía
-// window.innerWidth una vez por render sin reaccionar a cambios reales
-// de tamaño — por eso hacía falta recargar la página para que el
-// calendario "se diera cuenta" de que ahora es mobile). Con
-// useState + listener de resize, el componente vuelve a renderizar
-// automáticamente en cuanto la ventana cruza el breakpoint, igual que
-// ya pasa en el resto de la app vía CSS (acá no alcanza con CSS porque
-// la diferencia es de qué JSX se renderiza, no solo de estilos).
-//
-// setIsMobile solo se llama cuando el valor booleano realmente cambia
-// (no en cada pixel de resize) — evita re-renders de sobra mientras se
-// arrastra el borde de la ventana sin cruzar el límite de 640px.
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 640)
-  useEffect(() => {
-    function onResize() {
-      const nowMobile = window.innerWidth <= 640
-      setIsMobile(prev => prev === nowMobile ? prev : nowMobile)
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  return isMobile
-}
 
 function EstadoChip({ est, estados }) {
   const e = estados.find(x => x.value === est)

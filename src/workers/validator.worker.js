@@ -1,3 +1,5 @@
+import { decodeLatin1, detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
+
 const DISPOSABLE_DOMAINS = new Set([
   'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','yopmail.com',
   'trashmail.com','sharklasers.com','grr.la','spam4.me','10minutemail.com',
@@ -15,14 +17,22 @@ const GENERIC_NAMES = new Set([
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const SUSPICIOUS_TLD = /\.(xyz|top|click|loan|work|gdn|bid|win|download|accountant|webcam)$/i;
 const ROWS_PER_CODE = 500;
+// Tope de filas devueltas en las listas de "notInOriginal" / "duplicatesInClean"
+// / "missingFromClean" de handleVerify — antes era el número 500 repetido a
+// mano en 5 lugares distintos (el worker y el JSX), ahora es una sola
+// constante que viaja al frontend junto con el resultado (ver 'done' más
+// abajo), así el label "(mostrando 500)" nunca puede desincronizarse del
+// límite real usado para cortar las listas.
+const VERIFY_ROWS_LIMIT = 500;
 const EXCLUDE_CODES = new Set(['INVALID_FORMAT', 'TYPO_DOMAIN', 'EMPTY', 'DOUBLE_DOT']);
 
-function normalizeEmail(email) {
-  return email.normalize('NFC').toLowerCase().trim();
-}
-
-function detectCol(headers, patterns) {
-  return headers.find(h => patterns.some(p => p.test(h))) || null;
+// Único lugar que decide si una fila se considera "excluida" de la base
+// limpia — antes este mismo chequeo (codes.some(c => EXCLUDE_CODES.has(c)))
+// estaba repetido en 3 lugares distintos del archivo (handleAnalyze,
+// handleGenerateClean, handleGenerateRemoved): si el día de mañana cambia
+// qué códigos excluyen a un contacto, alcanza con tocar esta función.
+function isExcluded(row) {
+  return row.codes.some(c => EXCLUDE_CODES.has(c));
 }
 
 function validateRow(row, emailCol, nameCol, seenEmails, rowNum) {
@@ -86,50 +96,6 @@ function validateRow(row, emailCol, nameCol, seenEmails, rowNum) {
   }
 
   return issues;
-}
-
-function parseCSVLine(line, sep) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  let i = 0;
-  while (i < line.length) {
-    const ch = line[i];
-    if (ch === '"' && !inQuotes && current === '') {
-      inQuotes = true;
-    } else if (ch === '"' && inQuotes) {
-      if (line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = false;
-    } else if (ch === sep && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
-    i++;
-  }
-  result.push(current);
-  return result;
-}
-
-function decodeLatin1(uint8array) {
-  let str = '';
-  for (let i = 0; i < uint8array.length; i++) {
-    str += String.fromCharCode(uint8array[i]);
-  }
-  return str;
-}
-
-function detectEncoding(bytes) {
-  const sample = bytes.slice(0, 4096);
-  const testUtf8 = new TextDecoder('utf-8').decode(sample);
-  return testUtf8.includes('\uFFFD') ? 'latin1' : 'utf8';
-}
-
-function decodeChunk(bytes, encoding) {
-  return encoding === 'utf8'
-    ? new TextDecoder('utf-8').decode(bytes)
-    : decodeLatin1(bytes);
 }
 
 let storedAllRows = [];
@@ -257,7 +223,7 @@ async function handleAnalyze({ file }) {
     let removedCount = 0;
     for (let i = 0; i < allRows.length; i++) {
       const r = allRows[i];
-      if (r.codes.some(c => EXCLUDE_CODES.has(c))) { removedCount++; continue; }
+      if (isExcluded(r)) { removedCount++; continue; }
       if (r.emailVal && lastIndexByEmail.get(r.emailVal) !== i) { removedCount++; continue; }
       cleanCount++;
     }
@@ -296,7 +262,7 @@ async function handleGenerateClean() {
 
     for (let i = 0; i < total; i++) {
       const r = allRows[i];
-      if (r.codes.some(c => EXCLUDE_CODES.has(c))) continue;
+      if (isExcluded(r)) continue;
       if (r.emailVal && lastIndexByEmail.get(r.emailVal) !== i) continue;
       cleanLines.push(r.line);
       if (i % BATCH === 0) {
@@ -325,7 +291,7 @@ async function handleGenerateRemoved() {
     for (let i = 0; i < total; i++) {
       const r = allRows[i];
       let excluded = false;
-      if (r.codes.some(c => EXCLUDE_CODES.has(c))) excluded = true;
+      if (isExcluded(r)) excluded = true;
       if (r.emailVal && lastIndexByEmail.get(r.emailVal) !== i) excluded = true;
       if (excluded) removedLines.push(r.line);
       if (i % BATCH === 0) {
@@ -389,10 +355,10 @@ async function handleVerify({ file }) {
         headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
         const emailVal = emailCol ? normalizeEmail(row[emailCol] ?? '') : '';
 
-        if (emailVal && !originalEmailSet.has(emailVal) && notInOriginal.length < 500) {
+        if (emailVal && !originalEmailSet.has(emailVal) && notInOriginal.length < VERIFY_ROWS_LIMIT) {
           notInOriginal.push({ rowNum: totalRows + 1, email: emailVal });
         }
-        if (emailVal && seenInClean.has(emailVal) && duplicatesInClean.length < 500) {
+        if (emailVal && seenInClean.has(emailVal) && duplicatesInClean.length < VERIFY_ROWS_LIMIT) {
           duplicatesInClean.push({ rowNum: totalRows + 1, email: emailVal, firstRow: seenInClean.get(emailVal) });
         } else if (emailVal) {
           seenInClean.set(emailVal, totalRows + 1);
@@ -416,10 +382,10 @@ async function handleVerify({ file }) {
       headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
       const emailVal = emailCol ? normalizeEmail(row[emailCol] ?? '') : '';
 
-      if (emailVal && !originalEmailSet.has(emailVal) && notInOriginal.length < 500) {
+      if (emailVal && !originalEmailSet.has(emailVal) && notInOriginal.length < VERIFY_ROWS_LIMIT) {
         notInOriginal.push({ rowNum: totalRows + 1, email: emailVal });
       }
-      if (emailVal && seenInClean.has(emailVal) && duplicatesInClean.length < 500) {
+      if (emailVal && seenInClean.has(emailVal) && duplicatesInClean.length < VERIFY_ROWS_LIMIT) {
         duplicatesInClean.push({ rowNum: totalRows + 1, email: emailVal, firstRow: seenInClean.get(emailVal) });
       } else if (emailVal) {
         seenInClean.set(emailVal, totalRows + 1);
@@ -433,14 +399,14 @@ async function handleVerify({ file }) {
     const expectedCleanEmails = new Set();
     for (let i = 0; i < storedAllRows.length; i++) {
       const r = storedAllRows[i];
-      if (r.codes.some(c => EXCLUDE_CODES.has(c))) continue;
+      if (isExcluded(r)) continue;
       if (r.emailVal && lastIndexByEmail.get(r.emailVal) !== i) continue;
       if (r.emailVal) expectedCleanEmails.add(r.emailVal);
     }
 
     const missingFromClean = [];
     for (const email of expectedCleanEmails) {
-      if (!seenInClean.has(email) && missingFromClean.length < 500) {
+      if (!seenInClean.has(email) && missingFromClean.length < VERIFY_ROWS_LIMIT) {
         missingFromClean.push(email);
       }
     }
@@ -453,6 +419,11 @@ async function handleVerify({ file }) {
       notInOriginal,
       duplicatesInClean,
       missingFromClean,
+      // Viaja junto con el resultado para que el frontend nunca tenga
+      // que hardcodear el mismo número por separado (ver VerifyCheck en
+      // RevisionBase.jsx) — si este límite cambia algún día, el label
+      // de la UI ("(mostrando 500)") se actualiza solo.
+      rowsLimit: VERIFY_ROWS_LIMIT,
     });
 
   } catch (err) {

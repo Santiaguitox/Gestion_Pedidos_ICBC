@@ -139,9 +139,10 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
             <CopyBtn text={ent.nombre_pieza} />
           </div>
           {ent.link_online && (
-            <div className="entregable-field-row">
-              <span className="entregable-field-key">Link:</span>
-              <span className="entregable-field-link">{ent.link_online}</span>
+            <div className="entregable-link-box">
+              <a href={ent.link_online} target="_blank" rel="noopener" className="entregable-link-box-text">
+                {ent.link_online}
+              </a>
               <CopyBtn text={ent.link_online} />
               <a href={ent.link_online} target="_blank" rel="noopener" className="entregable-link-icon">
                 <ExternalLink size={13} />

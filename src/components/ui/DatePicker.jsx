@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 const AÑOS = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 2 + i)
 const MESES = Array.from({ length: 12 }, (_, i) => ({
@@ -62,7 +62,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
   const startOffset = (getDay(firstDay) + 6) % 7 // lunes = 0
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
       <button
         ref={btnRef}
         type="button"
@@ -70,7 +70,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
         onClick={handleOpen}
         title={placeholder}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '0.375rem',
+          flex: 1, display: 'flex', alignItems: 'center', gap: '0.375rem',
           background: 'var(--bg-elevated)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem',
           fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 400,
@@ -81,6 +81,24 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
         <Calendar size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         {selected ? format(selected, "d 'de' MMMM yyyy", { locale: es }) : placeholder}
       </button>
+      {selected && !disabled && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          title="Quitar fecha"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '28px', height: '28px', flexShrink: 0,
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-elevated)', color: 'var(--text-muted)',
+            cursor: 'pointer', transition: 'all 150ms',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--icbc-red)'; e.currentTarget.style.color = 'var(--icbc-red)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+        >
+          <X size={13} />
+        </button>
+      )}
 
       {open && (
         <div style={{

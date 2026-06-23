@@ -96,7 +96,10 @@ export default function CompareTabBase() {
       a.href = URL.createObjectURL(blob)
       a.download = `${base}_${key}.${ext}`
       a.click()
-      URL.revokeObjectURL(a.href)
+      // Mismo criterio que en RevisionBase.jsx — ver ese archivo para
+      // el detalle completo del riesgo en Firefox de revocar la URL
+      // inmediatamente después del click.
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
       if (key === 'nuevos') setDlNuevos('done')
       else if (key === 'madre') setDlMadre('done')
       else if (key === 'perdidos') setDlPerdidos('done')

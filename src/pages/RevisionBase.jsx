@@ -74,13 +74,6 @@ export default function RevisionBase() {
   const fileNameRef = useRef('')
   const DETAIL_PAGE_SIZE = 100
 
-  const getWorker = useCallback(() => {
-    if (!workerRef.current) {
-      workerRef.current = new Worker(new URL('../workers/validator.worker.js', import.meta.url), { type: 'module' })
-    }
-    return workerRef.current
-  }, [])
-
   const setupWorkerListeners = useCallback((worker) => {
     worker.onmessage = (e) => {
       const msg = e.data
@@ -131,6 +124,22 @@ export default function RevisionBase() {
     }
   }, [])
 
+  // El listener se configura UNA sola vez, en el momento en que el
+  // worker se crea — antes se volvía a llamar setupWorkerListeners()
+  // antes de cada acción (processFile, handleGenerateClean, etc.), lo
+  // cual no rompía nada (worker.onmessage se reasigna sin problema),
+  // pero era confuso y redundante. getWorker ya hacía lazy-init del
+  // worker en sí; ahora también deja el listener listo en ese mismo
+  // momento, así el resto del código solo necesita pedir el worker y
+  // mandarle mensajes, sin preocuparse de "engancharlo" cada vez.
+  const getWorker = useCallback(() => {
+    if (!workerRef.current) {
+      workerRef.current = new Worker(new URL('../workers/validator.worker.js', import.meta.url), { type: 'module' })
+      setupWorkerListeners(workerRef.current)
+    }
+    return workerRef.current
+  }, [setupWorkerListeners])
+
   function downloadBlob(content, originalFileName, suffix) {
     const ext = originalFileName.split('.').pop()
     const baseName = originalFileName.replace(/\.[^/.]+$/, '')
@@ -139,7 +148,12 @@ export default function RevisionBase() {
     a.href = URL.createObjectURL(blob)
     a.download = `${baseName}_${suffix}.${ext}`
     a.click()
-    URL.revokeObjectURL(a.href)
+    // Revocar con un pequeño delay en vez de inmediatamente después del
+    // click — en Firefox específicamente, revocar la URL al toque puede
+    // hacer que la descarga ni siquiera aparezca (el navegador todavía
+    // no terminó de procesarla). Un timeout corto da margen sin
+    // necesitar nada más complejo como escuchar el evento de descarga.
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
 
   const processFile = useCallback((file) => {
@@ -160,15 +174,13 @@ export default function RevisionBase() {
     setActiveCode(null)
 
     const worker = getWorker()
-    setupWorkerListeners(worker)
     worker.postMessage({ type: 'analyze', file })
-  }, [getWorker, setupWorkerListeners])
+  }, [getWorker])
 
   const handleGenerateClean = () => {
     if (!workerRef.current) return
     setCleanPhase('generating')
     setCleanProgress(0)
-    setupWorkerListeners(workerRef.current)
     workerRef.current.postMessage({ type: 'generate_clean' })
   }
 
@@ -176,7 +188,6 @@ export default function RevisionBase() {
     if (!workerRef.current) return
     setRemovedPhase('generating')
     setRemovedProgress(0)
-    setupWorkerListeners(workerRef.current)
     workerRef.current.postMessage({ type: 'generate_removed' })
   }
 
@@ -190,9 +201,8 @@ export default function RevisionBase() {
     setVerifyPhase('processing')
     setVerifyProgress(0)
     setVerifyResult(null)
-    setupWorkerListeners(workerRef.current)
     workerRef.current.postMessage({ type: 'verify', file })
-  }, [setupWorkerListeners])
+  }, [])
 
   const reset = () => {
     setPhase('idle'); setStats(null); setIssueRowsByCode({}); setIssueSummary({})
@@ -524,9 +534,9 @@ export default function RevisionBase() {
                     </div>
                   </div>
 
-                  <VerifyCheck title="Emails no presentes en la base original" items={verifyResult.notInOriginal} total={verifyResult.notInOriginal.length} okMsg="Todos los emails de la base subida pertenecen a la base original." renderItem={r => `fila ${r.rowNum} — ${r.email}`} />
-                  <VerifyCheck title="Duplicados dentro de la base depurada" items={verifyResult.duplicatesInClean} total={verifyResult.duplicatesInClean.length} okMsg="Sin duplicados." renderItem={r => `fila ${r.rowNum} — ${r.email} (primera vez: fila ${r.firstRow})`} />
-                  <VerifyCheck title="Contactos que deberían estar y no están" items={verifyResult.missingFromClean} total={verifyResult.missingFromClean.length} okMsg="No faltan contactos." renderItem={email => email} />
+                  <VerifyCheck title="Emails no presentes en la base original" items={verifyResult.notInOriginal} total={verifyResult.notInOriginal.length} rowsLimit={verifyResult.rowsLimit} okMsg="Todos los emails de la base subida pertenecen a la base original." renderItem={r => `fila ${r.rowNum} — ${r.email}`} />
+                  <VerifyCheck title="Duplicados dentro de la base depurada" items={verifyResult.duplicatesInClean} total={verifyResult.duplicatesInClean.length} rowsLimit={verifyResult.rowsLimit} okMsg="Sin duplicados." renderItem={r => `fila ${r.rowNum} — ${r.email} (primera vez: fila ${r.firstRow})`} />
+                  <VerifyCheck title="Contactos que deberían estar y no están" items={verifyResult.missingFromClean} total={verifyResult.missingFromClean.length} rowsLimit={verifyResult.rowsLimit} okMsg="No faltan contactos." renderItem={email => email} />
                 </div>
               )}
             </>
@@ -540,10 +550,14 @@ export default function RevisionBase() {
   )
 }
 
-function VerifyCheck({ title, items, total, okMsg, renderItem }) {
+function VerifyCheck({ title, items, total, okMsg, renderItem, rowsLimit }) {
   const [open, setOpen] = useState(false)
   const hasIssues = total > 0
-  const more = total - items.length
+  // 'more' ya se calculaba antes pero nunca se mostraba en ningún lado
+  // — solo tiene sentido un valor positivo cuando el worker realmente
+  // cortó la lista en rowsLimit (si total < rowsLimit, items ya tiene
+  // todo, more sería 0 o negativo y no corresponde mostrar nada).
+  const more = rowsLimit && total >= rowsLimit ? total - items.length : 0
 
   return (
     <div className={`rb-vcheck ${hasIssues ? 'fail' : 'pass'}`}>
@@ -560,6 +574,11 @@ function VerifyCheck({ title, items, total, okMsg, renderItem }) {
       {!hasIssues && <div className="rb-vcheck-ok-note">{okMsg}</div>}
       {hasIssues && open && (
         <div className="rb-vcheck-body">
+          {more > 0 && (
+            <p className="rb-vcheck-more">
+              Mostrando las primeras {fmt(rowsLimit)} de {fmt(total)} — hay {fmt(more)} más sin listar.
+            </p>
+          )}
           <div className="rb-table-wrap" style={{ marginTop: 14 }}>
             <div className="rb-table-body" style={{ maxHeight: 300 }}>
               {items.map((item, i) => (

@@ -24,6 +24,7 @@
  --yellow-text: #F59E0B;
  --yellow-bg: rgba(245, 158, 11, 0.08);
  --yellow-border: rgba(245, 158, 11, 0.3);
+ font-family: var(--font-body);
 }
 
 /* ─── TABS (pasos guiados, numerados) ───────────────────────────────── */
@@ -534,7 +535,7 @@
 .rb-vcheck.fail .rb-vcheck-count { color: var(--accent-primary); }
 .rb-vcheck-body { padding: 0 18px 16px; border-top: 1px solid var(--border); }
 .rb-vcheck-ok-note { padding: 12px 18px 14px; font-size: 13px; color: var(--green-text); }
-.rb-vcheck-more { font-size: 12px; color: var(--text-muted); margin-top: 10px; text-align: center; }
+.rb-vcheck-more { font-size: 12px; color: var(--text-muted); margin: 0 0 6px; text-align: center; }
 /* ─── COMPARAR ───────────────────────────────────────────────────────── */
 .rb-compare-grid {
  display: grid;

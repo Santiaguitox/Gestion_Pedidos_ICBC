@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { REVISION_CONFIG } from '@/lib/revision/config'
 import {
   compararCampos, validateCsvHeaders, leerMuestraDeArchivo,
@@ -106,11 +107,12 @@ function TablaMuestra({ headers, filas, avisos }) {
 }
 
 export default function RevisionEnvios() {
+  const { state: navState } = useLocation()
   const [modo, setModo] = useState('url')
   const [html, setHtml] = useState('')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(navState?.url ?? '')
   const [urlError, setUrlError] = useState('')
-  const [headerRaw, setHeaderRaw] = useState('')
+  const [headerRaw, setHeaderRaw] = useState(navState?.headerLine ?? '')
   const headerInputRef = useAutoResize(headerRaw)
   const [muestra, setMuestra] = useState(null) // { headers, filas } o null
   const [dragging, setDragging] = useState(false)
@@ -129,7 +131,7 @@ export default function RevisionEnvios() {
       setHeaderRaw(headerLine)
       setMuestra({ headers, filas })
     } catch {
-      setError('No se pudo leer el archivo. Verificá que sea un .csv o .txt válido.')
+      setError('No se pudo leer el archivo. Verificá que sea un .csv, .txt o .xlsx válido.')
     }
   }
 
@@ -198,11 +200,11 @@ export default function RevisionEnvios() {
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input ref={fileInputRef} type="file" accept=".csv,.txt" style={{ display: 'none' }}
+              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx" style={{ display: 'none' }}
                 onChange={e => { if (e.target.files[0]) cargarArchivo(e.target.files[0]) }} />
               <Upload size={16} />
               <div>
-                <span>Subí .csv / .txt</span>
+                <span>Subí .csv / .txt / .xlsx</span>
                 <span className="re2-dropzone-hint">solo se lee la 1ª línea</span>
               </div>
             </div>
