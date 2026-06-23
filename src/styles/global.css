@@ -35,6 +35,7 @@
   --accent-secondary: var(--icomm-violet);
   --badge-bg:       rgba(91,78,232,0.15);
   --badge-border:   rgba(91,78,232,0.3);
+  --red-bg-soft:    rgba(208,17,27,0.12);
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
   --shadow-md:  0 4px 16px rgba(0,0,0,0.5);
   --shadow-lg:  0 8px 32px rgba(0,0,0,0.6);
@@ -55,6 +56,7 @@
   --accent-secondary: var(--icomm-blue);
   --badge-bg:       rgba(26,46,230,0.07);
   --badge-border:   rgba(26,46,230,0.2);
+  --red-bg-soft:    rgba(208,17,27,0.05);
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
   --shadow-md:  0 4px 16px rgba(0,0,0,0.08);
   --shadow-lg:  0 8px 32px rgba(0,0,0,0.12);
@@ -2285,6 +2287,14 @@ select:focus {
   transition: all 150ms;
 }
 
+/* Combinación específica con btn-toggle-active (ej: el botón "Hoy" en
+   Calendario cuando el día seleccionado es hoy) — sin esto, como ambas
+   clases tienen la misma especificidad, el color ganador depende del
+   orden de aparición en el archivo en vez de la intención real. */
+.btn-ver-mas.btn-toggle-active {
+  color: #fff;
+}
+
 /* ─── Subtareas ───────────────────────────────────────────────────────────── */
 .subtareas-progreso {
   display: flex;
@@ -3275,14 +3285,14 @@ select:focus {
 /* ─── Calendario ──────────────────────────────────────────────────────────── */
 .cal-root {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 1.5rem;
+  grid-template-columns: minmax(280px, 0.28fr) minmax(0, 1fr);
+  gap: 1.25rem;
   align-items: start;
 }
 
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   background: var(--border);
   border-radius: var(--radius-lg);
@@ -3317,12 +3327,11 @@ select:focus {
 }
 
 .cal-day-selected {
-  background: rgba(208,17,27,0.06);
-  border-top: 2px solid var(--icbc-red);
+  background: var(--red-bg-soft);
 }
 
 .cal-day-today {
-  background: rgba(208,17,27,0.03);
+  background: var(--bg-surface);
 }
 
 .cal-day-number {
@@ -3340,6 +3349,12 @@ select:focus {
 .cal-day-number-today {
   background: var(--icbc-red);
   color: #fff;
+}
+
+.cal-day-number-selected {
+  background: var(--bg-surface);
+  color: var(--icbc-red);
+  box-shadow: inset 0 0 0 1.5px var(--icbc-red);
 }
 
 .cal-day-number-past {
@@ -3402,42 +3417,71 @@ select:focus {
 }
 
 .cal-panel-header {
-  padding: 0.875rem 1rem;
+  padding: 1.375rem;
   border-bottom: 1px solid var(--border);
+}
+
+.cal-panel-header-top {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.cal-panel-num {
+  font-family: var(--font-display);
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: var(--icbc-red);
+  line-height: 0.9;
+  flex-shrink: 0;
 }
 
 .cal-panel-title {
   font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.cal-panel-month {
+  font-size: 0.78125rem;
+  color: var(--text-muted);
+  margin-top: 0.125rem;
 }
 
 .cal-panel-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.78125rem;
+  font-weight: 500;
   color: var(--text-muted);
-  margin-top: 0.125rem;
+  margin-top: 1rem;
+  padding-top: 0.8125rem;
+  border-top: 1px solid var(--border);
 }
 
 .cal-panel-body {
   display: flex;
   flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem;
   max-height: 600px;
   overflow-y: auto;
 }
 
 .cal-pedido-item {
-  padding: 0.875rem 1rem;
+  padding: 0.6875rem 0.8125rem;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  transition: background 150ms;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 150ms, background 150ms;
 }
 
-.cal-pedido-item:hover { background: var(--bg-hover); }
+.cal-pedido-item:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 
 .cal-pedido-nombre {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   flex: 1;
   overflow: hidden;
@@ -3447,9 +3491,8 @@ select:focus {
 
 .cal-pedido-estados {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.3125rem;
   flex-wrap: wrap;
-  padding-left: 1.375rem;
 }
 
 .cal-empty {
@@ -3852,6 +3895,19 @@ select:focus {
   letter-spacing: 0.06em;
   color: var(--text-muted);
   padding: 0.5rem 1rem 0.25rem;
+}
+
+/* Variante sin padding lateral propio, para usar dentro de
+   .cal-panel-body — ese contenedor ya tiene su propio padding y gap
+   entre cards, así que el padding lateral normal duplicaría el
+   espaciado y desalinearía el label respecto a las cards. */
+.cal-section-label-panel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0.25rem 0 0;
 }
 
 

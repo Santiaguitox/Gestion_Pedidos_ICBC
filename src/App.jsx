@@ -12,6 +12,7 @@ import Calendario from '@/pages/Calendario'
 import Notificaciones from '@/pages/Notificaciones'
 import RevisionEmail from '@/pages/RevisionEmail'
 import RevisionBase from '@/pages/RevisionBase'
+import RevisionEnvios from '@/pages/RevisionEnvios'
 import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
 import Configuracion from '@/pages/Configuracion'
@@ -36,6 +37,7 @@ export default function App() {
                 <Route path="notificaciones" element={<Notificaciones />} />
                 <Route path="revision" element={<RevisionEmail />} />
                 <Route path="revision-bbdd" element={<RevisionBase />} />
+                <Route path="revision-envios" element={<RevisionEnvios />} />
                 <Route path="usuarios" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
                     <Usuarios />

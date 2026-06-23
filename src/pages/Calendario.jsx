@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useEstados } from '@/hooks/useEstados'
@@ -7,9 +7,31 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay,
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { GrupoLabel } from '@/components/ui/GrupoLabel'
 
+// Hook real (a diferencia de la versión anterior, que solo leía
+// window.innerWidth una vez por render sin reaccionar a cambios reales
+// de tamaño — por eso hacía falta recargar la página para que el
+// calendario "se diera cuenta" de que ahora es mobile). Con
+// useState + listener de resize, el componente vuelve a renderizar
+// automáticamente en cuanto la ventana cruza el breakpoint, igual que
+// ya pasa en el resto de la app vía CSS (acá no alcanza con CSS porque
+// la diferencia es de qué JSX se renderiza, no solo de estilos).
+//
+// setIsMobile solo se llama cuando el valor booleano realmente cambia
+// (no en cada pixel de resize) — evita re-renders de sobra mientras se
+// arrastra el borde de la ventana sin cruzar el límite de 640px.
 function useIsMobile() {
-  return window.innerWidth <= 640
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 640)
+  useEffect(() => {
+    function onResize() {
+      const nowMobile = window.innerWidth <= 640
+      setIsMobile(prev => prev === nowMobile ? prev : nowMobile)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return isMobile
 }
 
 function EstadoChip({ est, estados }) {
@@ -26,15 +48,15 @@ function EstadoChip({ est, estados }) {
   )
 }
 
-function PedidoItemPanel({ p, estados, navigate, last }) {
+function PedidoItemPanel({ p, estados, navigate }) {
   const prio = PRIORIDADES.find(x => x.value === p.prioridad)
   const esFinalizado = p.estados?.includes('finalizado')
   return (
     <div onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
       className="cal-pedido-item"
-      style={{ borderBottom: !last ? '1px solid var(--border)' : 'none', opacity: esFinalizado ? 0.6 : 1 }}>
+      style={{ opacity: esFinalizado ? 0.6 : 1 }}>
       <div className="flex items-center gap-2">
-        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: prio?.color ?? '#6B7280', flexShrink: 0 }} />
+        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: prio?.color ?? '#6B7280', flexShrink: 0 }} />
         <span className="cal-pedido-nombre">{p.asunto}</span>
       </div>
       {p.estados?.length > 0 && (
@@ -48,9 +70,54 @@ function PedidoItemPanel({ p, estados, navigate, last }) {
 
 export default function Calendario() {
   const navigate = useNavigate()
-  const { pedidos } = usePedidos()
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDay, setSelectedDay] = useState(null)
+  // Ref al bloque del día de "hoy" dentro de la lista de timeline — solo
+  // existe cuando ese día efectivamente se está renderizando ahí (mes
+  // actual + tiene pedidos), se usa para el scroll suave al tocar "Hoy".
+  const refHoyTimeline = useRef(null)
+  // Disparador del scroll: un simple contador que se incrementa cada vez
+  // que se toca "Hoy" — el efecto reacciona a ESTE valor (no directo
+  // dentro del onClick), para que el scroll ocurra DESPUÉS de que React
+  // ya terminó de re-renderizar con el mes/datos correctos. Si el botón
+  // disparara el scroll directo, correría contra el DOM viejo (mes
+  // anterior) en vez del nuevo.
+  const [scrollHoyTrigger, setScrollHoyTrigger] = useState(0)
+  useEffect(() => {
+    if (scrollHoyTrigger > 0) {
+      // requestAnimationFrame espera a que el navegador termine de pintar
+      // el layout nuevo (relevante sobre todo si "Hoy" implicó además
+      // cambiar de mes, lo que dispara una recarga de datos) antes de
+      // intentar el scroll — sin esto, en ese caso puntual el scroll
+      // podría correr contra un DOM que todavía no tiene el día de hoy.
+      requestAnimationFrame(() => {
+        refHoyTimeline.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }, [scrollHoyTrigger])
+
+  // Calendario necesita TODOS los pedidos con fecha_limite en el mes
+  // visible, sin importar cuándo se crearon ni si están finalizados —
+  // por eso usa el modo 'vencimiento' del RPC (filtra por fecha_limite,
+  // no por created_at, e incluye finalizados siempre) en vez del modo
+  // 'normal' que usa Pedidos.jsx (pensado para un listado paginado de
+  // actividad reciente, no para "todo lo que vence este mes").
+  //
+  // paginaSize generoso (200, vs el default de 30) para que la mayoría
+  // de los meses entren en una sola página — y como red de seguridad
+  // extra, el efecto de abajo sigue pidiendo más automáticamente
+  // mientras hayMas siga en true, así nunca queda nada afuera sin
+  // tener que adivinar un límite fijo.
+  const venceDesde = format(startOfMonth(currentDate), 'yyyy-MM-dd')
+  const venceHasta = format(endOfMonth(currentDate), 'yyyy-MM-dd')
+  const { pedidos, hayMas, cargandoMas, cargarMas } = usePedidos({
+    modo: 'vencimiento', venceDesde, venceHasta, paginaSize: 200,
+  })
+  useEffect(() => {
+    if (hayMas && !cargandoMas) cargarMas()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hayMas, cargandoMas])
+
+  const [selectedDay, setSelectedDay] = useState(() => new Date())
   const { estados } = useEstados()
   const isMobile = useIsMobile()
   const [vistaDesktop, setVistaDesktop] = useLocalStorage('cal:vista', 'grid')
@@ -94,7 +161,8 @@ export default function Calendario() {
           </button>
         </div>
       )}
-      <button onClick={() => { setCurrentDate(new Date()); setSelectedDay(null) }} className="btn-ver-mas">
+      <button onClick={() => { const hoy = new Date(); setCurrentDate(hoy); setSelectedDay(hoy); setScrollHoyTrigger(t => t + 1) }}
+        className={`btn-ver-mas ${selectedDay && isToday(selectedDay) ? 'btn-toggle-active' : ''}`}>
         Hoy
       </button>
       <button onClick={() => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="cal-nav-btn">
@@ -130,40 +198,6 @@ export default function Calendario() {
       {mostrarTimeline ? (
         <div className="flex flex-col gap-3">
 
-          {isMobile && (
-            <div className="cal-panel">
-              <div className="cal-panel-header">
-                <p className="cal-panel-title">
-                  {selectedDay ? format(selectedDay, "d 'de' MMMM", { locale: es }) : format(new Date(), "d 'de' MMMM", { locale: es })}
-                </p>
-                <p className="cal-panel-subtitle">
-                  {pedidosDia.length === 0 ? 'Sin pedidos' : `${pedidosDia.length} pedido${pedidosDia.length !== 1 ? 's' : ''}`}
-                </p>
-              </div>
-              <div className="cal-panel-body">
-                {pedidosDia.length === 0 ? (
-                  <div className="cal-empty"><Calendar size={24} /><p>Tocá un día para ver sus pedidos</p></div>
-                ) : (
-                  <>
-                    {pedidosDiaActivos.map((p, i) => (
-                      <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
-                        last={i === pedidosDiaActivos.length - 1 && pedidosDiaFinalizados.length === 0} />
-                    ))}
-                    {pedidosDiaFinalizados.length > 0 && (
-                      <>
-                        <div className="cal-section-label">Finalizados</div>
-                        {pedidosDiaFinalizados.map((p, i) => (
-                          <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
-                            last={i === pedidosDiaFinalizados.length - 1} />
-                        ))}
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
           {pedidosPorDia.length === 0 ? (
             <div className="empty-state"><Calendar size={32} /><p>No hay pedidos este mes</p></div>
           ) : pedidosPorDia.map(({ day, pedidos: dp }) => {
@@ -172,7 +206,7 @@ export default function Calendario() {
             const activos = dp.filter(p => !p.estados?.includes('finalizado'))
             const finalizados = dp.filter(p => p.estados?.includes('finalizado'))
             return (
-              <div key={day.toISOString()} className="flex gap-3">
+              <div key={day.toISOString()} ref={esHoy ? refHoyTimeline : null} className="flex gap-3">
                 <div style={{ flexShrink: 0, width: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '0.25rem' }}>
                   <span style={{
                     width: '36px', height: '36px', borderRadius: '50%', display: 'flex',
@@ -188,6 +222,7 @@ export default function Calendario() {
                   </span>
                 </div>
                 <div className="flex flex-col gap-2 flex-1">
+                  {activos.length > 0 && <GrupoLabel texto="Activos" />}
                   {activos.map(p => {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                     return (
@@ -207,7 +242,7 @@ export default function Calendario() {
                   })}
                   {finalizados.length > 0 && (
                     <>
-                      <span className="cal-section-label">Finalizados</span>
+                      <GrupoLabel texto="Finalizados" />
                       {finalizados.map(p => {
                         const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                         return (
@@ -234,6 +269,43 @@ export default function Calendario() {
         </div>
       ) : (
         <div className="cal-root">
+
+          {/* Panel del día — protagonista, va primero en el layout */}
+          <div className="cal-panel">
+            <div className="cal-panel-header">
+              <div className="cal-panel-header-top">
+                <span className="cal-panel-num">{format(diaRef, 'd')}</span>
+                <div>
+                  <p className="cal-panel-title">{format(diaRef, 'EEEE', { locale: es })}</p>
+                  <p className="cal-panel-month">{format(diaRef, 'MMMM yyyy', { locale: es })}</p>
+                </div>
+              </div>
+              <p className="cal-panel-subtitle">
+                {pedidosDia.length === 0 ? 'Sin pedidos' : `${pedidosDia.length} pedido${pedidosDia.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+            <div className="cal-panel-body">
+              {pedidosDia.length === 0 ? (
+                <div className="cal-empty"><Calendar size={24} /><p>Sin pedidos este día</p></div>
+              ) : (
+                <>
+                  {pedidosDiaActivos.map(p => (
+                    <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate} />
+                  ))}
+                  {pedidosDiaFinalizados.length > 0 && (
+                    <>
+                      <div className="cal-section-label-panel">Finalizados</div>
+                      {pedidosDiaFinalizados.map(p => (
+                        <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate} />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Grilla mensual */}
           <div className="cal-grid">
             {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
               <div key={d} className="cal-header-cell">{d}</div>
@@ -252,7 +324,7 @@ export default function Calendario() {
                   onClick={() => setSelectedDay(isSameDay(day, selectedDay ?? new Date(-1)) ? null : day)}
                   className={`cal-day ${isSelected ? 'cal-day-selected' : todayFlag ? 'cal-day-today' : ''}`}
                   style={{ cursor: dayPedidos.length > 0 ? 'pointer' : 'default', borderTop: isSelected ? '2px solid var(--icbc-red)' : '2px solid transparent' }}>
-                  <span className={`cal-day-number ${todayFlag ? 'cal-day-number-today' : isPastDay ? 'cal-day-number-past' : 'cal-day-number-normal'}`}>
+                  <span className={`cal-day-number ${todayFlag ? 'cal-day-number-today' : isSelected ? 'cal-day-number-selected' : isPastDay ? 'cal-day-number-past' : 'cal-day-number-normal'}`}>
                     {format(day, 'd')}
                   </span>
                   {dayPedidos.slice(0, 3).map(p => {
@@ -273,38 +345,6 @@ export default function Calendario() {
             })}
           </div>
 
-          {/* Panel lateral */}
-          <div className="cal-panel">
-            <div className="cal-panel-header">
-              <p className="cal-panel-title">
-                {selectedDay ? format(selectedDay, "d 'de' MMMM", { locale: es }) : format(new Date(), "d 'de' MMMM", { locale: es })}
-              </p>
-              <p className="cal-panel-subtitle">
-                {pedidosDia.length === 0 ? 'Sin pedidos' : `${pedidosDia.length} pedido${pedidosDia.length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
-            <div className="cal-panel-body">
-              {pedidosDia.length === 0 ? (
-                <div className="cal-empty"><Calendar size={24} /><p>No hay pedidos para este día</p></div>
-              ) : (
-                <>
-                  {pedidosDiaActivos.map((p, i) => (
-                    <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
-                      last={i === pedidosDiaActivos.length - 1 && pedidosDiaFinalizados.length === 0} />
-                  ))}
-                  {pedidosDiaFinalizados.length > 0 && (
-                    <>
-                      <div className="cal-section-label">Finalizados</div>
-                      {pedidosDiaFinalizados.map((p, i) => (
-                        <PedidoItemPanel key={p.id} p={p} estados={estados} navigate={navigate}
-                          last={i === pedidosDiaFinalizados.length - 1} />
-                      ))}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
         </div>
       )}
     </div>

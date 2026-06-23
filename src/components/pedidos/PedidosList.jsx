@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { GrupoLabel } from '@/components/ui/GrupoLabel'
 import {
   Plus, Search, Filter, AlignJustify, LayoutList, ChevronDown, ChevronUp, X, Tag,
   ArrowUp, ChevronLeft, ChevronRight, Calendar, History,
@@ -42,18 +43,6 @@ function GrupoDiaLabel({ fecha, cantidad, finalizados }) {
       <span className="dia-group-count">
         {cantidad} pedido{cantidad !== 1 ? 's' : ''}{finalizados > 0 ? ` · ${finalizados} finalizado${finalizados !== 1 ? 's' : ''}` : ''}
       </span>
-    </div>
-  )
-}
-
-function GrupoLabel({ texto }) {
-  return (
-    <div className="dia-group-header">
-      <div className="dia-group-line" />
-      <span className="dia-group-label dia-group-label-hoy">
-        <span style={{ color: 'var(--text-secondary)' }}>Pedidos</span> {texto}
-      </span>
-      <div className="dia-group-line-flex" />
     </div>
   )
 }

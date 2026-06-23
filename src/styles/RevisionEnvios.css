@@ -1,0 +1,371 @@
+/* Revisión de envíos — estilos propios de esta herramienta, aislados
+   del resto del proyecto (mismo criterio que Revisión de BBDD y
+   Revisión de emails). */
+
+.re2-root * {
+  box-sizing: border-box;
+}
+
+.re2-root {
+  --green-text: #10B981;
+  --green-bg: rgba(16, 185, 129, 0.08);
+  --green-border: rgba(16, 185, 129, 0.25);
+  --red-text: var(--accent-primary);
+  --red-bg: rgba(208, 17, 27, 0.08);
+  --red-border: rgba(208, 17, 27, 0.25);
+  --yellow-text: #F59E0B;
+  --yellow-bg: rgba(245, 158, 11, 0.08);
+  --yellow-border: rgba(245, 158, 11, 0.3);
+}
+
+/* ─── Paneles ─────────────────────────────────────────────────────────── */
+.re2-workspace {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.re2-ws-section {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.re2-ws-section-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.re2-ws-section-label > span:first-child {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.re2-ws-rule { flex: 1; height: 1px; background: var(--border); }
+
+.re2-tabs {
+  display: inline-flex;
+  padding: 5px;
+  background: var(--bg-hover);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.re2-tabs button {
+  padding: 5px 15px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.re2-tabs button.active {
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(208, 17, 27, 0.3);
+}
+
+.re2-file-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--green-border);
+  border-radius: 10px;
+  background: var(--green-bg);
+  padding: 10px 13px;
+  color: var(--green-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.re2-file-chip span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.re2-file-chip svg:last-child { flex-shrink: 0; }
+
+/* ─── Dropzone (header de la base) ───────────────────────────────────── */
+.re2-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 20px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-base);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.re2-dropzone:hover, .re2-dropzone.dragging {
+  border-color: var(--accent-primary);
+}
+.re2-dropzone > svg {
+  flex-shrink: 0;
+  color: #fff;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  padding: 8px;
+  width: 32px;
+  height: 32px;
+  box-shadow: 0 4px 10px rgba(208, 17, 27, 0.25);
+}
+.re2-dropzone > div { display: flex; flex-direction: column; gap: 2px; }
+.re2-dropzone > div > span:first-child { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.re2-dropzone-hint { font-size: 11px; color: var(--text-muted); }
+
+.re2-header-input {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  resize: vertical;
+  overflow-y: auto;
+  max-height: 220px;
+}
+.re2-header-input:focus { outline: 2px solid var(--accent-primary); outline-offset: -1px; }
+
+/* ─── Avisos del header ───────────────────────────────────────────────── */
+.re2-avisos { display: flex; flex-direction: column; gap: 6px; }
+.re2-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 7px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.re2-aviso svg { flex-shrink: 0; margin-top: 2px; }
+.re2-aviso-warning { background: var(--yellow-bg); border: 1px solid var(--yellow-border); color: var(--yellow-text); }
+.re2-aviso-error { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--accent-primary); }
+.re2-aviso b { font-weight: 700; }
+
+/* ─── Switch HTML/URL (mismo patrón que Revisión de emails) ─────────── */
+/* ─── Tabla de muestra (filas reales de la base, hasta FILAS_MUESTRA) ── */
+.re2-muestra {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.re2-muestra-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.re2-muestra-head span:nth-child(2) {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+.re2-muestra-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+}
+.re2-muestra-scroll { overflow-x: auto; }
+.re2-muestra-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.re2-muestra-table th {
+  text-align: left;
+  padding: 6px 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.re2-muestra-table td {
+  padding: 6px 11px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+.re2-muestra-table tr:last-child td { border-bottom: none; }
+.re2-muestra-table th.col-aviso, .re2-muestra-table td.col-aviso {
+  background: var(--yellow-bg);
+  color: var(--yellow-text);
+}
+
+.re2-clear-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 6px;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+}
+.re2-clear-btn:hover { color: var(--text-primary); }
+
+/* ─── Acciones / error ───────────────────────────────────────────────── */
+.re2-error-banner {
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: 10px;
+  color: var(--accent-primary);
+  padding: 11px 15px;
+  font-size: 13px;
+}
+
+.re2-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.re2-btn-analizar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 11px 20px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.re2-btn-analizar:hover { background: var(--accent-hover); }
+.re2-btn-analizar:disabled { opacity: 0.5; cursor: default; }
+
+.re2-btn-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.re2-btn-reset:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+/* ─── Resultado ───────────────────────────────────────────────────────── */
+.re2-resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.re2-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+.re2-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.re2-pill-ok { background: var(--green-bg); border-color: var(--green-border); color: var(--green-text); }
+.re2-pill-miss { background: var(--red-bg); border-color: var(--red-border); color: var(--accent-primary); }
+.re2-pill-unused { background: var(--yellow-bg); border-color: var(--yellow-border); color: var(--yellow-text); }
+
+.re2-tag-section { display: flex; flex-direction: column; gap: 8px; }
+.re2-tag-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.re2-tag-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.re2-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.re2-tag-ok { background: var(--green-bg); border-color: var(--green-border); color: var(--green-text); }
+.re2-tag-miss { background: var(--red-bg); border-color: var(--red-border); color: var(--accent-primary); }
+.re2-tag-unused { background: var(--yellow-bg); border-color: var(--yellow-border); color: var(--yellow-text); }
+
+/* ─── Tabla de detalle ────────────────────────────────────────────────── */
+.re2-report {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.re2-report-scroll { overflow-x: auto; }
+.re2-report-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.re2-report-table th {
+  text-align: left;
+  padding: 9px 16px;
+  background: var(--bg-hover);
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.re2-report-table td {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.re2-report-table tr:last-child td { border-bottom: none; }
+.re2-report-table tbody tr:hover { background: var(--bg-hover); }
+.re2-report-field { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text-primary); }
+.re2-report-col { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text-secondary); }
+
+.re2-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 5px;
+  width: fit-content;
+}
+.re2-sb-ok { background: var(--green-bg); color: var(--green-text); }
+.re2-sb-miss { background: var(--red-bg); color: var(--accent-primary); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (max-width: 640px)
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .re2-actions { flex-direction: column; align-items: stretch; }
+  .re2-btn-analizar { justify-content: center; width: 100%; }
+  .re2-btn-reset { width: 100%; }
+}
