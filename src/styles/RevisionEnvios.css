@@ -337,6 +337,35 @@
   gap: 16px;
 }
 
+/* Mensaje cuando el HTML no tiene ningún campo <*Campo*> — reemplaza
+   por completo a los pills/tags/tabla, que no tendrían nada útil que
+   mostrar en este caso (verían 0/0/N de forma confusa). */
+.re2-sin-campos {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-hover);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+.re2-sin-campos svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.re2-sin-campos p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+.re2-sin-campos code {
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-surface);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
 .re2-pills { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* Fila que envuelve los pills + el botón de re-verificar — separados
@@ -415,7 +444,7 @@
   font-size: 13px;
 }
 .re2-report-table th {
-  text-align: left;
+  text-align: center;
   padding: 9px 16px;
   background: var(--bg-hover);
   font-family: var(--font-body);
@@ -427,6 +456,7 @@
   white-space: nowrap;
 }
 .re2-report-table td {
+  text-align: center;
   padding: 9px 16px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;

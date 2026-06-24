@@ -5,7 +5,7 @@ import {
   compararCampos, validateCsvHeaders, leerMuestraDeArchivo,
 } from '@/lib/revision-envios/comparar'
 import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
-import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft, RefreshCw } from 'lucide-react'
+import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft, RefreshCw, Info } from 'lucide-react'
 import { Section } from '@/components/pedidos/Section'
 import '@/styles/RevisionEnvios.css'
 
@@ -370,72 +370,93 @@ export default function RevisionEnvios() {
 
           {resultado && (
             <div className="re2-resultado">
-              <div className="re2-resultado-header">
-                <div className="re2-pills">
-                  <span className="re2-pill re2-pill-ok"><Check size={13} />{resultado.ok.length} campo{resultado.ok.length !== 1 ? 's' : ''} OK</span>
-                  <span className="re2-pill re2-pill-miss"><X size={13} />{resultado.miss.length} campo{resultado.miss.length !== 1 ? 's' : ''} sin match</span>
-                  <span className="re2-pill re2-pill-unused"><AlertTriangle size={13} />{resultado.unused.length} columna{resultado.unused.length !== 1 ? 's' : ''} no usada{resultado.unused.length !== 1 ? 's' : ''}</span>
+              {/* Caso especial: el HTML no tiene ningún campo <*Campo*>
+                  personalizado — pasa seguido con piezas que no llevan
+                  merge tags. Sin esto, los 3 pills mostrarían "0 OK / 0
+                  sin match / N no usadas" (técnicamente cierto pero
+                  confuso, ya que las "N no usadas" son TODAS las
+                  columnas de la base sin que eso sea un problema real),
+                  y la tabla de detalle se vería con el header pero sin
+                  ninguna fila. Mejor un mensaje directo que explique
+                  que no hay nada para comparar. */}
+              {resultado.htmlFields.size === 0 ? (
+                <div className="re2-sin-campos">
+                  <Info size={18} />
+                  <p>
+                    Esta pieza no tiene ningún campo personalizado <code>&lt;*Campo*&gt;</code> en su HTML —
+                    no hay nada para comparar contra la base.
+                  </p>
                 </div>
-                {/* Re-verificar — mismo ícono y criterio que ya usa
-                    BaseDatosSection.jsx: solo aparece una vez que hubo
-                    un resultado, nunca mientras se está verificando. */}
-                <button onClick={handleAnalizar} className="re2-reverificar-btn" title="Volver a analizar">
-                  <RefreshCw size={14} />
-                </button>
-              </div>
+              ) : (
+                <>
+                  <div className="re2-resultado-header">
+                    <div className="re2-pills">
+                      <span className="re2-pill re2-pill-ok"><Check size={13} />{resultado.ok.length} campo{resultado.ok.length !== 1 ? 's' : ''} OK</span>
+                      <span className="re2-pill re2-pill-miss"><X size={13} />{resultado.miss.length} campo{resultado.miss.length !== 1 ? 's' : ''} sin match</span>
+                      <span className="re2-pill re2-pill-unused"><AlertTriangle size={13} />{resultado.unused.length} columna{resultado.unused.length !== 1 ? 's' : ''} no usada{resultado.unused.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {/* Re-verificar — mismo ícono y criterio que ya usa
+                        BaseDatosSection.jsx: solo aparece una vez que hubo
+                        un resultado, nunca mientras se está verificando. */}
+                    <button onClick={handleAnalizar} className="re2-reverificar-btn" title="Volver a analizar">
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
 
-              {resultado.miss.length > 0 && (
-                <div className="re2-tag-section">
-                  <div className="re2-tag-section-title">Campos sin match</div>
-                  <div className="re2-tag-grid">
-                    {resultado.miss.map(f => <span key={f} className="re2-tag re2-tag-miss"><X size={11} />{f}</span>)}
-                  </div>
-                </div>
-              )}
-              {resultado.ok.length > 0 && (
-                <div className="re2-tag-section">
-                  <div className="re2-tag-section-title">Campos OK</div>
-                  <div className="re2-tag-grid">
-                    {resultado.ok.map(f => <span key={f} className="re2-tag re2-tag-ok"><Check size={11} />{f}</span>)}
-                  </div>
-                </div>
-              )}
-              {resultado.unused.length > 0 && (
-                <div className="re2-tag-section">
-                  <div className="re2-tag-section-title">Columnas de la base no usadas en el HTML</div>
-                  <div className="re2-tag-grid">
-                    {resultado.unused.map(f => <span key={f} className="re2-tag re2-tag-unused"><AlertTriangle size={11} />{f}</span>)}
-                  </div>
-                </div>
-              )}
+                  {resultado.miss.length > 0 && (
+                    <div className="re2-tag-section">
+                      <div className="re2-tag-section-title">Campos sin match</div>
+                      <div className="re2-tag-grid">
+                        {resultado.miss.map(f => <span key={f} className="re2-tag re2-tag-miss"><X size={11} />{f}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {resultado.ok.length > 0 && (
+                    <div className="re2-tag-section">
+                      <div className="re2-tag-section-title">Campos OK</div>
+                      <div className="re2-tag-grid">
+                        {resultado.ok.map(f => <span key={f} className="re2-tag re2-tag-ok"><Check size={11} />{f}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {resultado.unused.length > 0 && (
+                    <div className="re2-tag-section">
+                      <div className="re2-tag-section-title">Columnas de la base no usadas en el HTML</div>
+                      <div className="re2-tag-grid">
+                        {resultado.unused.map(f => <span key={f} className="re2-tag re2-tag-unused"><AlertTriangle size={11} />{f}</span>)}
+                      </div>
+                    </div>
+                  )}
 
-              <div className="re2-tag-section-title" style={{ marginTop: '0.5rem' }}>Detalle completo — campos del HTML</div>
-              <div className="re2-report">
-                <div className="re2-report-scroll">
-                  <table className="re2-report-table">
-                    <thead>
-                      <tr><th>Campo en el HTML</th><th>Estado</th><th>Columna en base</th></tr>
-                    </thead>
-                    <tbody>
-                      {[...resultado.htmlFields].sort().map(f => {
-                        const inBase = resultado.headersMap.hasOwnProperty(f.toLowerCase())
-                        const colName = inBase ? resultado.headersMap[f.toLowerCase()] : null
-                        return (
-                          <tr key={f}>
-                            <td className="re2-report-field">&lt;*{f}*&gt;</td>
-                            <td>
-                              <span className={`re2-status-badge ${inBase ? 're2-sb-ok' : 're2-sb-miss'}`}>
-                                {inBase ? <><Check size={11} />encontrado</> : <><X size={11} />no encontrado</>}
-                              </span>
-                            </td>
-                            <td className="re2-report-col">{colName || '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                  <div className="re2-tag-section-title" style={{ marginTop: '0.5rem' }}>Detalle completo — campos del HTML</div>
+                  <div className="re2-report">
+                    <div className="re2-report-scroll">
+                      <table className="re2-report-table">
+                        <thead>
+                          <tr><th>Campo en el HTML</th><th>Estado</th><th>Columna en base</th></tr>
+                        </thead>
+                        <tbody>
+                          {[...resultado.htmlFields].sort().map(f => {
+                            const inBase = resultado.headersMap.hasOwnProperty(f.toLowerCase())
+                            const colName = inBase ? resultado.headersMap[f.toLowerCase()] : null
+                            return (
+                              <tr key={f}>
+                                <td className="re2-report-field">&lt;*{f}*&gt;</td>
+                                <td>
+                                  <span className={`re2-status-badge ${inBase ? 're2-sb-ok' : 're2-sb-miss'}`}>
+                                    {inBase ? <><Check size={11} />encontrado</> : <><X size={11} />no encontrado</>}
+                                  </span>
+                                </td>
+                                <td className="re2-report-col">{colName || '—'}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </Section>
