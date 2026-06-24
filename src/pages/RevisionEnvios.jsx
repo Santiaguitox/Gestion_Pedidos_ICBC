@@ -5,7 +5,8 @@ import {
   compararCampos, validateCsvHeaders, leerMuestraDeArchivo,
 } from '@/lib/revision-envios/comparar'
 import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
-import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft } from 'lucide-react'
+import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft, RefreshCw } from 'lucide-react'
+import { Section } from '@/components/pedidos/Section'
 import '@/styles/RevisionEnvios.css'
 
 // Hace que un textarea crezca con su contenido en vez de quedar fijo en
@@ -329,93 +330,117 @@ export default function RevisionEnvios() {
           )}
         </div>
 
-        {/* Progress bar — mismo lenguaje visual que "Revisión de BBDD"
-            (spinner + label + % grande + barra en rojo), pero con
-            clases propias re2-* — cada herramienta tiene su CSS
-            aislado, no se importa RevisionBase.css desde acá. Antes,
-            mientras se esperaba el fetch del HTML, el botón solo decía
-            "Analizando…" sin ninguna señal de avance. */}
-        {cargando && (
-          <div className="re2-processing">
-            <div className="re2-processing-head">
-              <div className="re2-spinner" />
-              <div className="re2-processing-filename">
-                {modo === 'html' ? 'Analizando HTML pegado' : (url || 'Analizando pieza')}
-              </div>
-            </div>
-            <div className="re2-processing-top">
-              <div className="re2-processing-label">Comparando campos…</div>
-              <div className="re2-processing-pct">{progreso}%</div>
-            </div>
-            <div className="re2-progress-track"><div className="re2-progress-fill" style={{ width: `${progreso}%` }} /></div>
-            <div className="re2-processing-note">Comparando contra el encabezado de la base — no se guarda nada.</div>
-          </div>
-        )}
-
-        {resultado && (
-          <div className="re2-resultado">
-            <div className="re2-pills">
-              <span className="re2-pill re2-pill-ok"><Check size={13} />{resultado.ok.length} campo{resultado.ok.length !== 1 ? 's' : ''} OK</span>
-              <span className="re2-pill re2-pill-miss"><X size={13} />{resultado.miss.length} campo{resultado.miss.length !== 1 ? 's' : ''} sin match</span>
-              <span className="re2-pill re2-pill-unused"><AlertTriangle size={13} />{resultado.unused.length} columna{resultado.unused.length !== 1 ? 's' : ''} no usada{resultado.unused.length !== 1 ? 's' : ''}</span>
-            </div>
-
-            {resultado.miss.length > 0 && (
-              <div className="re2-tag-section">
-                <div className="re2-tag-section-title">Campos sin match</div>
-                <div className="re2-tag-grid">
-                  {resultado.miss.map(f => <span key={f} className="re2-tag re2-tag-miss"><X size={11} />{f}</span>)}
-                </div>
-              </div>
-            )}
-            {resultado.ok.length > 0 && (
-              <div className="re2-tag-section">
-                <div className="re2-tag-section-title">Campos OK</div>
-                <div className="re2-tag-grid">
-                  {resultado.ok.map(f => <span key={f} className="re2-tag re2-tag-ok"><Check size={11} />{f}</span>)}
-                </div>
-              </div>
-            )}
-            {resultado.unused.length > 0 && (
-              <div className="re2-tag-section">
-                <div className="re2-tag-section-title">Columnas de la base no usadas en el HTML</div>
-                <div className="re2-tag-grid">
-                  {resultado.unused.map(f => <span key={f} className="re2-tag re2-tag-unused"><AlertTriangle size={11} />{f}</span>)}
-                </div>
-              </div>
-            )}
-
-            <div className="re2-tag-section-title" style={{ marginTop: '0.5rem' }}>Detalle completo — campos del HTML</div>
-            <div className="re2-report">
-              <div className="re2-report-scroll">
-                <table className="re2-report-table">
-                  <thead>
-                    <tr><th>Campo en el HTML</th><th>Estado</th><th>Columna en base</th></tr>
-                  </thead>
-                  <tbody>
-                    {[...resultado.htmlFields].sort().map(f => {
-                      const inBase = resultado.headersMap.hasOwnProperty(f.toLowerCase())
-                      const colName = inBase ? resultado.headersMap[f.toLowerCase()] : null
-                      return (
-                        <tr key={f}>
-                          <td className="re2-report-field">&lt;*{f}*&gt;</td>
-                          <td>
-                            <span className={`re2-status-badge ${inBase ? 're2-sb-ok' : 're2-sb-miss'}`}>
-                              {inBase ? <><Check size={11} />encontrado</> : <><X size={11} />no encontrado</>}
-                            </span>
-                          </td>
-                          <td className="re2-report-col">{colName || '—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
       </div>
+
+      {/* Resultado en un acordeón separado del formulario de arriba —
+          así se puede cerrar para comparar la tabla de muestra (las
+          filas reales de la base) sin que el resultado ocupe toda la
+          pantalla. Arranca abierto si ya hay algo para mostrar
+          (cargando o resultado), cerrado si todavía no se analizó
+          nada — incluye el caso de auto-run con datos precargados,
+          que debe verse de una sin tener que abrir nada. */}
+      {(cargando || resultado) && (
+        <Section
+          title="Resultado"
+          icon={<Search size={16} />}
+          defaultOpen={true}
+        >
+          {/* Progress bar — mismo lenguaje visual que "Revisión de BBDD"
+              (spinner + label + % grande + barra en rojo), pero con
+              clases propias re2-* — cada herramienta tiene su CSS
+              aislado, no se importa RevisionBase.css desde acá. Antes,
+              mientras se esperaba el fetch del HTML, el botón solo decía
+              "Analizando…" sin ninguna señal de avance. */}
+          {cargando && (
+            <div className="re2-processing">
+              <div className="re2-processing-head">
+                <div className="re2-spinner" />
+                <div className="re2-processing-filename">
+                  {modo === 'html' ? 'Analizando HTML pegado' : (url || 'Analizando pieza')}
+                </div>
+              </div>
+              <div className="re2-processing-top">
+                <div className="re2-processing-label">Comparando campos…</div>
+                <div className="re2-processing-pct">{progreso}%</div>
+              </div>
+              <div className="re2-progress-track"><div className="re2-progress-fill" style={{ width: `${progreso}%` }} /></div>
+              <div className="re2-processing-note">Comparando contra el encabezado de la base — no se guarda nada.</div>
+            </div>
+          )}
+
+          {resultado && (
+            <div className="re2-resultado">
+              <div className="re2-resultado-header">
+                <div className="re2-pills">
+                  <span className="re2-pill re2-pill-ok"><Check size={13} />{resultado.ok.length} campo{resultado.ok.length !== 1 ? 's' : ''} OK</span>
+                  <span className="re2-pill re2-pill-miss"><X size={13} />{resultado.miss.length} campo{resultado.miss.length !== 1 ? 's' : ''} sin match</span>
+                  <span className="re2-pill re2-pill-unused"><AlertTriangle size={13} />{resultado.unused.length} columna{resultado.unused.length !== 1 ? 's' : ''} no usada{resultado.unused.length !== 1 ? 's' : ''}</span>
+                </div>
+                {/* Re-verificar — mismo ícono y criterio que ya usa
+                    BaseDatosSection.jsx: solo aparece una vez que hubo
+                    un resultado, nunca mientras se está verificando. */}
+                <button onClick={handleAnalizar} className="re2-reverificar-btn" title="Volver a analizar">
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+
+              {resultado.miss.length > 0 && (
+                <div className="re2-tag-section">
+                  <div className="re2-tag-section-title">Campos sin match</div>
+                  <div className="re2-tag-grid">
+                    {resultado.miss.map(f => <span key={f} className="re2-tag re2-tag-miss"><X size={11} />{f}</span>)}
+                  </div>
+                </div>
+              )}
+              {resultado.ok.length > 0 && (
+                <div className="re2-tag-section">
+                  <div className="re2-tag-section-title">Campos OK</div>
+                  <div className="re2-tag-grid">
+                    {resultado.ok.map(f => <span key={f} className="re2-tag re2-tag-ok"><Check size={11} />{f}</span>)}
+                  </div>
+                </div>
+              )}
+              {resultado.unused.length > 0 && (
+                <div className="re2-tag-section">
+                  <div className="re2-tag-section-title">Columnas de la base no usadas en el HTML</div>
+                  <div className="re2-tag-grid">
+                    {resultado.unused.map(f => <span key={f} className="re2-tag re2-tag-unused"><AlertTriangle size={11} />{f}</span>)}
+                  </div>
+                </div>
+              )}
+
+              <div className="re2-tag-section-title" style={{ marginTop: '0.5rem' }}>Detalle completo — campos del HTML</div>
+              <div className="re2-report">
+                <div className="re2-report-scroll">
+                  <table className="re2-report-table">
+                    <thead>
+                      <tr><th>Campo en el HTML</th><th>Estado</th><th>Columna en base</th></tr>
+                    </thead>
+                    <tbody>
+                      {[...resultado.htmlFields].sort().map(f => {
+                        const inBase = resultado.headersMap.hasOwnProperty(f.toLowerCase())
+                        const colName = inBase ? resultado.headersMap[f.toLowerCase()] : null
+                        return (
+                          <tr key={f}>
+                            <td className="re2-report-field">&lt;*{f}*&gt;</td>
+                            <td>
+                              <span className={`re2-status-badge ${inBase ? 're2-sb-ok' : 're2-sb-miss'}`}>
+                                {inBase ? <><Check size={11} />encontrado</> : <><X size={11} />no encontrado</>}
+                              </span>
+                            </td>
+                            <td className="re2-report-col">{colName || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
     </div>
   )
 }

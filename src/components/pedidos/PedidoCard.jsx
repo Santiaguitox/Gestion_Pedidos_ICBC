@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/Badge'
 import { PRIORIDADES } from '@/lib/constants'
-import { Calendar, ExternalLink, Copy, Check, ChevronDown, ChevronUp, Tag, Database } from 'lucide-react'
+import { Calendar, ExternalLink, Copy, Check, ChevronDown, ChevronUp, Tag, Database, FileSearch } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -96,6 +96,15 @@ function PillBaseCompacto({ pedidoBase, entregables, onClick }) {
   const texto = peorBase.resultado_tipo === 'ok' ? 'Compatible'
     : peorBase.resultado_tipo === 'error_proxy' ? 'No verificado'
     : `${peorBase.resultado_miss_count ?? '?'} falta${peorBase.resultado_miss_count === 1 ? '' : 'n'}`
+  // Title informativo (no solo el nombre de la herramienta) — mismo
+  // criterio que el pill de Revisión de HTML: da contexto rápido al
+  // pasar el mouse, sin tener que hacer click para enterarse a qué
+  // base/resultado corresponde.
+  const titleTexto = peorBase.resultado_tipo === 'ok'
+    ? `${peorBase.nombre_archivo} es compatible con la pieza`
+    : peorBase.resultado_tipo === 'error_proxy'
+      ? `No se pudo verificar ${peorBase.nombre_archivo}`
+      : `${peorBase.nombre_archivo}: ${peorBase.resultado_miss_count ?? '?'} campo${peorBase.resultado_miss_count === 1 ? '' : 's'} faltante${peorBase.resultado_miss_count === 1 ? '' : 's'}`
 
   function irARevision(e) {
     e.stopPropagation()
@@ -110,7 +119,7 @@ function PillBaseCompacto({ pedidoBase, entregables, onClick }) {
     <button
       onClick={irARevision}
       className={`entregable-revision-badge-compacto entregable-revision-${severidad}`}
-      title="Revisión de envíos"
+      title={titleTexto}
     >
       <Database size={10} style={{ marginRight: '3px' }} />
       {texto}
@@ -226,6 +235,7 @@ export function EntregablesCard({ entregables, pedidoBase }) {
             {ent.revision_pruebas_total != null && (
               ent.revision_pruebas_ok === ent.revision_pruebas_total ? (
                 <span className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}>
+                  <FileSearch size={11} style={{ verticalAlign: '-1px' }} />
                   {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas
                 </span>
               ) : (
@@ -233,6 +243,7 @@ export function EntregablesCard({ entregables, pedidoBase }) {
                   onClick={() => navigate('/app/revision', { state: { url: ent.link_online, entregableId: ent.id } })}
                   className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
                 >
+                  <FileSearch size={11} style={{ verticalAlign: '-1px' }} />
                   {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas
                 </button>
               )
@@ -338,21 +349,31 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
             </div>
           )}
-          {peorRevision && (
-            peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total ? (
-              <span className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}>
-                {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-              </span>
-            ) : (
-              <button
-                onClick={e => { e.stopPropagation(); navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
-                className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
-              >
-                {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-              </button>
-            )
+          {(peorRevision || peorBaseDePedido(pedido.pedido_base)) && (
+            <div className="pedido-compact-grupo">
+              {peorRevision && (
+                peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total ? (
+                  <span
+                    className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                    title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                  >
+                    <FileSearch size={10} style={{ marginRight: '3px' }} />
+                    {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                  </span>
+                ) : (
+                  <button
+                    onClick={e => { e.stopPropagation(); navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
+                    className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                    title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                  >
+                    <FileSearch size={10} style={{ marginRight: '3px' }} />
+                    {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                  </button>
+                )
+              )}
+              <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
+            </div>
           )}
-          <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
           <span className="pedido-meta-item">
             <Calendar size={12} />
             {fechaTexto ?? 'Sin fecha'}
@@ -429,34 +450,43 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </div>
             )}
 
-            {peorRevision && (
-              <div className="pedido-compact-mobile-seccion">
-                <span className="pedido-compact-fila-label">Revisión:</span>
-                <div className="pedido-compact-mobile-pills">
-                  {esRevisionPerfecta ? (
-                    <span className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}>
-                      {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
-                      className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
-                    >
-                      {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-                    </button>
-                  )}
+            {(() => {
+              const peorBase = peorBaseDePedido(pedido.pedido_base)
+              const cantidadRevisiones = (peorRevision ? 1 : 0) + (peorBase ? 1 : 0)
+              if (cantidadRevisiones === 0) return null
+              return (
+                <div className="pedido-compact-mobile-seccion">
+                  <span className="pedido-compact-fila-label">
+                    {cantidadRevisiones === 1 ? 'Revisión:' : 'Revisiones:'}
+                  </span>
+                  <div className="pedido-compact-mobile-pills">
+                    {peorRevision && (
+                      esRevisionPerfecta ? (
+                        <span
+                          className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                          title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                        >
+                          <FileSearch size={10} style={{ marginRight: '3px' }} />
+                          {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
+                          className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                          title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                        >
+                          <FileSearch size={10} style={{ marginRight: '3px' }} />
+                          {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
+                        </button>
+                      )
+                    )}
+                    {peorBase && (
+                      <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {peorBaseDePedido(pedido.pedido_base) && (
-              <div className="pedido-compact-mobile-seccion">
-                <span className="pedido-compact-fila-label">Envíos:</span>
-                <div className="pedido-compact-mobile-pills">
-                  <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             <button onClick={irAlDetalle} className="pedido-compact-mobile-ver-pedido">
               <ExternalLink size={13} />Ver pedido

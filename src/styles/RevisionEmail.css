@@ -35,34 +35,37 @@
   margin-bottom: 18px;
 }
 
-.re-switch-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
+/* Mismo patrón de pestañas con texto que ya usa Revisión de envíos
+   (re2-tabs en RevisionEnvios.css) — clase propia re-tabs porque cada
+   herramienta mantiene su CSS aislado, pero el lenguaje visual es
+   idéntico a propósito (consistencia entre las herramientas de
+   revisión). Reemplaza al viejo switch tipo toggle físico
+   (re-switch/re-switch-thumb), que quedaba visualmente distinto del
+   resto. */
+.re-tabs {
+  display: inline-flex;
+  padding: 5px;
+  background: var(--bg-hover);
+  border-radius: 10px;
+  flex-shrink: 0;
   margin-bottom: 16px;
 }
-.re-switch-label { color: var(--text-muted); }
-.re-switch-label.active { font-weight: 600; color: var(--text-primary); }
-.re-switch {
-  position: relative;
-  width: 42px;
-  height: 24px;
-  border-radius: 999px;
+.re-tabs button {
+  padding: 5px 15px;
+  border-radius: 10px;
   border: none;
-  flex-shrink: 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background 150ms ease;
+  font-family: inherit;
 }
-.re-switch-thumb {
-  position: absolute;
-  top: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: left 150ms ease;
+.re-tabs button.active {
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(208, 17, 27, 0.3);
 }
 
 .re-input-row {

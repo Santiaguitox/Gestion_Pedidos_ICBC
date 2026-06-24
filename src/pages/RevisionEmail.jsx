@@ -169,15 +169,9 @@ export default function RevisionEmail() {
       {/* Panel de carga */}
       <div className="re-load-panel">
 
-        <div className="re-switch-row">
-          <span className={`re-switch-label ${modo === 'html' ? 'active' : ''}`}>Pegar HTML</span>
-          <button
-            onClick={() => { setModo(modo === 'html' ? 'url' : 'html'); setUrlError('') }}
-            className="re-switch"
-            style={{ background: modo === 'url' ? 'var(--accent-primary)' : 'var(--border-strong)' }}>
-            <span className="re-switch-thumb" style={{ left: modo === 'url' ? '21px' : '3px' }} />
-          </button>
-          <span className={`re-switch-label ${modo === 'url' ? 'active' : ''}`}>Obtener desde URL</span>
+        <div className="re-tabs">
+          <button className={modo === 'html' ? 'active' : ''} onClick={() => { setModo('html'); setUrlError('') }}>HTML</button>
+          <button className={modo === 'url' ? 'active' : ''} onClick={() => { setModo('url'); setUrlError('') }}>URL</button>
         </div>
 
         <div className="re-input-row">

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
-import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check } from 'lucide-react'
+import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
@@ -156,20 +156,38 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
           )}
           {bloqueado && <span className="entregable-bloqueado-msg">Aprobada — para modificar generá una nueva versión</span>}
           {revisionEnCurso && (
-            <div className="entregable-revision-progreso">
-              <div className="entregable-revision-barra-pista">
-                <div className="entregable-revision-barra-relleno" style={{ width: `${revisionEnCurso.porcentaje}%` }} />
+            <div className="entregable-revision-processing">
+              <div className="entregable-revision-processing-top">
+                <Loader2 size={13} className="entregable-revision-processing-spinner" />
+                <div className="entregable-revision-processing-label">
+                  {revisionEnCurso.mensaje || 'Revisando pieza…'}
+                </div>
+                <div className="entregable-revision-processing-pct">{revisionEnCurso.porcentaje}%</div>
               </div>
-              <span className="entregable-revision-progreso-texto">Revisando pieza…</span>
+              <div className="entregable-revision-progress-track">
+                <div className="entregable-revision-progress-fill" style={{ width: `${revisionEnCurso.porcentaje}%` }} />
+              </div>
             </div>
           )}
           {!revisionEnCurso && ent.revision_pruebas_total != null && (
-            <button
-              onClick={() => onVerDetalle(ent.link_online, ent.id)}
-              className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
-            >
-              {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas — Ver detalle
-            </button>
+            <div className="entregable-revision-resultado-fila">
+              <button
+                onClick={() => onVerDetalle(ent.link_online, ent.id)}
+                className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
+              >
+                {ent.revision_pruebas_ok}/{ent.revision_pruebas_total} pruebas superadas — Ver detalle
+              </button>
+              {/* Re-verificar — mismo ícono y criterio que ya usa
+                  BaseDatosSection.jsx: solo aparece después de que ya
+                  hubo un resultado, nunca mientras nunca se corrió. */}
+              <button
+                onClick={() => dispararRevision(ent.id, ent.link_online)}
+                className="entregable-reverificar-btn"
+                title="Volver a revisar"
+              >
+                <RefreshCw size={13} />
+              </button>
+            </div>
           )}
         </div>
       )}

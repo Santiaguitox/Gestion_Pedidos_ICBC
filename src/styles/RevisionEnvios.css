@@ -338,6 +338,32 @@
 }
 
 .re2-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Fila que envuelve los pills + el botón de re-verificar — separados
+   porque el botón necesita quedar pegado a la derecha, mientras los
+   pills siguen pudiendo wrap-ear libremente en pantallas chicas. */
+.re2-resultado-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.re2-reverificar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: all 150ms;
+}
+.re2-reverificar-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
 .re2-pill {
   display: inline-flex;
   align-items: center;
