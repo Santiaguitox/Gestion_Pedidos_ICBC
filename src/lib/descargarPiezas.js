@@ -1,7 +1,6 @@
 import JSZip from 'jszip'
 import { REVISION_CONFIG } from '@/lib/revision/config'
 
-// Trae el HTML de una pieza via el mismo proxy que usa RevisionEnvios
 async function fetchHtml(url) {
   const res = await fetch(`${REVISION_CONFIG.PROXY_URL}?url=${encodeURIComponent(url)}`)
   if (!res.ok) throw new Error(`Error ${res.status} al obtener ${url}`)
@@ -10,10 +9,26 @@ async function fetchHtml(url) {
   return res.text()
 }
 
-// Limpia el HTML descargado para quedarse solo con:
-// 1. Los <style> que contienen @media (hoja de estilos relevante)
-// 2. Todo el contenido del body desde el preheader en adelante
-// (el div con display:none que contiene el texto oculto en inbox)
+// Tags HTML que se validan (los más comunes en emails)
+const TAGS_VALIDAR = ['table', 'tbody', 'tr', 'td', 'div', 'span', 'a', 'img', 'p', 'strong', 'em', 'ul', 'ol', 'li']
+
+// Valida que los tags abran y cierren correctamente.
+// Devuelve array de strings con los problemas encontrados, o [] si está ok.
+function validarEstructura(html) {
+  const problemas = []
+  for (const tag of TAGS_VALIDAR) {
+    // Contar aperturas (excluir self-closing y comentarios)
+    const aperturas = (html.match(new RegExp(`<${tag}[\\s>]`, 'gi')) ?? []).length
+    const cierres   = (html.match(new RegExp(`</${tag}>`, 'gi')) ?? []).length
+    if (aperturas !== cierres) {
+      problemas.push(`<${tag}>: ${aperturas} apertura${aperturas !== 1 ? 's' : ''}, ${cierres} cierre${cierres !== 1 ? 's' : ''}`)
+    }
+  }
+  return problemas
+}
+
+// Limpia el HTML: solo estilos con @media + contenido desde el preheader.
+// También elimina los cierres sobrantes de los wrappers que se sacan arriba.
 function limpiarHtml(html) {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
@@ -25,96 +40,122 @@ function limpiarHtml(html) {
     .join('\n')
 
   // 2. Contenido del body desde el preheader en adelante
-  // El preheader es el primer div con display:none (texto oculto en inbox)
-  const body = doc.body
-  let contenido = ''
-  if (body) {
-    const nodos = Array.from(body.childNodes)
-    // Buscar el índice del primer elemento con display:none (preheader)
-    // puede estar anidado en una tabla, así que buscamos en el innerHTML
-    // directamente usando el patrón conocido
-    const bodyHtml = body.innerHTML
-    const preheaderIdx = bodyHtml.indexOf('display: none')
-    if (preheaderIdx !== -1) {
-      // Retroceder hasta el < más cercano antes del match
-      const inicio = bodyHtml.lastIndexOf('<', preheaderIdx)
-      contenido = bodyHtml.slice(inicio)
-    } else {
-      // Si no hay preheader, tomar todo el body
-      contenido = bodyHtml
-    }
+  const bodyHtml = doc.body?.innerHTML ?? ''
+  const preheaderIdx = bodyHtml.indexOf('display: none')
+  let contenido = preheaderIdx !== -1
+    ? bodyHtml.slice(bodyHtml.lastIndexOf('<', preheaderIdx))
+    : bodyHtml
+
+  // 3. Eliminar cierres sobrantes al final que corresponden a los
+  // wrappers externos que se cortaron al sacar lo que estaba antes
+  // del preheader. Se detectan contando qué tags tienen más cierres
+  // que aperturas en el contenido recortado y se eliminan del final.
+  const tagsConCierresSobrantes = TAGS_VALIDAR.filter(tag => {
+    const aperturas = (contenido.match(new RegExp(`<${tag}[\\s>]`, 'gi')) ?? []).length
+    const cierres   = (contenido.match(new RegExp(`</${tag}>`, 'gi')) ?? []).length
+    return cierres > aperturas
+  })
+
+  for (const tag of tagsConCierresSobrantes) {
+    const aperturas = (contenido.match(new RegExp(`<${tag}[\\s>]`, 'gi')) ?? []).length
+    const cierres   = (contenido.match(new RegExp(`</${tag}>`, 'gi')) ?? []).length
+    let sobrantes = cierres - aperturas
+    // Eliminar los cierres sobrantes de atrás para adelante
+    contenido = contenido.replace(new RegExp(`(</${tag}>)(?=[^]*$)`, 'gi'), (match, p1, offset, str) => {
+      if (sobrantes > 0) {
+        // Solo eliminar si está hacia el final del string
+        const restante = str.slice(offset)
+        const cierresRestantes = (restante.match(new RegExp(`</${tag}>`, 'gi')) ?? []).length
+        if (cierresRestantes <= sobrantes) { sobrantes--; return '' }
+      }
+      return match
+    })
   }
 
-  return `${estilosRelevantes}\n${contenido}`.trim()
+  return {
+    html: `${estilosRelevantes}\n${contenido}`.trim(),
+    problemas: validarEstructura(`${estilosRelevantes}\n${contenido}`)
+  }
 }
+
 function nombreArchivo(pieza) {
   const base = (pieza.nombre_pieza || pieza.link_online || 'pieza')
-    .replace(/https?:\/\/[^/]+\/?/, '') // sacar dominio si es un link
-    .replace(/[^a-zA-Z0-9_\-]/g, '_')   // caracteres inválidos → _
-    .replace(/_+/g, '_')                  // múltiples _ → uno solo
-    .replace(/^_|_$/g, '')               // trim _
-    .slice(0, 80)                         // máximo 80 chars
+    .replace(/https?:\/\/[^/]+\/?/, '')
+    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 80)
   return `${base || 'pieza'}.html`
 }
 
-// Descarga una sola pieza como ZIP con el archivo .html adentro
-export async function descargarPiezaIndividual(pieza, onError) {
-  if (!pieza.link_online) { onError?.('La pieza no tiene link cargado'); return }
-  try {
-    const html = limpiarHtml(await fetchHtml(pieza.link_online))
-    const zip = new JSZip()
-    zip.file(nombreArchivo(pieza), html)
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = nombreArchivo(pieza).replace('.html', '.zip')
-    a.click()
-    URL.revokeObjectURL(url)
-  } catch (e) {
-    onError?.(e.message || 'No se pudo descargar el HTML')
-  }
-}
-
-// Descarga todas las piezas con link como un único ZIP
-export async function descargarTodasLasPiezas(entregables, nombrePedido, onError) {
-  const conLink = entregables.filter(e => e.link_online)
-  if (!conLink.length) { onError?.('Ninguna pieza tiene link cargado'); return }
-
-  const zip = new JSZip()
-  const usados = new Set()
-
-  await Promise.all(conLink.map(async pieza => {
-    try {
-    const html = limpiarHtml(await fetchHtml(pieza.link_online))
-      // Evitar nombres de archivo duplicados dentro del ZIP
-      let nombre = nombreArchivo(pieza)
-      if (usados.has(nombre)) {
-        const ext = '.html'
-        const base = nombre.replace(ext, '')
-        let i = 2
-        while (usados.has(`${base}_${i}${ext}`)) i++
-        nombre = `${base}_${i}${ext}`
-      }
-      usados.add(nombre)
-      zip.file(nombre, html)
-    } catch {
-      // Si una pieza falla, seguir con las demás — no abortar todo
-    }
-  }))
-
-  if (Object.keys(zip.files).length === 0) {
-    onError?.('No se pudo obtener el HTML de ninguna pieza')
-    return
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' })
+function triggerDescarga(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  const nombreZip = (nombrePedido || 'piezas')
-    .replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60)
-  a.download = `${nombreZip}.zip`
+  a.download = nombre
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// Descarga una sola pieza como ZIP.
+// Devuelve { problemas } para que el llamador muestre el modal si corresponde.
+// Si se llama con continuar=true, descarga sin validar.
+export async function descargarPiezaIndividual(pieza, { continuar = false } = {}) {
+  if (!pieza.link_online) throw new Error('La pieza no tiene link cargado')
+  const { html, problemas } = limpiarHtml(await fetchHtml(pieza.link_online))
+  if (problemas.length > 0 && !continuar) return { problemas }
+
+  const zip = new JSZip()
+  zip.file(nombreArchivo(pieza), html)
+  const blob = await zip.generateAsync({ type: 'blob' })
+  triggerDescarga(blob, nombreArchivo(pieza).replace('.html', '.zip'))
+  return { problemas: [] }
+}
+
+// Descarga todas las piezas con link como un único ZIP.
+// Devuelve { problemas: { [nombre]: string[] } } con los problemas por pieza.
+export async function descargarTodasLasPiezas(entregables, nombrePedido, { continuar = false } = {}) {
+  const conLink = entregables.filter(e => e.link_online)
+  if (!conLink.length) throw new Error('Ninguna pieza tiene link cargado')
+
+  const resultados = await Promise.all(conLink.map(async pieza => {
+    try {
+      const { html, problemas } = limpiarHtml(await fetchHtml(pieza.link_online))
+      return { pieza, html, problemas }
+    } catch {
+      return { pieza, html: null, problemas: [] }
+    }
+  }))
+
+  // Si hay problemas y no se forzó continuar, devolver sin descargar
+  const conProblemas = resultados.filter(r => r.problemas.length > 0)
+  if (conProblemas.length > 0 && !continuar) {
+    return {
+      problemas: Object.fromEntries(
+        conProblemas.map(r => [r.pieza.nombre_pieza || r.pieza.link_online, r.problemas])
+      )
+    }
+  }
+
+  const zip = new JSZip()
+  const usados = new Set()
+  for (const { pieza, html } of resultados) {
+    if (!html) continue
+    let nombre = nombreArchivo(pieza)
+    if (usados.has(nombre)) {
+      const base = nombre.replace('.html', '')
+      let i = 2
+      while (usados.has(`${base}_${i}.html`)) i++
+      nombre = `${base}_${i}.html`
+    }
+    usados.add(nombre)
+    zip.file(nombre, html)
+  }
+
+  if (Object.keys(zip.files).length === 0) throw new Error('No se pudo obtener el HTML de ninguna pieza')
+
+  const blob = await zip.generateAsync({ type: 'blob' })
+  const nombreZip = (nombrePedido || 'piezas').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60)
+  triggerDescarga(blob, `${nombreZip}.zip`)
+  return { problemas: {} }
 }

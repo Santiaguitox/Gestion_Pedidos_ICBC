@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import { descargarPiezaIndividual, descargarTodasLasPiezas } from '@/lib/descargarPiezas'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 function CopyAllBtn({ entregables }) {
   const [copied, setCopied] = useState(false)
@@ -24,7 +25,7 @@ function CopyAllBtn({ entregables }) {
   )
 }
 
-function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otrosEntregables, setConfirm, revisionEnCurso, onVerDetalle, dispararRevision }) {
+function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otrosEntregables, setConfirm, revisionEnCurso, onVerDetalle, dispararRevision, onDescargaIndividual }) {
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
   const [editando, setEditando] = useState(false)
@@ -149,7 +150,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
                 <ExternalLink size={13} />
               </a>
               <button
-                onClick={() => descargarPiezaIndividual(ent)}
+                onClick={() => onDescargaIndividual(ent)}
                 className="entregable-link-icon"
                 title="Descargar HTML"
               >
@@ -209,6 +210,9 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
   const [form, setForm] = useState({ nombre_pieza: '', link_online: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Modal de validación de estructura HTML
+  const [modalValidacion, setModalValidacion] = useState(null)
+  // { tipo: 'individual'|'todas', pieza?, problemas, onContinuar }
   // Revisiones automáticas en curso, indexadas por id de entregable —
   // { [entregableId]: { porcentaje, mensaje } }. Vive en el padre (no en
   // cada EntregableItem) porque el indicador GLOBAL necesita ver el
@@ -351,6 +355,40 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
     })
   }
 
+  async function handleDescargaIndividual(pieza) {
+    try {
+      const { problemas } = await descargarPiezaIndividual(pieza)
+      if (problemas.length > 0) {
+        setModalValidacion({
+          problemas: { [pieza.nombre_pieza || 'Pieza']: problemas },
+          onContinuar: () => {
+            setModalValidacion(null)
+            descargarPiezaIndividual(pieza, { continuar: true })
+          }
+        })
+      }
+    } catch (e) {
+      // error de red/proxy — ignorar silenciosamente en local
+    }
+  }
+
+  async function handleDescargaTodas() {
+    try {
+      const { problemas } = await descargarTodasLasPiezas(entregables, nombrePedido)
+      if (Object.keys(problemas).length > 0) {
+        setModalValidacion({
+          problemas,
+          onContinuar: () => {
+            setModalValidacion(null)
+            descargarTodasLasPiezas(entregables, nombrePedido, { continuar: true })
+          }
+        })
+      }
+    } catch (e) {
+      // error de red/proxy — ignorar silenciosamente en local
+    }
+  }
+
   const piezasConLink = entregables.filter(e => e.link_online)
 
   return (
@@ -364,7 +402,7 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
         <div className="entregables-descarga-bar">
           <button
             className="btn-descargar-piezas"
-            onClick={() => descargarTodasLasPiezas(entregables, nombrePedido)}
+            onClick={handleDescargaTodas}
           >
             <Download size={14} />
             {piezasConLink.length === 1
@@ -377,7 +415,8 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
       {entregables.map(ent => (
         <EntregableItem key={ent.id} ent={ent} canWrite={canWrite} isSuperAdmin={isSuperAdmin} onUpdate={onUpdate} onEliminar={eliminar}
           otrosEntregables={entregables.filter(e => e.id !== ent.id)} setConfirm={setConfirm}
-          revisionEnCurso={revisionesEnCurso[ent.id]} onVerDetalle={verDetalle} dispararRevision={dispararRevision} />
+          revisionEnCurso={revisionesEnCurso[ent.id]} onVerDetalle={verDetalle} dispararRevision={dispararRevision}
+          onDescargaIndividual={handleDescargaIndividual} />
       ))}
       {showForm && (
         <div className="entregable-item">
@@ -399,6 +438,37 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
         </button>
       )}
       {entregables.length > 1 && <CopyAllBtn entregables={entregables} />}
+
+      {modalValidacion && (
+        <ConfirmModal
+          open={true}
+          title="Problemas de estructura detectados"
+          variant="warning"
+          confirmLabel="Descargar igual"
+          cancelLabel="Cancelar"
+          onConfirm={modalValidacion.onContinuar}
+          onCancel={() => setModalValidacion(null)}
+          message={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                Se encontraron tags con aperturas y cierres que no coinciden:
+              </p>
+              {Object.entries(modalValidacion.problemas).map(([pieza, probs]) => (
+                <div key={pieza}>
+                  {Object.keys(modalValidacion.problemas).length > 1 && (
+                    <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{pieza}</p>
+                  )}
+                  <ul style={{ margin: 0, paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                    {probs.map(p => (
+                      <li key={p} style={{ fontSize: '0.75rem', fontFamily: 'var(--font-body)', color: 'var(--text-secondary)' }}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          }
+        />
+      )}
     </div>
   )
 }
