@@ -244,7 +244,7 @@ export default function PedidoDetalle() {
           >
             <EntregablesSection pedidoId={id} entregables={entregables} canWrite={canWrite}
               isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm}
-              nombrePedido={pedido.nombre_campana || pedido.id} />
+              nombrePedido={pedido.asunto || pedido.id} />
           </DetalleAcordeon>
 
           <DetalleAcordeon
