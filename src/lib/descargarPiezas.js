@@ -10,7 +10,8 @@ async function fetchHtml(url) {
 }
 
 // Tags HTML que se validan (los más comunes en emails)
-const TAGS_VALIDAR = ['table', 'tbody', 'tr', 'td', 'div', 'span', 'a', 'img', 'p', 'strong', 'em', 'ul', 'ol', 'li']
+// Se excluyen los void elements que no tienen cierre: img, br, hr, meta, input, link
+const TAGS_VALIDAR = ['table', 'tbody', 'tr', 'td', 'div', 'span', 'a', 'p', 'strong', 'em', 'ul', 'ol', 'li']
 
 // Valida que los tags abran y cierren correctamente.
 // Devuelve array de strings con los problemas encontrados, o [] si está ok.
