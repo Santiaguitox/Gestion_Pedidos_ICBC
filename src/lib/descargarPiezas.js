@@ -79,6 +79,20 @@ function limpiarHtml(html) {
   }
 }
 
+// Sanitiza el nombre del ZIP: normaliza tildes, reemplaza ñ→n,
+// espacios y caracteres especiales → _, colapsa múltiples _ y recorta.
+// Ejemplo: "Envío Plazo Fijo | CAMPAÑA NRO 33" → "Envio_Plazo_Fijo_CAMPANA_NRO_33"
+function sanitizarNombreZip(nombre) {
+  return (nombre || 'piezas')
+    .replace(/[ñÑ]/g, m => m === 'ñ' ? 'n' : 'N')  // ñ → n antes del normalize
+    .normalize('NFD')                                  // descomponer tildes: á → a + ́
+    .replace(/[\u0300-\u036f]/g, '')                  // sacar los diacríticos
+    .replace(/[^a-zA-Z0-9]/g, '_')                    // todo lo que no sea alfanumérico → _
+    .replace(/_+/g, '_')                              // múltiples _ → uno solo
+    .replace(/^_|_$/g, '')                            // trim _
+    .slice(0, 80) || 'piezas'
+}
+
 function nombreArchivo(pieza) {
   const base = (pieza.nombre_pieza || pieza.link_online || 'pieza')
     .replace(/https?:\/\/[^/]+\/?/, '')
@@ -156,7 +170,7 @@ export async function descargarTodasLasPiezas(entregables, nombrePedido, { conti
   if (Object.keys(zip.files).length === 0) throw new Error('No se pudo obtener el HTML de ninguna pieza')
 
   const blob = await zip.generateAsync({ type: 'blob' })
-  const nombreZip = (nombrePedido || 'piezas').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60)
+  const nombreZip = sanitizarNombreZip(nombrePedido)
   triggerDescarga(blob, `${nombreZip}.zip`)
   return { problemas: {} }
 }
