@@ -2,14 +2,25 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useIsMobile } from '@/hooks/useIsMobile'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ROLES, ROLE_COLORS } from '@/lib/constants'
 import { Badge } from '@/components/ui/Badge'
-import { Users, UserPlus, X, Trash2, Pencil, BarChart2 } from 'lucide-react'
+import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 
 const AREAS_EQUIPO = ['PM', 'Diseño', 'Programación', 'Comercial', 'Otro']
+
+// Mismos 10 colores del rediseño — se ofrecen como presets rápidos en
+// el modal de editar, ADEMÁS del <input type="color"> libre que ya
+// existía (no en su lugar): el picker libre permite cualquier color,
+// los presets son un atajo para los más usados.
+const AVATAR_COLOR_PRESETS = [
+  '#D0111B', '#EA580C', '#CA8A04', '#15803D', '#0891B2',
+  '#2563EB', '#5B4EE8', '#7C3AED', '#DB2777', '#6B7280',
+]
 
 export default function Usuarios() {
   const { role: myRole, user: myUser } = useAuth()
@@ -28,6 +39,14 @@ export default function Usuarios() {
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [editForm, setEditForm] = useState({ role: '', area_equipo: '', avatar_color: '' })
   const [savingEdit, setSavingEdit] = useState(false)
+  const isMobile = useIsMobile()
+  // Persiste entre sesiones, igual patrón que los filtros de
+  // Notificaciones. En mobile se ignora (ver más abajo) y se fuerza
+  // Grilla siempre — la Tabla tiene columnas fijas que se aprietan
+  // demasiado en una pantalla angosta, mientras que la Grilla con una
+  // sola tarjeta por fila entra bien.
+  const [vistaGuardada, setVista] = useLocalStorage('usuarios:vista', 'grid')
+  const vista = isMobile ? 'grid' : vistaGuardada
 
   useEffect(() => { fetchUsuarios() }, [])
 
@@ -125,6 +144,10 @@ export default function Usuarios() {
       setInviteSuccess(`Invitación enviada a ${form.email}`)
       setForm({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
       fetchUsuarios()
+      // Cierra el modal solo, dando un instante para que se vea el
+      // mensaje de éxito antes de desaparecer — mejor que cerrarlo de
+      // golpe sin ninguna confirmación visible.
+      setTimeout(() => { setShowForm(false); setInviteSuccess('') }, 1400)
     }
     setInviting(false)
   }
@@ -144,26 +167,48 @@ export default function Usuarios() {
               <BarChart2 size={16} />Estadísticas
             </button>
           )}
-          <button onClick={() => { setShowForm(v => !v); setInviteError(''); setInviteSuccess('') }}
-            className="btn-header-action">
-            {showForm ? <X size={16} /> : <UserPlus size={16} />}
-            {showForm ? 'Cancelar' : 'Invitar usuario'}
+          <button onClick={() => { setShowForm(true); setInviteError(''); setInviteSuccess('') }} className="btn-header-action">
+            <UserPlus size={16} />Invitar usuario
           </button>
         </div>
       </div>
 
+      {/* Toolbar de vista — propia fila, separada del header, alineada
+          a la izquierda justo arriba de las tarjetas/tabla (no junto a
+          los botones de acción del header). Oculta en mobile, donde la
+          vista queda forzada a Grilla — no tiene sentido mostrar un
+          control que no cambiaría nada visible. */}
+      {!isMobile && (
+        <div className="usuarios-toolbar">
+          <div className="re-tabs">
+            <button className={vista === 'grid' ? 'active' : ''} onClick={() => setVista('grid')}>
+              <LayoutGrid size={14} />Grilla
+            </button>
+            <button className={vista === 'table' ? 'active' : ''} onClick={() => setVista('table')}>
+              <List size={14} />Tabla
+            </button>
+          </div>
+        </div>
+      )}
+
       {showCargaTrabajo && <CargaTrabajoModal onClose={() => setShowCargaTrabajo(false)} />}
 
       {showForm && (
-        <div className="panel">
-          <div className="panel-body" style={{ padding: '1.25rem' }}>
-            <div>
-              <h3 className="section-accordion-title">Invitar nuevo usuario</h3>
-              <p className="text-muted-sm" style={{ marginTop: '0.25rem' }}>
-                Se enviará un email con un link para que el usuario establezca su contraseña.
-              </p>
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal" style={{ maxWidth: '560px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">Invitar nuevo usuario</h2>
+                <p className="text-muted-sm" style={{ marginTop: '0.25rem' }}>
+                  Se enviará un email con un link para que el usuario establezca su contraseña.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowForm(false)} className="modal-close">
+                <X size={18} />
+              </button>
             </div>
-            <form onSubmit={handleInvitar} className="flex flex-col gap-[0.875rem]">
+
+            <form onSubmit={handleInvitar} className="modal-body">
               <div className="field-grid-2">
                 <div className="field">
                   <label className="field-label">Email <span style={{ color: 'var(--icbc-red)' }}>*</span></label>
@@ -191,7 +236,8 @@ export default function Usuarios() {
               </div>
               {inviteError && <p className="msg-error">{inviteError}</p>}
               {inviteSuccess && <p className="msg-success">{inviteSuccess}</p>}
-              <div className="flex justify-end">
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancelar</button>
                 <button type="submit" disabled={inviting} className="btn-primary" style={{ width: 'auto', opacity: inviting ? 0.6 : 1 }}>
                   {inviting ? 'Enviando…' : 'Enviar invitación'}
                 </button>
@@ -206,48 +252,89 @@ export default function Usuarios() {
         <div className="empty-state"><Users size={32} /><p>No hay usuarios.</p></div>
       )}
 
-      <div className="flex flex-col gap-2">
-        {usuarios.map(u => (
-          <div key={u.id} className="usuario-item">
-            <div className="flex items-center gap-3">
-              <span className="usuario-avatar" style={{ background: u.avatar_color || colorAvatar(u.id) }}>
-                {iniciales(u.full_name)}
-              </span>
-              <div className="usuario-info">
-                <p className="usuario-nombre">{u.full_name || u.email}</p>
-                <p className="usuario-email">{u.email}</p>
-              </div>
-            </div>
-            <div className="usuario-actions">
-              <Badge label={u.role} color={ROLE_COLORS[u.role] ?? '#6B7280'} />
-              {u.area_equipo && <Badge label={u.area_equipo} color="#5B4EE8" size="sm" />}
-              <button type="button" onClick={() => abrirEditarUsuario(u)} className="btn-header-action">
-                <Pencil size={16} />Editar
-              </button>
-            </div>
+      {!loading && usuarios.length > 0 && (
+        vista === 'grid' ? (
+          <div className="usuarios-grid">
+            {usuarios.map(u => {
+              const color = u.avatar_color || colorAvatar(u.id)
+              return (
+                <div key={u.id} className="usuario-card">
+                  <div className="usuario-card-top">
+                    <span className="usuario-card-avatar" style={{ background: color, boxShadow: `0 0 0 4px ${color}24` }}>
+                      {iniciales(u.full_name)}
+                    </span>
+                    <div className="usuario-info" style={{ minWidth: 0, flex: 1 }}>
+                      <p className="usuario-nombre usuario-card-nombre">{u.full_name || u.email}</p>
+                      <p className="usuario-email usuario-card-email">{u.email}</p>
+                    </div>
+                  </div>
+                  <div className="usuario-card-badges">
+                    <Badge label={u.role} color={ROLE_COLORS[u.role] ?? '#6B7280'} />
+                    {u.area_equipo && <Badge label={u.area_equipo} color="#5B4EE8" size="sm" />}
+                  </div>
+                  <div className="usuario-card-footer">
+                    <button type="button" onClick={() => abrirEditarUsuario(u)} className="usuario-card-edit-btn">
+                      <Pencil size={14} />Editar
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        ))}
-      </div>
+        ) : (
+          <div className="usuarios-table">
+            <div className="usuarios-table-header">
+              <div>Usuario</div><div>Rol</div><div>Área</div><div></div>
+            </div>
+            {usuarios.map(u => (
+              <div key={u.id} className="usuarios-table-row">
+                <div className="usuarios-table-user">
+                  <span className="usuario-card-avatar usuario-table-avatar" style={{ background: u.avatar_color || colorAvatar(u.id) }}>
+                    {iniciales(u.full_name)}
+                  </span>
+                  <div className="usuario-info" style={{ minWidth: 0 }}>
+                    <p className="usuario-nombre usuario-card-nombre">{u.full_name || u.email}</p>
+                    <p className="usuario-email usuario-card-email">{u.email}</p>
+                  </div>
+                </div>
+                <div><Badge label={u.role} color={ROLE_COLORS[u.role] ?? '#6B7280'} /></div>
+                <div>{u.area_equipo && <Badge label={u.area_equipo} color="#5B4EE8" size="sm" />}</div>
+                <div style={{ textAlign: 'right' }}>
+                  <button type="button" onClick={() => abrirEditarUsuario(u)} className="btn-header-action">
+                    <Pencil size={16} />Editar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
 
       {usuarioEditando && (
         <div className="modal-overlay" onClick={cerrarEditarUsuario}>
-          <div className="modal" style={{ maxWidth: '460px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <h2 className="modal-title">Editar usuario</h2>
-                <p className="text-muted-sm" style={{ marginTop: '0.25rem' }}>
-                  {usuarioEditando.full_name || usuarioEditando.email}
-                </p>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                  <Badge label={usuarioEditando.role} color={ROLE_COLORS[usuarioEditando.role] ?? '#6B7280'} />
-                  {usuarioEditando.area_equipo && (
-                    <Badge label={usuarioEditando.area_equipo} color="#5B4EE8" size="sm" />
-                  )}
-                </div>
-              </div>
-              <button type="button" onClick={cerrarEditarUsuario} className="modal-close">
+          <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+            {/* Header con banda de color — el fondo es el color del
+                avatar (en vivo, sigue el color elegido en los presets
+                de abajo sin necesitar guardar primero) al 12% de
+                opacidad, igual patrón que el resto de la app usa para
+                derivar variantes "suaves" de un color base. */}
+            <div className="modal-usuario-edit-header" style={{ background: `${editForm.avatar_color || colorAvatar(usuarioEditando.id)}1F` }}>
+              <button type="button" onClick={cerrarEditarUsuario} className="modal-usuario-edit-close">
                 <X size={18} />
               </button>
+              <div className="modal-usuario-edit-header-row">
+                <span
+                  className="modal-usuario-edit-avatar"
+                  style={{ background: editForm.avatar_color || colorAvatar(usuarioEditando.id) }}
+                >
+                  {iniciales(usuarioEditando.full_name)}
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div className="modal-usuario-edit-eyebrow">Editar usuario</div>
+                  <div className="modal-usuario-edit-nombre">{usuarioEditando.full_name || usuarioEditando.email}</div>
+                  <div className="modal-usuario-edit-email">{usuarioEditando.email}</div>
+                </div>
+              </div>
             </div>
 
             <form onSubmit={guardarUsuarioEditado} className="modal-body">
@@ -266,15 +353,44 @@ export default function Usuarios() {
               </div>
               <div className="field">
                 <label className="field-label">Color del avatar</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={editForm.avatar_color}
-                    onChange={e => setEditForm(f => ({ ...f, avatar_color: e.target.value }))}
-                    className="color-picker-input"
-                  />
-                  <span className="text-muted-sm">Se usa en los avatares de las tarjetas de pedido.</span>
+                <div className="avatar-color-presets">
+                  {AVATAR_COLOR_PRESETS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditForm(f => ({ ...f, avatar_color: c }))}
+                      className="avatar-color-swatch"
+                      style={{
+                        background: c,
+                        boxShadow: editForm.avatar_color?.toLowerCase() === c.toLowerCase() ? `0 0 0 2px var(--bg-surface), 0 0 0 4px ${c}` : 'none',
+                      }}
+                      title={c}
+                      aria-label={`Color ${c}`}
+                    />
+                  ))}
+                  {/* Picker libre — para cualquier color fuera de los
+                      10 presets de arriba. No reemplaza a los presets,
+                      los complementa. Se ve como un swatch más (con un
+                      "+" adentro) en vez del cuadrado nativo del
+                      navegador, y el label "Otro color" queda siempre
+                      visible al lado, no solo como title al hover. */}
+                  <div className="avatar-color-custom">
+                    <span className="avatar-color-custom-swatch">
+                      <Plus size={13} />
+                      <input
+                        type="color"
+                        value={editForm.avatar_color}
+                        onChange={e => setEditForm(f => ({ ...f, avatar_color: e.target.value }))}
+                        className="avatar-color-custom-input"
+                        aria-label="Elegir otro color"
+                      />
+                    </span>
+                    <span className="avatar-color-custom-label">Otro color</span>
+                  </div>
                 </div>
+                <span className="text-muted-sm" style={{ display: 'block', marginTop: '0.625rem' }}>
+                  Se usa en los avatares de las tarjetas de pedido.
+                </span>
               </div>
 
               {myRole === ROLES.SUPER_ADMIN && usuarioEditando.id !== myUser?.id && (

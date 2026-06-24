@@ -1426,6 +1426,75 @@ select:focus {
   border-radius: var(--radius-sm);
 }
 
+/* ─── Header del modal "Editar usuario" — banda de color dinámica
+   (el color del avatar del usuario, muy suave) en vez del header
+   genérico .modal-header de texto plano. El resto del modal (body,
+   footer) sigue usando las clases genéricas sin cambios. ─── */
+.modal-usuario-edit-header {
+  position: relative;
+  padding: 1.625rem 1.625rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.modal-usuario-edit-close {
+  position: absolute;
+  top: 1.125rem;
+  right: 1.125rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.modal-usuario-edit-close:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+.modal-usuario-edit-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9375rem;
+}
+.modal-usuario-edit-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1.3125rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 3px solid var(--bg-surface);
+  box-shadow: 0 2px 8px rgba(20, 22, 40, 0.14);
+}
+.modal-usuario-edit-eyebrow {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.1875rem;
+}
+.modal-usuario-edit-nombre {
+  font-weight: 700;
+  font-size: 1.1875rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal-usuario-edit-email {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .modal-body {
   padding: 1.5rem;
   display: flex;
@@ -3477,23 +3546,213 @@ select:focus {
   padding: 0.875rem 1.25rem;
 }
 
-.usuario-avatar {
-  width: 36px;
-  height: 36px;
+.usuario-info { display: flex; flex-direction: column; }
+.usuario-nombre { font-size: 0.9375rem; font-weight: 600; }
+.usuario-email { font-size: 0.8125rem; color: var(--text-muted); }
+
+/* ─── Vista Grilla — tarjeta "Limpio" ─────────────────────────────────── */
+.usuarios-grid {
+  display: grid;
+  gap: 1.125rem;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+}
+.usuario-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9375rem;
+  transition: box-shadow 150ms, border-color 150ms;
+}
+.usuario-card:hover {
+  box-shadow: 0 4px 16px rgba(20, 22, 40, 0.07);
+  border-color: var(--border-strong);
+}
+.usuario-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+.usuario-card-avatar {
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: var(--accent-primary);
   color: #fff;
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 1.0625rem;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
+.usuario-card-nombre {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.usuario-card-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.usuario-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4375rem;
+}
+.usuario-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 0.8125rem;
+}
+.usuario-card-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.8125rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.usuario-card-edit-btn:hover {
+  background: var(--bg-hover);
+}
 
-.usuario-info { display: flex; flex-direction: column; }
-.usuario-nombre { font-size: 0.9375rem; font-weight: 600; }
-.usuario-email { font-size: 0.8125rem; color: var(--text-muted); }
+/* ─── Vista Tabla ──────────────────────────────────────────────────────── */
+.usuarios-table {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.usuarios-table-header {
+  display: grid;
+  grid-template-columns: 2.4fr 1fr 1fr 90px;
+  gap: 1rem;
+  padding: 0.8125rem 1.375rem;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.71875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+/* Rol y Área (columnas 2 y 3) centradas — Usuario queda a la izquierda
+   (es el contenido principal de la fila) y la columna de acción
+   mantiene su propio text-align inline. */
+.usuarios-table-header > div:nth-child(2),
+.usuarios-table-header > div:nth-child(3) {
+  text-align: center;
+}
+.usuarios-table-row > div:nth-child(2),
+.usuarios-table-row > div:nth-child(3) {
+  display: flex;
+  justify-content: center;
+}
+.usuarios-table-row {
+  display: grid;
+  grid-template-columns: 2.4fr 1fr 1fr 90px;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.875rem 1.375rem;
+  border-bottom: 1px solid var(--border);
+}
+.usuarios-table-row:last-child { border-bottom: none; }
+.usuarios-table-row:hover { background: var(--bg-hover); }
+.usuarios-table-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.usuario-table-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 0.875rem;
+}
+
+/* ─── Toolbar con el switch Grilla/Tabla — fila propia, separada del
+   header de la página, justo arriba de las tarjetas/tabla. El switch
+   en sí reusa .re-tabs (Revisión de emails) con texto+ícono, igual
+   patrón visual que ya existe ahí, sin clases nuevas. ─── */
+.usuarios-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.usuarios-toolbar .re-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* ─── Presets de color del avatar (modal de editar usuario) ──────────── */
+.avatar-color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6875rem;
+  align-items: center;
+}
+.avatar-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 100ms;
+}
+.avatar-color-swatch:hover {
+  transform: scale(1.08);
+}
+
+/* Picker libre, con forma de swatch (no el cuadrado nativo del
+   navegador) — el input[type=color] real queda invisible encima,
+   ocupando todo el círculo, así el click sigue abriendo el picker del
+   sistema operativo. El label "Otro color" es texto siempre visible,
+   no un title que solo aparece al hover. */
+.avatar-color-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+}
+.avatar-color-custom-swatch {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.avatar-color-custom-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+  cursor: pointer;
+}
+.avatar-color-custom-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
 
 .color-picker-input {
   -webkit-appearance: none;
@@ -3521,12 +3780,6 @@ select:focus {
 .color-picker-input::-moz-color-swatch {
   border: none;
   border-radius: calc(var(--radius-sm) - 2px);
-}
-
-.usuario-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
 }
 
 .msg-success {
@@ -3882,20 +4135,212 @@ select:focus {
 
 /* ─── Notificaciones v2 ───────────────────────────────────────────────────── */
 
-.notif-filter-btn {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 0.3rem 0.75rem;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  transition: all 150ms;
+/* Toolbar superior — tabs a la izquierda, acciones a la derecha.
+   Reemplaza al panel "Filtros y acciones" colapsable: los filtros ya
+   no necesitan esconderse (son 3 pestañas siempre visibles), y las
+   acciones masivas menos frecuentes viven en el menú "⋮". */
+.notif-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
-
-.notif-filter-btn-active {
+.notif-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+.notif-tabs button {
+  border: none;
+  background: none;
+  padding: 0.4375rem 0.8125rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.notif-tabs button.active {
   background: var(--accent-primary);
   color: #fff;
-  border-color: var(--accent-primary);
+  font-weight: 600;
+}
+.notif-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+.notif-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.5rem 0.8125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.notif-btn-outline:hover { background: var(--bg-hover); }
+.notif-btn-sm { padding: 0.375rem 0.6875rem; font-size: 0.78125rem; }
+.notif-btn-danger { color: var(--icbc-red); border-color: rgba(208, 17, 27, 0.25); }
+.notif-btn-danger:hover { background: rgba(208, 17, 27, 0.06); }
+.notif-btn-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.375rem 0.625rem;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.78125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.notif-btn-clear:hover { background: var(--bg-hover); }
+.notif-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.notif-btn-icon:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+/* Menú desplegable — usado tanto para el "⋮" del header (acciones
+   masivas) como el de cada ítem individual (mismas clases, distinto
+   contenido). */
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 210px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(16, 18, 22, 0.16);
+  padding: 5px;
+  z-index: 40;
+}
+.notif-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5625rem 0.625rem;
+  border: none;
+  background: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-dropdown button:hover { background: var(--bg-hover); }
+.notif-dropdown-danger { color: var(--icbc-red) !important; }
+.notif-dropdown-danger:hover { background: rgba(208, 17, 27, 0.06) !important; }
+.notif-dropdown-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+/* Empty state propio (antes reusaba .empty-state genérico) */
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.375rem;
+  padding: 4rem 1.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+}
+.notif-empty-title { font-size: 0.9375rem; font-weight: 600; color: var(--text-secondary); margin: 0.5rem 0 0; }
+.notif-empty-sub { font-size: 0.8125rem; color: var(--text-muted); margin: 0; }
+
+.notif-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.75rem;
+}
+.notif-pagesize-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78125rem;
+  color: var(--text-muted);
+}
+.notif-pagesize-label select {
+  width: auto;
+  font-size: 0.8125rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+}
+
+/* Barra de selección / "seleccionar todo" — mismo contenedor para
+   ambos estados, con un modificador cuando hay algo seleccionado
+   (fondo rojo muy suave, igual criterio que el rediseño). */
+.notif-bulkbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-wrap: wrap;
+}
+.notif-bulkbar-active {
+  flex-direction: column;
+  align-items: stretch;
+  background: rgba(208, 17, 27, 0.04);
+  border-bottom-color: rgba(208, 17, 27, 0.18);
+}
+.notif-bulkbar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6875rem;
+}
+.notif-bulkbar-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.notif-bulkbar-count { font-size: 0.8125rem; font-weight: 600; color: var(--icbc-red); }
+.notif-bulkbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(208, 17, 27, 0.14);
+}
+
+/* Header de cada grupo de fecha (Hoy / Ayer / Esta semana / Anteriores) */
+.notif-group-label {
+  padding: 0.5rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border);
 }
 
 .notif-item-v2 {
@@ -3903,7 +4348,7 @@ select:focus {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 0.9375rem 1rem;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 150ms;
@@ -3943,39 +4388,18 @@ select:focus {
 }
 
 .notif-item-content { flex: 1; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.notif-item-msg { font-size: 0.875rem; line-height: 1.4; }
+.notif-item-msg { font-size: 0.875rem; line-height: 1.45; overflow-wrap: anywhere; }
 .notif-item-msg-leida { color: var(--text-secondary); font-weight: 400; }
 .notif-item-msg-nueva { font-weight: 500; color: var(--text-primary); }
 .notif-item-time { font-size: 0.75rem; color: var(--text-muted); }
 
 .notif-item-actions {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.25rem;
   opacity: 0;
   transition: opacity 150ms;
   flex-shrink: 0;
-}
-
-.notif-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
-  color: var(--text-muted);
-  transition: all 150ms;
-}
-
-.notif-action-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
-.notif-action-btn-danger:hover { color: var(--icbc-red); border-color: rgba(208,17,27,0.4); }
-
-.notif-bulk-count {
-  font-weight: 600;
-  color: var(--icbc-red);
 }
 
 .notif-container {
@@ -4690,19 +5114,6 @@ select:focus {
     width: 100%;
     border-top: 1px solid var(--border);
     padding-top: 0.375rem;
-  }
-
-  /* ── Usuarios — 2 líneas ── */
-  .usuario-item {
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .usuario-actions {
-    width: 100%;
-    justify-content: flex-end;
-    border-top: 1px solid var(--border);
-    padding-top: 0.625rem;
   }
 
   /* ── Detalle topbar ── */

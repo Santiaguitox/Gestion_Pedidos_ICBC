@@ -1,18 +1,49 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Bell, CheckCheck, Trash2, MailOpen, Mail, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter } from 'lucide-react'
+import {
+  Bell, CheckCheck, Trash2, MailOpen, Mail, ExternalLink,
+  ChevronLeft, ChevronRight, MoreHorizontal, X,
+} from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 const PAGE_OPTIONS = [10, 20, 50]
-const FILTROS = [
+const TABS = [
   { value: 'todas',  label: 'Todas' },
   { value: 'nuevas', label: 'No leídas' },
   { value: 'leidas', label: 'Leídas' },
 ]
+
+// Agrupa por antigüedad relativa al momento actual — mismas 4 cubetas
+// y mismos límites en horas que definió el rediseño (bucketOf): Hoy
+// (<24h), Ayer (<48h), Esta semana (<168h = 7 días), Anteriores (el
+// resto). Se calcula sobre timestamps reales (created_at), no sobre
+// una cifra de horas ya calculada de antemano como en el mock de la
+// IA de diseño.
+function bucketDe(createdAt, ahora) {
+  const horas = (ahora.getTime() - new Date(createdAt).getTime()) / 36e5
+  if (horas < 24) return 'Hoy'
+  if (horas < 48) return 'Ayer'
+  if (horas < 168) return 'Esta semana'
+  return 'Anteriores'
+}
+const ORDEN_GRUPOS = ['Hoy', 'Ayer', 'Esta semana', 'Anteriores']
+
+// Agrupa una lista ya paginada en los 4 baldes de arriba, preservando
+// el orden relativo dentro de cada balde y devolviendo solo los baldes
+// que tienen al menos un ítem (mismo criterio que el rediseño: si no
+// hay nada "Hoy", ese header de grupo no se muestra).
+function agruparPorFecha(items, ahora) {
+  const mapa = {}
+  items.forEach(n => {
+    const b = bucketDe(n.created_at, ahora)
+    ;(mapa[b] = mapa[b] || []).push(n)
+  })
+  return ORDEN_GRUPOS.filter(b => mapa[b]).map(b => ({ label: b, items: mapa[b] }))
+}
 
 export default function Notificaciones() {
   const navigate = useNavigate()
@@ -26,11 +57,29 @@ export default function Notificaciones() {
   const [filtro, setFiltro] = useLocalStorage('notif:filtro', 'todas')
   const [seleccionadas, setSeleccionadas] = useState(new Set())
   const [pagina, setPagina] = useState(0)
-  const [panelOpen, setPanelOpen] = useLocalStorage('notif:panelOpen', true)
   const [pageSize, setPageSize] = useLocalStorage('notif:pageSize', 10)
   const [confirmEliminarTodas, setConfirmEliminarTodas] = useState(false)
+  // Menú "⋮" del header (marcar todas no leídas / eliminar todas) y el
+  // de cada ítem individual — uno solo abierto a la vez, igual patrón
+  // que ya usa EstadoPopover.jsx: un ref que apunta al menú actualmente
+  // abierto, mousedown global lo cierra si el click fue afuera.
+  const [menuHeaderOpen, setMenuHeaderOpen] = useState(false)
+  const [menuItemAbierto, setMenuItemAbierto] = useState(null)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuHeaderOpen(false)
+        setMenuItemAbierto(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   const noLeidas = notificaciones.filter(n => !n.leida).length
+  const haLeidas = notificaciones.some(n => n.leida)
 
   const lista = notificaciones.filter(n => {
     if (filtro === 'nuevas') return !n.leida
@@ -43,6 +92,13 @@ export default function Notificaciones() {
   const listaVisible = lista.slice(paginaActual * pageSize, (paginaActual + 1) * pageSize)
   const haySeleccion = seleccionadas.size > 0
   const todasSeleccionadas = seleccionadas.size === listaVisible.length && listaVisible.length > 0
+
+  // Agrupación por fecha — sobre la página actual, mismo criterio que
+  // el rediseño original (no sobre el total filtrado): es más barato y
+  // en la práctica, al estar ordenado por fecha descendente, un mismo
+  // grupo no debería partirse entre dos páginas salvo casos de borde
+  // con pocos ítems por página.
+  const grupos = agruparPorFecha(listaVisible, new Date())
 
   const selItems = notificaciones.filter(n => seleccionadas.has(n.id))
   const selTodasLeidas = selItems.length > 0 && selItems.every(n => n.leida)
@@ -95,7 +151,7 @@ export default function Notificaciones() {
   }
 
   return (
-    <div className="page-root" style={{ maxWidth: '680px' }}>
+    <div className="page-root">
 
       <div className="page-header">
         <div>
@@ -106,89 +162,84 @@ export default function Notificaciones() {
         </div>
       </div>
 
-      {/* Panel filtros y acciones */}
-      <div className="panel">
-        <div className="panel-header" onClick={() => setPanelOpen(v => !v)}>
-          <div className="panel-header-left">
-            <Filter size={15} color="var(--text-muted)" />
-            <span className="panel-label">Filtros y acciones</span>
-            {filtro !== 'todas' && <span className="badge-active-pill">activos</span>}
-          </div>
-          <div className="panel-header-right">
-            {panelOpen ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
-          </div>
+      {/* Tabs + acciones — reemplaza al panel "Filtros y acciones"
+          colapsable: los 3 filtros ahora son pestañas siempre visibles
+          (no hay nada que esconder ahí), y las acciones masivas viven
+          en un botón de acceso directo ("Marcar todas como leídas",
+          solo si hay alguna sin leer) + un menú "⋮" para las acciones
+          menos frecuentes (marcar todas no leídas, eliminar todas). */}
+      <div className="notif-toolbar">
+        <div className="notif-tabs">
+          {TABS.map(t => (
+            <button key={t.value} onClick={() => handleFiltro(t.value)}
+              className={filtro === t.value ? 'active' : ''}>
+              {t.label}
+              {t.value === 'nuevas' && noLeidas > 0 && (
+                <span style={{ marginLeft: '0.3rem', fontWeight: 700 }}>({noLeidas})</span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {panelOpen && (
-          <div className="panel-body">
-            <span className="filter-date-label">Filtrar por</span>
-            <div className="filters-row">
-              {FILTROS.map(f => (
-                <button key={f.value} onClick={() => handleFiltro(f.value)}
-                  className={`notif-filter-btn ${filtro === f.value ? 'notif-filter-btn-active' : ''}`}>
-                  {f.label}
-                  {f.value === 'nuevas' && noLeidas > 0 && (
-                    <span style={{ marginLeft: '0.375rem', fontWeight: 700 }}>({noLeidas})</span>
-                  )}
+        <div className="notif-toolbar-actions" ref={menuHeaderOpen ? menuRef : null}>
+          {noLeidas > 0 && (
+            <button onClick={marcarTodasLeidas} className="notif-btn-outline">
+              <CheckCheck size={15} />Marcar todas como leídas
+            </button>
+          )}
+          {notificaciones.length > 0 && (
+            <button onClick={() => setMenuHeaderOpen(v => !v)} className="notif-btn-icon" title="Más acciones">
+              <MoreHorizontal size={16} />
+            </button>
+          )}
+          {menuHeaderOpen && (
+            <div className="notif-dropdown">
+              {haLeidas && (
+                <button onClick={() => { marcarTodasNoLeidas(); setMenuHeaderOpen(false) }}>
+                  <Mail size={15} />Marcar todas como no leídas
                 </button>
-              ))}
+              )}
+              <button
+                onClick={() => { setConfirmEliminarTodas(true); setMenuHeaderOpen(false) }}
+                className="notif-dropdown-danger"
+              >
+                <Trash2 size={15} />Eliminar todas
+              </button>
             </div>
-
-            <div className="form-divider" />
-            <span className="filter-date-label">Acciones</span>
-            <div className="filters-row filters-row-acciones">
-              {noLeidas > 0 && (
-                <button onClick={marcarTodasLeidas} className="btn-edit"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  <CheckCheck size={14} />Marcar todas como leídas
-                </button>
-              )}
-              {notificaciones.some(n => n.leida) && (
-                <button onClick={marcarTodasNoLeidas} className="btn-edit"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  <Mail size={14} />Marcar todas como no leídas
-                </button>
-              )}
-              {notificaciones.length > 0 && (
-                <button onClick={() => setConfirmEliminarTodas(true)}
-                  className="btn-delete"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  <Trash2 size={14} />Eliminar todas
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Empty */}
       {lista.length === 0 && (
-        <div className="empty-state notif-container" style={{ padding: '3rem' }}>
-          <Bell size={36} style={{ opacity: 0.4 }} />
-          <p style={{ fontWeight: 500 }}>
+        <div className="notif-empty">
+          <Bell size={40} />
+          <p className="notif-empty-title">
             {filtro === 'todas' ? 'No tenés notificaciones'
               : filtro === 'nuevas' ? 'No tenés notificaciones sin leer'
               : 'No tenés notificaciones leídas'}
+          </p>
+          <p className="notif-empty-sub">
+            {filtro === 'todas' ? 'Te vamos a avisar acá cuando tengas algo nuevo.' : 'Cambiá el filtro para ver el resto.'}
           </p>
         </div>
       )}
 
       {/* Toolbar + Lista */}
       {lista.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
 
           {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.75rem' }}>
+          <div className="notif-meta-row">
             <span className="text-muted-sm">
               Mostrando {paginaActual * pageSize + 1}–{Math.min((paginaActual + 1) * pageSize, lista.length)} de {lista.length}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="filter-date-label">Por página</span>
-              <select value={pageSize} onChange={e => handlePageSize(Number(e.target.value))}
-                style={{ width: 'auto', fontSize: '0.8125rem', padding: '0.25rem 1.5rem 0.25rem 0.5rem' }}>
+            <label className="notif-pagesize-label">
+              Por página
+              <select value={pageSize} onChange={e => handlePageSize(Number(e.target.value))}>
                 {PAGE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
-            </div>
+            </label>
           </div>
 
           {/* Lista */}
@@ -196,106 +247,122 @@ export default function Notificaciones() {
 
             {/* Header / Bulk bar */}
             {haySeleccion ? (
-              <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                {/* Línea 1: checkbox + contador */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <input type="checkbox" checked={todasSeleccionadas} onChange={toggleTodas}
-                    style={{ width: '16px', height: '16px', flexShrink: 0, accentColor: 'var(--accent-primary)', cursor: 'pointer' }} />
-                  <span style={{ width: '8px', flexShrink: 0 }} />
-                  <span className="text-muted-sm">
-                    <span className="notif-bulk-count">{seleccionadas.size}</span>{' '}
-                    seleccionada{seleccionadas.size !== 1 ? 's' : ''}
-                  </span>
+              <div className="notif-bulkbar notif-bulkbar-active">
+                <div className="notif-bulkbar-row">
+                  <input type="checkbox" checked={todasSeleccionadas} onChange={toggleTodas} />
+                  <span className="notif-bulkbar-count">{seleccionadas.size} seleccionada{seleccionadas.size !== 1 ? 's' : ''}</span>
                 </div>
-                {/* Línea 2: botones de acción */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                <div className="notif-bulkbar-actions">
                   {!selTodasLeidas && (
-                    <button onClick={handleMarcarSeleccionadasLeidas} className="btn-edit"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8125rem' }}>
-                      <MailOpen size={13} />Marcar leídas
+                    <button onClick={handleMarcarSeleccionadasLeidas} className="notif-btn-outline notif-btn-sm">
+                      <MailOpen size={13} />Marcar como leídas
                     </button>
                   )}
                   {!selTodasNoLeidas && (
-                    <button onClick={handleMarcarSeleccionadasNoLeidas} className="btn-edit"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8125rem' }}>
+                    <button onClick={handleMarcarSeleccionadasNoLeidas} className="notif-btn-outline notif-btn-sm">
                       <Mail size={13} />Marcar como no leídas
                     </button>
                   )}
-                  <button onClick={handleEliminarSeleccionadas} className="btn-delete"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8125rem' }}>
+                  <button onClick={handleEliminarSeleccionadas} className="notif-btn-outline notif-btn-sm notif-btn-danger">
                     <Trash2 size={13} />Eliminar
+                  </button>
+                  <button onClick={() => setSeleccionadas(new Set())} className="notif-btn-clear">
+                    <X size={13} />Deseleccionar
                   </button>
                 </div>
               </div>
             ) : (
-              <div style={{ padding: '1.125rem 1rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <input type="checkbox" checked={false} onChange={toggleTodas}
-                  style={{ width: '16px', height: '16px', flexShrink: 0, accentColor: 'var(--accent-primary)', cursor: 'pointer' }} />
-                <span style={{ width: '8px', flexShrink: 0 }} />
-                <span className="text-muted-sm" style={{ flex: 1 }}>Seleccionar todo</span>
-                <span className="text-muted-sm">
-                  {lista.length} notificacion{lista.length !== 1 ? 'es' : ''}
-                </span>
+              <div className="notif-bulkbar">
+                <label className="notif-bulkbar-row" style={{ cursor: 'pointer', flex: 1 }}>
+                  <input type="checkbox" checked={false} onChange={toggleTodas} />
+                  <span className="text-muted-sm">Seleccionar todo</span>
+                </label>
+                <span className="text-muted-sm">{lista.length} notificacion{lista.length !== 1 ? 'es' : ''}</span>
               </div>
             )}
 
-            {/* Items */}
-            {listaVisible.map(n => (
-              <div key={n.id} className="notif-item-v2"
-                style={{ background: seleccionadas.has(n.id) ? 'rgba(208,17,27,0.03)' : undefined }}>
+            {/* Items — agrupados por antigüedad (Hoy/Ayer/Esta semana/
+                Anteriores), un header de sección antes de cada grupo
+                que tenga al menos un ítem. */}
+            {grupos.map(grupo => (
+              <div key={grupo.label}>
+                <div className="notif-group-label">{grupo.label}</div>
+                {grupo.items.map(n => (
+                  <div key={n.id} className="notif-item-v2" style={{ background: seleccionadas.has(n.id) ? 'rgba(208,17,27,0.04)' : undefined }}>
 
-                <input type="checkbox"
-                  className={`notif-checkbox ${seleccionadas.has(n.id) ? 'notif-checkbox-visible' : ''}`}
-                  checked={seleccionadas.has(n.id)}
-                  onChange={e => { e.stopPropagation(); toggleSeleccion(n.id) }}
-                  onClick={e => e.stopPropagation()} />
+                    <input type="checkbox"
+                      className={`notif-checkbox ${seleccionadas.has(n.id) ? 'notif-checkbox-visible' : ''}`}
+                      checked={seleccionadas.has(n.id)}
+                      onChange={e => { e.stopPropagation(); toggleSeleccion(n.id) }}
+                      onClick={e => e.stopPropagation()} />
 
-                <span className={`notif-item-dot ${n.leida ? 'notif-item-dot-leida' : ''}`} />
+                    <span className={`notif-item-dot ${n.leida ? 'notif-item-dot-leida' : ''}`} />
 
-                <div className="notif-item-content" onClick={() => handleClick(n)}>
-                  <p className={`notif-item-msg ${n.leida ? 'notif-item-msg-leida' : 'notif-item-msg-nueva'}`}>
-                    {n.mensaje}
-                  </p>
-                  <span className="notif-item-time">
-                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: es })}
-                  </span>
-                </div>
+                    <div className="notif-item-content" onClick={() => handleClick(n)}>
+                      <p className={`notif-item-msg ${n.leida ? 'notif-item-msg-leida' : 'notif-item-msg-nueva'}`}>
+                        {n.mensaje}
+                      </p>
+                      <span className="notif-item-time">
+                        {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: es })}
+                      </span>
+                    </div>
 
-                <div className="notif-item-actions">
-                  {n.pedido_id && (
-                    <button onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } }) }}
-                      className="notif-action-btn" title="Ver pedido">
-                      <ExternalLink size={13} />
-                    </button>
-                  )}
-                  <button
-                    onClick={e => { e.stopPropagation(); n.leida ? marcarNoLeida(n.id) : marcarLeida(n.id) }}
-                    className="notif-action-btn"
-                    title={n.leida ? 'Marcar como no leída' : 'Marcar como leída'}>
-                    {n.leida ? <Mail size={13} /> : <MailOpen size={13} />}
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); eliminar(n.id) }}
-                    className="notif-action-btn notif-action-btn-danger" title="Eliminar">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                    {/* Un solo botón "⋮" en vez de 3 acciones siempre
+                        visibles — el menú se abre/cierra con el mismo
+                        ref callback en los N ítems + el del header: el
+                        ref solo se "enchufa" al nodo del menú que está
+                        realmente abierto en cada momento (a lo sumo
+                        uno), así un solo mousedown listener alcanza
+                        para cerrar cualquiera de todos ellos. */}
+                    <div
+                      className="notif-item-actions"
+                      ref={menuItemAbierto === n.id ? menuRef : null}
+                      style={menuItemAbierto === n.id ? { opacity: 1 } : undefined}
+                    >
+                      <button
+                        onClick={e => { e.stopPropagation(); setMenuItemAbierto(v => v === n.id ? null : n.id); setMenuHeaderOpen(false) }}
+                        className="notif-btn-icon"
+                        title="Más acciones"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                      {menuItemAbierto === n.id && (
+                        <div className="notif-dropdown" onClick={e => e.stopPropagation()}>
+                          {n.pedido_id && (
+                            <button onClick={() => { navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } }); setMenuItemAbierto(null) }}>
+                              <ExternalLink size={15} />Ir al pedido
+                            </button>
+                          )}
+                          <button onClick={() => { n.leida ? marcarNoLeida(n.id) : marcarLeida(n.id); setMenuItemAbierto(null) }}>
+                            {n.leida ? <Mail size={15} /> : <MailOpen size={15} />}
+                            {n.leida ? 'Marcar como no leída' : 'Marcar como leída'}
+                          </button>
+                          <div className="notif-dropdown-sep" />
+                          <button onClick={() => { eliminar(n.id); setMenuItemAbierto(null) }} className="notif-dropdown-danger">
+                            <Trash2 size={15} />Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
 
             {/* Paginador */}
             {totalPaginas > 1 && (
               <div className="pagination" style={{ padding: '0.75rem' }}>
-                <button disabled={paginaActual === 0} onClick={() => setPagina(p => p - 1)}
+                <button disabled={paginaActual === 0} onClick={() => { setPagina(p => p - 1); setMenuItemAbierto(null) }}
                   className="btn-page btn-page-nav" style={{ opacity: paginaActual === 0 ? 0.4 : 1 }}>
                   <ChevronLeft size={14} />
                 </button>
                 {Array.from({ length: totalPaginas }, (_, i) => (
-                  <button key={i} onClick={() => setPagina(i)}
+                  <button key={i} onClick={() => { setPagina(i); setMenuItemAbierto(null) }}
                     className={`btn-page ${paginaActual === i ? 'btn-page-active' : ''}`}>
                     {i + 1}
                   </button>
                 ))}
-                <button disabled={paginaActual >= totalPaginas - 1} onClick={() => setPagina(p => p + 1)}
+                <button disabled={paginaActual >= totalPaginas - 1} onClick={() => { setPagina(p => p + 1); setMenuItemAbierto(null) }}
                   className="btn-page btn-page-nav" style={{ opacity: paginaActual >= totalPaginas - 1 ? 0.4 : 1 }}>
                   <ChevronRight size={14} />
                 </button>
