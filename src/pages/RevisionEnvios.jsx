@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { REVISION_CONFIG } from '@/lib/revision/config'
 import {
   compararCampos, validateCsvHeaders, leerMuestraDeArchivo,
 } from '@/lib/revision-envios/comparar'
-import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2 } from 'lucide-react'
+import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
+import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft } from 'lucide-react'
 import '@/styles/RevisionEnvios.css'
 
 // Hace que un textarea crezca con su contenido en vez de quedar fijo en
@@ -108,6 +109,7 @@ function TablaMuestra({ headers, filas, avisos }) {
 
 export default function RevisionEnvios() {
   const { state: navState } = useLocation()
+  const navigate = useNavigate()
   const [modo, setModo] = useState('url')
   const [html, setHtml] = useState('')
   const [url, setUrl] = useState(navState?.url ?? '')
@@ -120,6 +122,7 @@ export default function RevisionEnvios() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
   const [resultado, setResultado] = useState(null)
+  const [progreso, setProgreso] = useState(0)
   const fileInputRef = useRef(null)
 
   const avisosHeader = headerRaw.trim() ? validateCsvHeaders(headerRaw) : []
@@ -164,9 +167,15 @@ export default function RevisionEnvios() {
       } catch { setUrlError('La URL ingresada no es válida'); return }
     }
 
-    setUrlError(''); setError(''); setCargando(true); setResultado(null)
+    setUrlError(''); setError(''); setCargando(true); setResultado(null); setProgreso(0)
     try {
-      const htmlAAnalizar = modo === 'html' ? html : await traerHtmlDeUrl(url)
+      // Animación y fetch en paralelo — el usuario ve avance mientras
+      // se espera el HTML real, en vez de quedarse con el botón en
+      // "Analizando…" sin ninguna señal de que algo está pasando.
+      const [htmlAAnalizar] = await Promise.all([
+        modo === 'html' ? Promise.resolve(html) : traerHtmlDeUrl(url),
+        animarProgreso(setProgreso)
+      ])
       setResultado(compararCampos(headerRaw, htmlAAnalizar))
     } catch (err) {
       setError(err.message || 'No se pudo completar el análisis.')
@@ -174,8 +183,40 @@ export default function RevisionEnvios() {
     setCargando(false)
   }
 
+  // Auto-disparo del análisis cuando se llega desde el deep-link de
+  // "Base de datos" en el detalle de un pedido (con headerLine + url ya
+  // precargados vía navState) — no tiene sentido obligar a apretar
+  // "Analizar" si ya tenemos todo lo necesario, el usuario solo quiere
+  // ver el resultado. autoRunDone evita que se dispare más de una vez
+  // (ej. si el componente re-renderiza por otra razón) y evita pisar un
+  // análisis manual posterior si el usuario edita y vuelve a analizar.
+  const autoRunDone = useRef(false)
+  useEffect(() => {
+    if (autoRunDone.current) return
+    autoRunDone.current = true
+    if (navState?.url && navState?.headerLine) {
+      handleAnalizar()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="page-root re2-root">
+
+      {/* Solo aparece si se llegó acá desde el riel/acordeón de un
+          pedido puntual (vía navState.volverA) — vuelve directo a ese
+          pedido en vez de obligar a navegar por el menú. Mismo patrón
+          de state que ya usa el resto de la app (PedidoCard, Calendario,
+          Notificaciones) para "Volver a…", no hay localStorage de por
+          medio. Si se llegó por cualquier otro camino, no se muestra. */}
+      {navState?.volverA && (
+        <button
+          onClick={() => navigate(`/app/pedidos/${navState.volverA.pedidoId}`)}
+          className="btn-back"
+        >
+          <ArrowLeft size={16} /><span>Volver al pedido</span>
+        </button>
+      )}
 
       <div>
         <h1 className="page-title">Revisión de envíos</h1>
@@ -287,6 +328,29 @@ export default function RevisionEnvios() {
             </button>
           )}
         </div>
+
+        {/* Progress bar — mismo lenguaje visual que "Revisión de BBDD"
+            (spinner + label + % grande + barra en rojo), pero con
+            clases propias re2-* — cada herramienta tiene su CSS
+            aislado, no se importa RevisionBase.css desde acá. Antes,
+            mientras se esperaba el fetch del HTML, el botón solo decía
+            "Analizando…" sin ninguna señal de avance. */}
+        {cargando && (
+          <div className="re2-processing">
+            <div className="re2-processing-head">
+              <div className="re2-spinner" />
+              <div className="re2-processing-filename">
+                {modo === 'html' ? 'Analizando HTML pegado' : (url || 'Analizando pieza')}
+              </div>
+            </div>
+            <div className="re2-processing-top">
+              <div className="re2-processing-label">Comparando campos…</div>
+              <div className="re2-processing-pct">{progreso}%</div>
+            </div>
+            <div className="re2-progress-track"><div className="re2-progress-fill" style={{ width: `${progreso}%` }} /></div>
+            <div className="re2-processing-note">Comparando contra el encabezado de la base — no se guarda nada.</div>
+          </div>
+        )}
 
         {resultado && (
           <div className="re2-resultado">

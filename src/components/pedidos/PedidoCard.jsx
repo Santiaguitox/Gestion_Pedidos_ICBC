@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/Badge'
 import { PRIORIDADES } from '@/lib/constants'
-import { Calendar, ExternalLink, Copy, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react'
+import { Calendar, ExternalLink, Copy, Check, ChevronDown, ChevronUp, Tag, Database } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -57,6 +57,67 @@ export function peorRevisionDePedido(entregables) {
   )
 }
 
+// Mismo patrón que peorRevisionDePedido, pero para Revisión de envíos
+// (compatibilidad base↔pieza, ver BaseDatosSection.jsx) — el peor
+// resultado entre todas las bases cargadas en el pedido. Jerarquía:
+// 'miss' (campos realmente faltantes, problema de compatibilidad real)
+// > 'error_proxy' (no se pudo verificar, falla técnica, no implica que
+// esté mal) > 'ok'. Bases sin resultado_tipo (nunca verificadas) se
+// ignoran acá — no hay nada que mostrar todavía, no es lo mismo que un
+// error.
+const ORDEN_SEVERIDAD_BASE = { miss: 0, error_proxy: 1, ok: 2 }
+
+export function peorBaseDePedido(pedidoBase) {
+  const conResultado = (pedidoBase ?? []).filter(b => b.resultado_tipo != null)
+  if (conResultado.length === 0) return null
+  return conResultado.reduce((peor, b) =>
+    ORDEN_SEVERIDAD_BASE[b.resultado_tipo] < ORDEN_SEVERIDAD_BASE[peor.resultado_tipo] ? b : peor
+  )
+}
+
+// Mapea resultado_tipo de pedido_base a la misma escala de color que ya
+// usa Revisión de emails (ok/advertencia/error) — error_proxy es una
+// falla técnica al verificar (no necesariamente la base está mal), por
+// eso es "advertencia" (ámbar) y no "error" (rojo); miss es un problema
+// de compatibilidad real, ese sí es "error".
+const SEVERIDAD_VISUAL_BASE = { ok: 'ok', error_proxy: 'advertencia', miss: 'error' }
+
+// Pill compacto del resultado de Revisión de envíos para una tarjeta de
+// pedido — mismo patrón visual que el badge de Revisión de emails
+// (entregable-revision-badge-compacto), reusado tal cual con un ícono
+// de base de datos en vez del número de pruebas, porque "compatible /
+// no compatible" no tiene un ratio limpio como "8/10 pruebas". Click
+// navega a Revisión de envíos con header+url precargados — mismo
+// deep-link que ya usa el riel de info de PedidoDetalle.
+function PillBaseCompacto({ pedidoBase, entregables, onClick }) {
+  const peorBase = peorBaseDePedido(pedidoBase)
+  if (!peorBase) return null
+  const severidad = SEVERIDAD_VISUAL_BASE[peorBase.resultado_tipo]
+  const texto = peorBase.resultado_tipo === 'ok' ? 'Compatible'
+    : peorBase.resultado_tipo === 'error_proxy' ? 'No verificado'
+    : `${peorBase.resultado_miss_count ?? '?'} falta${peorBase.resultado_miss_count === 1 ? '' : 'n'}`
+
+  function irARevision(e) {
+    e.stopPropagation()
+    const pieza = peorBase.entregable_id
+      ? entregables.find(en => en.id === peorBase.entregable_id)
+      : entregables.find(en => en.link_online)
+    if (!pieza?.link_online) return
+    onClick(peorBase.header_line, pieza.link_online)
+  }
+
+  return (
+    <button
+      onClick={irARevision}
+      className={`entregable-revision-badge-compacto entregable-revision-${severidad}`}
+      title="Revisión de envíos"
+    >
+      <Database size={10} style={{ marginRight: '3px' }} />
+      {texto}
+    </button>
+  )
+}
+
 export function CopyBtn({ text }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -89,7 +150,32 @@ function CopyAllBtnInline({ entregables }) {
   )
 }
 
-export function EntregablesCard({ entregables }) {
+// Para una pieza puntual, busca el resultado de Revisión de envíos que
+// le corresponde — prioriza una base asignada DIRECTAMENTE a esa pieza
+// (entregable_id === ent.id) sobre una base "para todas las piezas"
+// (entregable_id null), igual prioridad que ya usa BaseDatosSection al
+// resolver qué evaluar. Devuelve { base, evaluacion } o null si no hay
+// ningún resultado aplicable a esta pieza todavía.
+function resultadoBaseParaPieza(pedidoBase, entregableId) {
+  const bases = pedidoBase ?? []
+  const directa = bases.find(b => b.entregable_id === entregableId && b.resultado_tipo != null)
+  const general = bases.find(b => b.entregable_id == null && b.resultado_tipo != null)
+  const base = directa ?? general
+  if (!base) return null
+  // Busca la evaluación de ESTA pieza puntual dentro del detalle — si
+  // no está (la base se verificó pero no incluyó esta pieza, por
+  // ejemplo si en ese momento no tenía link todavía), no hay nada que
+  // mostrar para ella. No usar un fallback al primer elemento del
+  // array: eso mostraría el resultado de OTRA pieza como si fuera de
+  // esta, que es peor que no mostrar nada.
+  const evaluacion = Array.isArray(base.resultado_detalle)
+    ? base.resultado_detalle.find(e => e.entregable_id === entregableId)
+    : null
+  if (!evaluacion) return null
+  return { base, evaluacion }
+}
+
+export function EntregablesCard({ entregables, pedidoBase }) {
   const navigate = useNavigate()
   const [expandido, setExpandido] = useState(false)
   if (!entregables?.length) return null
@@ -151,6 +237,25 @@ export function EntregablesCard({ entregables }) {
                 </button>
               )
             )}
+            {(() => {
+              const r = resultadoBaseParaPieza(pedidoBase, ent.id)
+              if (!r?.evaluacion) return null
+              const severidad = SEVERIDAD_VISUAL_BASE[r.evaluacion.tipo === 'error_proxy' ? 'error_proxy' : (r.evaluacion.miss?.length ? 'miss' : 'ok')]
+              const texto = r.evaluacion.tipo === 'error_proxy'
+                ? 'No se pudo verificar la base'
+                : r.evaluacion.miss?.length
+                  ? `${r.evaluacion.miss.length} campo${r.evaluacion.miss.length !== 1 ? 's' : ''} faltante${r.evaluacion.miss.length !== 1 ? 's' : ''} en la base`
+                  : 'Compatible con la base'
+              return (
+                <button
+                  onClick={() => navigate('/app/revision-envios', { state: { headerLine: r.base.header_line, url: ent.link_online, volverA: { pedidoId: r.base.pedido_id } } })}
+                  className={`entregable-revision-resumen entregable-revision-${severidad}`}
+                >
+                  <Database size={11} style={{ verticalAlign: '-1px' }} />
+                  {texto}
+                </button>
+              )
+            })()}
           </div>
         ))}
       </div>
@@ -173,6 +278,19 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
     ? format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })
     : null
   const peorRevision = peorRevisionDePedido(pedido.entregable)
+  // pedido.entregable puede venir como array (caso normal) o como
+  // objeto único (cuando Supabase/la RPC devuelve una sola fila para
+  // la relación) — normalizado acá una sola vez, igual criterio que ya
+  // usa PedidoCardFull más abajo.
+  const entregablesNorm = Array.isArray(pedido.entregable)
+    ? pedido.entregable
+    : pedido.entregable ? [pedido.entregable] : []
+  // Lleva a Revisión de envíos con el header+url ya precargados, mismo
+  // deep-link que usa el riel de info en PedidoDetalle — auto-corre el
+  // análisis sin esperar un click más.
+  function irARevisionEnvios(headerLine, url) {
+    navigate('/app/revision-envios', { state: { headerLine, url, volverA: { pedidoId: pedido.id } } })
+  }
   // Acordeón mobile: arranca colapsado (tipo y prioridad son campos
   // obligatorios al crear un pedido, así que el cuerpo expandido nunca
   // queda vacío — siempre hay algo que mostrar al abrirlo).
@@ -234,6 +352,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </button>
             )
           )}
+          <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
           <span className="pedido-meta-item">
             <Calendar size={12} />
             {fechaTexto ?? 'Sin fecha'}
@@ -330,6 +449,15 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </div>
             )}
 
+            {peorBaseDePedido(pedido.pedido_base) && (
+              <div className="pedido-compact-mobile-seccion">
+                <span className="pedido-compact-fila-label">Envíos:</span>
+                <div className="pedido-compact-mobile-pills">
+                  <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
+                </div>
+              </div>
+            )}
+
             <button onClick={irAlDetalle} className="pedido-compact-mobile-ver-pedido">
               <ExternalLink size={13} />Ver pedido
             </button>
@@ -371,7 +499,7 @@ export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], esta
       </div>
 
       <h3 className="pedido-title">{pedido.asunto}</h3>
-      <EntregablesCard entregables={entregables} />
+      <EntregablesCard entregables={entregables} pedidoBase={pedido.pedido_base} />
 
       {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
 

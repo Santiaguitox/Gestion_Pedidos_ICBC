@@ -211,7 +211,7 @@ export default function PedidoDetalle() {
           title="Detalles del pedido" defaultOpen={false}
         >
           <div className="det-info-mobile-grid">
-            <DetalleInfoBloques pedido={pedido} instancias={instancias} />
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} />
           </div>
         </DetalleAcordeon>
       )}
@@ -247,11 +247,22 @@ export default function PedidoDetalle() {
           </DetalleAcordeon>
 
           <DetalleAcordeon
+            id="base-datos-acordeon"
             icon={<Database size={18} />} iconColor="#10B981" iconBg="rgba(16,185,129,0.1)"
             title="Base de datos"
             badge={bases.length > 0 ? bases.length : null}
             badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
-            defaultOpen={bases.length > 0 || canWrite}
+            // Abierto si ya hay bases cargadas (para ver el resultado),
+            // o si el usuario puede escribir y ya hay al menos una
+            // pieza (ahí cargar una base tiene sentido inmediato). No
+            // se exige tener pieza para PODER cargar una base — ese es
+            // un flujo válido (suele llegar la base desde el primer
+            // mail del cliente, antes de tener el HTML armado) — solo
+            // se exige para que el acordeón arranque ABIERTO por
+            // default. Si las DOS (bases y piezas) están vacías, el
+            // pedido recién se está armando: arranca cerrado para no
+            // ocupar espacio con una sección sin nada todavía que hacer.
+            defaultOpen={bases.length > 0 || (canWrite && entregables.length > 0)}
           >
             <BaseDatosSection
               pedidoId={id}
@@ -276,7 +287,7 @@ export default function PedidoDetalle() {
             mobile esta misma info ya se mostró arriba como acordeón. */}
         {!isMobile && (
           <div className="det-info-rail">
-            <DetalleInfoBloques pedido={pedido} instancias={instancias} />
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} />
           </div>
         )}
       </div>

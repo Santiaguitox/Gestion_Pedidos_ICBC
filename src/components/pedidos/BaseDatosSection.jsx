@@ -1,9 +1,13 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { leerMuestraDeArchivo, compararCampos } from '@/lib/revision-envios/comparar'
+import { leerMuestraDeArchivo, compararCampos, validateCsvHeaders } from '@/lib/revision-envios/comparar'
+import { filtrarSoloUltimaVersion } from '@/lib/revision-envios/versionesPieza'
+import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
 import { REVISION_CONFIG } from '@/lib/revision/config'
-import { Upload, X, Database, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, X, Database, CheckCircle2, AlertCircle, AlertTriangle, Loader2, RefreshCw, ChevronDown } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 // Trae el HTML de una pieza via proxy — mismo criterio que RevisionEnvios.
 // Si el proxy no está disponible (local sin vercel dev) lanza un error
@@ -16,44 +20,30 @@ async function traerHtml(url) {
   return res.text()
 }
 
-// Simula progreso visual en ~1.5s independientemente de cuánto tarde
-// la operación real — garantiza que el usuario vea que se está trabajando.
-// Devuelve una Promise que resuelve cuando termina la animación.
-function animarProgreso(onProgreso) {
-  return new Promise(resolve => {
-    const pasos = [
-      { pct: 15, ms: 150 },
-      { pct: 35, ms: 350 },
-      { pct: 60, ms: 650 },
-      { pct: 80, ms: 950 },
-      { pct: 95, ms: 1200 },
-      { pct: 100, ms: 1500 },
-    ]
-    pasos.forEach(({ pct, ms }) => {
-      setTimeout(() => {
-        onProgreso(pct)
-        if (pct === 100) setTimeout(resolve, 150)
-      }, ms)
-    })
-  })
-}
-
-// Corre la comparación base↔merge tags para una pieza dada.
-// Trae el HTML via proxy y compara con el header_line de la base.
-async function verificarCompatibilidad(headerLine, linkOnline) {
+// Corre la comparación base↔merge tags para UNA pieza. Devuelve el
+// resultado "crudo" (incluye ok/miss/unused) más metadata de la pieza,
+// para que quien llama pueda armar tanto el detalle por pieza como el
+// agregado. tipo 'error_proxy' si el HTML no se pudo traer.
+async function verificarPieza(headerLine, pieza) {
   try {
-    const html = await traerHtml(linkOnline)
-    return { tipo: 'ok', ...compararCampos(headerLine, html) }
+    const html = await traerHtml(pieza.link_online)
+    const cmp = compararCampos(headerLine, html)
+    return { entregable_id: pieza.id, nombre_pieza: pieza.nombre_pieza || null, tipo: 'ok', miss: cmp.miss }
   } catch (e) {
-    return { tipo: 'error_proxy' }
+    return { entregable_id: pieza.id, nombre_pieza: pieza.nombre_pieza || null, tipo: 'error_proxy', miss: [] }
   }
 }
 
-function CompatPill({ resultado, onClick }) {
+// Pill de compatibilidad para UNA evaluación (ya sea la única pieza de
+// una base asignada, o una de las N piezas de una base "para todas").
+// onVerDetalle expande/colapsa la lista de campos faltantes in-place;
+// onIrARevision navega a la herramienta completa para más contexto.
+function CompatPill({ resultado, expandido, onToggleDetalle, onIrARevision }) {
   if (!resultado) return null
+
   if (resultado.tipo === 'error_proxy') {
     return (
-      <button className="base-compat-pill base-compat-unknown" onClick={onClick} title="Verificar manualmente en Revisión de envíos">
+      <button className="base-compat-pill base-compat-unknown" onClick={onIrARevision} title="Verificar manualmente en Revisión de envíos">
         No se pudo verificar
       </button>
     )
@@ -67,30 +57,89 @@ function CompatPill({ resultado, onClick }) {
     )
   }
   return (
-    <button className="base-compat-pill base-compat-error" onClick={onClick} title="Ver detalle en Revisión de envíos">
+    <button className="base-compat-pill base-compat-error" onClick={onToggleDetalle} title="Ver campos faltantes">
       <AlertCircle size={12} />
-      {resultado.miss.length === 1
-        ? '1 campo faltante'
-        : `${resultado.miss.length} campos faltantes`}
+      {resultado.miss.length === 1 ? '1 campo faltante' : `${resultado.miss.length} campos faltantes`}
+      <ChevronDown size={11} className={`base-compat-chevron ${expandido ? 'base-compat-chevron-open' : ''}`} />
     </button>
+  )
+}
+
+// Lista de campos faltantes, desplegada debajo del pill al expandir.
+// Separada del pill para poder reusarla tanto en el caso "una pieza"
+// como en cada fila del caso "todas las piezas".
+function DetalleMiss({ miss, onIrARevision }) {
+  return (
+    <div className="base-miss-detalle">
+      <p className="base-miss-detalle-label">Faltan en la base:</p>
+      <div className="base-miss-detalle-lista">
+        {miss.map(campo => (
+          <span key={campo} className="base-miss-chip">{campo}</span>
+        ))}
+      </div>
+      <button className="base-miss-ver-revision" onClick={onIrARevision}>
+        Ver detalle completo en Revisión de envíos
+      </button>
+    </div>
+  )
+}
+
+// Avisos estructurales del propio archivo de base (caracteres inválidos,
+// falta de columna Email, columnas duplicadas) — independientes de si
+// hay o no una pieza para comparar. Se corren una sola vez al subir el
+// archivo y se guardan junto a la base, no se recalculan en cada render.
+function AvisosEstructura({ avisos }) {
+  if (!avisos?.length) return null
+  return (
+    <div className="base-avisos-estructura">
+      {avisos.map((a, i) => (
+        <div key={i} className={`base-aviso-row base-aviso-${a.severidad}`}>
+          <AlertTriangle size={12} />
+          <span>
+            {a.tipo === 'falta_email' && 'No se encontró una columna exacta "Email"'}
+            {a.tipo === 'duplicado' && `Columnas duplicadas: ${a.campos.join(', ')}`}
+            {a.tipo === 'caracteres_invalidos' && `"${a.campo}" tiene caracteres no recomendados`}
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
 function resultadoDesdeSupabase(base) {
   if (!base.resultado_tipo) return null
-  if (base.resultado_tipo === 'error_proxy') return { tipo: 'error_proxy' }
-  if (base.resultado_tipo === 'ok') return { tipo: 'ok', miss: [] }
-  return { tipo: 'ok', miss: Array(base.resultado_miss_count ?? 1).fill('?') }
+  if (Array.isArray(base.resultado_detalle) && base.resultado_detalle.length) {
+    return { porPieza: base.resultado_detalle }
+  }
+  // Filas viejas, de antes de resultado_detalle — degradar a un solo
+  // resultado agregado sin detalle de campos (no tenemos los nombres).
+  if (base.resultado_tipo === 'error_proxy') return { porPieza: [{ tipo: 'error_proxy', miss: [] }] }
+  if (base.resultado_tipo === 'ok') return { porPieza: [{ tipo: 'ok', miss: [] }] }
+  return { porPieza: [{ tipo: 'ok', miss: Array(base.resultado_miss_count ?? 1).fill('?') }] }
 }
 
-function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, verificando, progreso, resultado }) {
+function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, onVerificar, verificando, progreso, resultado }) {
   const navigate = useNavigate()
   const resultadoMostrar = resultado ?? resultadoDesdeSupabase(base)
+  const porPieza = resultadoMostrar?.porPieza ?? []
+  // Los avisos estructurales (falta Email, duplicados, caracteres raros)
+  // dependen únicamente de header_line, que sí persiste en Supabase —
+  // se recalculan siempre acá en vez de depender de un campo en memoria,
+  // así sobreviven a un refresh de página o a que otro usuario abra el
+  // pedido. Es barato: header_line es una sola línea de texto.
+  const avisosEstructura = validateCsvHeaders(base.header_line)
+  // Clave de expansión: índice dentro de porPieza (un solo pill cuando
+  // la base aplica a una pieza, varios cuando aplica a todas).
+  const [expandidoIdx, setExpandidoIdx] = useState(null)
 
-  function irARevision() {
-    const pieza = entregables.find(e =>
-      base.entregable_id ? e.id === base.entregable_id : e.link_online
-    )
+  function piezaDe(entregableId) {
+    return entregables.find(e => e.id === entregableId)
+  }
+
+  function irARevision(entregableId) {
+    const pieza = entregableId
+      ? piezaDe(entregableId)
+      : entregables.find(e => e.link_online)
     if (!pieza?.link_online) return
     navigate('/app/revision-envios', {
       state: { headerLine: base.header_line, url: pieza.link_online }
@@ -106,7 +155,13 @@ function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, verifica
         </div>
         <div className="base-item-actions">
           {!verificando && resultadoMostrar && (
-            <CompatPill resultado={resultadoMostrar} onClick={irARevision} />
+            <button
+              onClick={() => onVerificar(base)}
+              className="base-reverificar-btn"
+              title="Volver a verificar compatibilidad"
+            >
+              <RefreshCw size={13} />
+            </button>
           )}
           {canWrite && (
             <button onClick={() => onEliminar(base.id)} className="base-quitar-btn" title="Quitar base">
@@ -115,6 +170,8 @@ function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, verifica
           )}
         </div>
       </div>
+
+      <AvisosEstructura avisos={avisosEstructura} />
 
       {/* Dropdown de asignación — solo si hay más de una pieza */}
       {canWrite && entregables.length > 1 && (
@@ -133,6 +190,68 @@ function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, verifica
             ))}
           </select>
         </div>
+      )}
+
+      {/* Aviso de versiones anteriores excluidas — solo aparece justo
+          después de correr la verificación automática "para todas las
+          piezas", cuando había más de una versión (_v1/_v2/etc) de la
+          misma pieza y se evaluó solo la última. No se persiste: es
+          informativo sobre esa corrida puntual, se recalcula cada vez
+          que se vuelve a verificar. No bloquea nada — el dropdown
+          "Aplica a" sigue permitiendo elegir cualquier versión a mano. */}
+      {!verificando && resultadoMostrar?.excluidasPorVersion?.length > 0 && (
+        <p className="base-versiones-excluidas-aviso">
+          Se excluyeron {resultadoMostrar.excluidasPorVersion.length === 1 ? '1 versión anterior' : `${resultadoMostrar.excluidasPorVersion.length} versiones anteriores`} de la verificación automática ({resultadoMostrar.excluidasPorVersion.map(p => p.nombre_pieza).join(', ')}) — para verificar una versión específica, asignala desde "Aplica a".
+        </p>
+      )}
+
+      {/* Resultados — uno por pieza evaluada. Si la base aplica a una
+          sola pieza, porPieza tiene un solo elemento y se ve igual que
+          antes; si aplica a "todas", cada pieza tiene su propio pill. */}
+      {!verificando && porPieza.length > 0 && (
+        <div className="base-resultados-lista">
+          {porPieza.map((r, idx) => {
+            const pieza = r.entregable_id ? piezaDe(r.entregable_id) : null
+            const mostrarNombrePieza = porPieza.length > 1
+            return (
+              <div key={r.entregable_id ?? idx} className="base-resultado-row">
+                {mostrarNombrePieza && (
+                  <span className="base-resultado-pieza-nombre">
+                    {pieza?.nombre_pieza || pieza?.link_online || r.nombre_pieza || 'Pieza'}
+                  </span>
+                )}
+                <CompatPill
+                  resultado={r}
+                  expandido={expandidoIdx === idx}
+                  onToggleDetalle={() => setExpandidoIdx(prev => prev === idx ? null : idx)}
+                  onIrARevision={() => irARevision(r.entregable_id)}
+                />
+                {expandidoIdx === idx && r.miss?.length > 0 && (
+                  <DetalleMiss miss={r.miss} onIrARevision={() => irARevision(r.entregable_id)} />
+                )}
+              </div>
+            )
+          })}
+          {base.verificado_at && (
+            <p className="base-verificado-fecha">
+              Verificado {formatDistanceToNow(new Date(base.verificado_at), { locale: es, addSuffix: true })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Sin pieza todavía — es un flujo legítimo (la base suele llegar
+          antes de tener el HTML armado), así que no es un error ni algo
+          para bloquear: se puede cargar la base igual. Pero sin ninguna
+          pieza con link no hay nada contra qué comparar, así que ni el
+          dropdown "Aplica a" ni la verificación automática se disparan
+          (ver entregables.length > 1 más arriba y el chequeo de
+          link_online en cargarArchivo/asignarPieza) — este aviso explica
+          por qué, para que no parezca que la base "no hizo nada". */}
+      {!verificando && porPieza.length === 0 && entregables.filter(e => e.link_online).length === 0 && (
+        <p className="base-sin-pieza-aviso">
+          Todavía no hay ninguna pieza cargada con link — apenas se cargue una, vas a poder verificar la compatibilidad.
+        </p>
       )}
 
       {/* Progress bar — abajo de todo, mismo patrón visual que piezas entregables */}
@@ -159,13 +278,29 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
   const [error, setError] = useState('')
   const fileInputRef = useRef(null)
 
-  // Estado de verificación por base: { [baseId]: { progreso, resultado } }
+  // Estado de verificación por base: { [baseId]: { progreso, resultado, terminado } }
   const [verificaciones, setVerificaciones] = useState({})
 
   async function correrVerificacion(base, entregablesActuales) {
-    const piezasAEvaluar = base.entregable_id
-      ? entregablesActuales.filter(e => e.id === base.entregable_id && e.link_online)
-      : entregablesActuales.filter(e => e.link_online)
+    let piezasAEvaluar
+    let excluidasPorVersion = []
+
+    if (base.entregable_id) {
+      // Asignación manual a una pieza específica — nunca se filtra por
+      // versión acá. Si el usuario eligió a propósito una _v1 vieja
+      // desde el dropdown "Aplica a", tiene que poder verificarla igual.
+      piezasAEvaluar = entregablesActuales.filter(e => e.id === base.entregable_id && e.link_online)
+    } else {
+      // Modo automático ("Todas las piezas") — si hay varias versiones
+      // de la misma pieza (mismo nombre base + sufijo _v1/_v2/etc), solo
+      // tiene sentido verificar la última: las anteriores ya no se van
+      // a enviar, comparar contra ellas es ruido. Las piezas sin patrón
+      // de versión no se tocan.
+      const conLink = entregablesActuales.filter(e => e.link_online)
+      const { vigentes, excluidas } = filtrarSoloUltimaVersion(conLink)
+      piezasAEvaluar = vigentes
+      excluidasPorVersion = excluidas
+    }
 
     if (!piezasAEvaluar.length) return
 
@@ -175,15 +310,11 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
     }))
 
     // Animación y fetch en paralelo — mostramos progreso animado mientras
-    // esperamos el HTML, y el resultado aparece cuando termina lo que tarde más
-    const [resultado] = await Promise.all([
-      Promise.all(piezasAEvaluar.map(p => verificarCompatibilidad(base.header_line, p.link_online)))
-        .then(resultados => {
-          // Si alguno falló por proxy, devolver ese estado
-          if (resultados.some(r => r.tipo === 'error_proxy')) return { tipo: 'error_proxy' }
-          const todosLosMiss = resultados.flatMap(r => r.miss)
-          return { tipo: 'ok', ...resultados[0], miss: todosLosMiss }
-        }),
+    // esperamos el HTML, y el resultado aparece cuando termina lo que tarde más.
+    // Cada pieza se evalúa por separado (porPieza), nunca se mezclan los
+    // resultados de piezas distintas en un solo conteo.
+    const [porPieza] = await Promise.all([
+      Promise.all(piezasAEvaluar.map(p => verificarPieza(base.header_line, p))),
       animarProgreso(pct =>
         setVerificaciones(prev => ({
           ...prev,
@@ -192,22 +323,27 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
       )
     ])
 
-    const resultadoFinal = resultado ?? { tipo: 'error_proxy' }
+    const resultadoFinal = { porPieza, excluidasPorVersion }
+    const verificadoAt = new Date().toISOString()
 
-    // Persistir resultado en Supabase para que sobreviva entre sesiones
+    // Para compatibilidad con el conteo agregado viejo (resultado_tipo,
+    // resultado_miss_count), seguimos derivando algo razonable de
+    // porPieza, pero la fuente de verdad pasa a ser resultado_detalle.
+    const huboError = porPieza.some(r => r.tipo === 'error_proxy')
+    const missTotal = porPieza.flatMap(r => r.miss)
+
     await supabase.from('pedido_base').update({
-      resultado_tipo: resultadoFinal.tipo === 'ok' && resultadoFinal.miss.length === 0
-        ? 'ok'
-        : resultadoFinal.tipo === 'error_proxy'
-          ? 'error_proxy'
-          : 'miss',
-      resultado_miss_count: resultadoFinal.miss?.length ?? null,
+      resultado_tipo: huboError ? 'error_proxy' : (missTotal.length === 0 ? 'ok' : 'miss'),
+      resultado_miss_count: missTotal.length,
+      resultado_detalle: porPieza,
+      verificado_at: verificadoAt,
     }).eq('id', base.id)
 
     setVerificaciones(prev => ({
       ...prev,
       [base.id]: { progreso: 100, resultado: resultadoFinal, terminado: true }
     }))
+    onUpdate()
   }
 
   async function cargarArchivo(file) {
@@ -244,8 +380,10 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
     setCargando(false)
     setProgresoSubida(0)
 
-    // Si hay exactamente una pieza con link, verificar automáticamente
-    if (insertedBase && entregables.filter(e => e.link_online).length === 1) {
+    // Si hay al menos una pieza con link, verificar automáticamente
+    // (antes solo lo hacía si había exactamente una; ahora corre
+    // siempre que haya algo para evaluar, mostrando un pill por pieza).
+    if (insertedBase && entregables.filter(e => e.link_online).length > 0) {
       correrVerificacion(insertedBase, entregables)
     }
   }
@@ -280,6 +418,7 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
             canWrite={canWrite}
             onEliminar={eliminarBase}
             onAsignar={asignarPieza}
+            onVerificar={b => correrVerificacion(b, entregables)}
             verificando={verif ? !verif.terminado : false}
             progreso={verif?.progreso ?? 0}
             resultado={verif?.resultado ?? null}

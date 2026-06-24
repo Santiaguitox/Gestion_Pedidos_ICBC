@@ -5,10 +5,10 @@ import { ChevronDown } from 'lucide-react'
 // secciones de Detalle de Pedido (Detalles del pedido, Subtareas,
 // Piezas, Historial). Reemplaza al <Section> genérico solo en esta
 // pantalla; Section.jsx queda intacto por si se reusa en otro lado.
-export function DetalleAcordeon({ icon, iconColor, iconBg, title, badge, badgeColor, badgeBg, defaultOpen = true, children }) {
+export function DetalleAcordeon({ id, icon, iconColor, iconBg, title, badge, badgeColor, badgeBg, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="det-acc">
+    <div id={id} className="det-acc">
       <button onClick={() => setOpen(v => !v)} className="det-acc-header">
         <span className="det-acc-icon" style={{ color: iconColor, background: iconBg }}>{icon}</span>
         <span className="det-acc-title">{title}</span>

@@ -237,6 +237,67 @@
   gap: 10px;
 }
 
+/* ─── Progress bar de análisis — mismo lenguaje visual que
+   "Revisión de BBDD" (rb-processing en RevisionBase.css), clases
+   propias re2-* porque cada herramienta mantiene su CSS aislado. ─── */
+.re2-processing {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 30px 28px;
+  margin-top: 0.75rem;
+}
+.re2-processing-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.re2-processing-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.re2-processing-label { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.re2-processing-pct {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  line-height: 1;
+}
+.re2-progress-track {
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.re2-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent-primary);
+  transition: width 0.12s linear;
+}
+.re2-processing-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+.re2-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--badge-border);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: re2Spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes re2Spin { to { transform: rotate(360deg); } }
+.re2-processing-filename {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .re2-btn-analizar {
   display: inline-flex;
   align-items: center;

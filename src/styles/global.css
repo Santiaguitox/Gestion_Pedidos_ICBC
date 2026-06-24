@@ -2255,6 +2255,76 @@ select:focus {
   color: var(--text-secondary);
 }
 
+/* ─── Bloque "Revisión de envíos" en el riel de info ──────────────────── */
+.det-info-revisiones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Una fila por evaluación base×pieza — texto envuelve naturalmente, no
+   se trunca, porque el detalle (qué campos faltan) es justo lo que
+   este bloque existe para mostrar sin tener que abrir el acordeón. */
+.det-info-revision-fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.det-info-revision-fila-clickeable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0.25rem;
+  margin: -0.25rem;
+  transition: background 150ms;
+}
+.det-info-revision-fila-clickeable:hover {
+  background: var(--bg-hover);
+}
+.det-info-revision-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.det-info-revision-icon-ok { color: #10B981; }
+.det-info-revision-icon-error { color: var(--icbc-red); }
+.det-info-revision-icon-warning { color: #B45309; }
+.det-info-revision-texto {
+  flex: 1;
+  min-width: 0;
+}
+.det-info-revision-texto b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.det-info-revision-chevron {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+.det-info-revisiones-link {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  align-self: flex-start;
+  margin-top: 0.125rem;
+}
+.det-info-revisiones-link:hover {
+  color: var(--text-primary);
+}
+
+/* Permite que el scroll hacia el acordeón ancle sin quedar tapado por
+   cualquier header sticky de la página */
+#base-datos-acordeon {
+  scroll-margin-top: 1rem;
+}
+
 .info-card-empty {
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -4912,3 +4982,140 @@ select:focus {
 .base-compat-unknown:hover {
   background: var(--border);
 }
+
+/* Chevron del pill de error — rota al expandir el detalle */
+.base-compat-chevron {
+  transition: transform 150ms;
+}
+.base-compat-chevron-open {
+  transform: rotate(180deg);
+}
+
+/* Botón de re-verificar manualmente */
+.base-reverificar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all 150ms;
+}
+.base-reverificar-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+/* Lista de resultados — uno por pieza evaluada cuando la base aplica a
+   "todas las piezas", o uno solo cuando aplica a una pieza específica */
+.base-resultados-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.base-resultado-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+.base-resultado-pieza-nombre {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.base-verificado-fecha {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-top: 0.125rem;
+}
+
+/* Detalle expandible de campos faltantes */
+.base-miss-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-top: 0.125rem;
+}
+.base-miss-detalle-label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.base-miss-detalle-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.base-miss-chip {
+  font-size: 0.6875rem;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(208, 17, 27, 0.08);
+  border: 1px solid rgba(208, 17, 27, 0.2);
+  color: var(--icbc-red);
+}
+.base-miss-ver-revision {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-align: left;
+  align-self: flex-start;
+}
+.base-miss-ver-revision:hover {
+  color: var(--text-primary);
+}
+
+/* Avisos estructurales del archivo de base (falta Email, duplicados,
+   caracteres inválidos) — independientes de cualquier pieza */
+.base-avisos-estructura {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.base-aviso-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.base-aviso-error {
+  color: var(--icbc-red);
+}
+.base-aviso-warning {
+  color: #B45309;
+}
+.base-aviso-row svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Aviso de versiones anteriores excluidas de la verificación automática */
+.base-versiones-excluidas-aviso {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.5rem;
+}
+
+/* Aviso de "todavía no hay pieza" — la base llegó antes que el HTML,
+   es un flujo normal, no un error: tono neutral, igual que el de
+   versiones excluidas. */
+.base-sin-pieza-aviso {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.5rem;
+}
+
