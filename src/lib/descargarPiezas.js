@@ -21,16 +21,18 @@ function nombreArchivo(pieza) {
   return `${base || 'pieza'}.html`
 }
 
-// Descarga una sola pieza como archivo .html
+// Descarga una sola pieza como ZIP con el archivo .html adentro
 export async function descargarPiezaIndividual(pieza, onError) {
   if (!pieza.link_online) { onError?.('La pieza no tiene link cargado'); return }
   try {
     const html = await fetchHtml(pieza.link_online)
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const zip = new JSZip()
+    zip.file(nombreArchivo(pieza), html)
+    const blob = await zip.generateAsync({ type: 'blob' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = nombreArchivo(pieza)
+    a.download = nombreArchivo(pieza).replace('.html', '.zip')
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {
