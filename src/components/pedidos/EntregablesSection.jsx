@@ -2,10 +2,11 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
-import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2 } from 'lucide-react'
+import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2, Download } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
+import { descargarPiezaIndividual } from '@/lib/descargarPiezas'
 
 function CopyAllBtn({ entregables }) {
   const [copied, setCopied] = useState(false)
@@ -147,6 +148,13 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
               <a href={ent.link_online} target="_blank" rel="noopener" className="entregable-link-icon">
                 <ExternalLink size={13} />
               </a>
+              <button
+                onClick={() => descargarPiezaIndividual(ent)}
+                className="entregable-link-icon"
+                title="Descargar HTML"
+              >
+                <Download size={13} />
+              </button>
             </div>
           )}
           {ent.aprobado && ent.aprobado_at && (
@@ -195,7 +203,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
   )
 }
 
-export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onUpdate, setConfirm }) {
+export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onUpdate, setConfirm, nombrePedido }) {
   const navigate = useNavigate()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nombre_pieza: '', link_online: '' })
@@ -343,11 +351,26 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
     })
   }
 
+  const piezasConLink = entregables.filter(e => e.link_online)
+
   return (
     <div className="flex flex-col gap-3">
       {cantidadEnCurso > 0 && (
         <div className="entregables-revision-global">
           Revisando {cantidadEnCurso} pieza{cantidadEnCurso !== 1 ? 's' : ''}…
+        </div>
+      )}
+      {piezasConLink.length > 0 && (
+        <div className="entregables-descarga-bar">
+          <button
+            className="btn-descargar-piezas"
+            onClick={() => descargarTodasLasPiezas(entregables, nombrePedido)}
+          >
+            <Download size={14} />
+            {piezasConLink.length === 1
+              ? 'Descargar HTML'
+              : `Descargar todas (${piezasConLink.length})`}
+          </button>
         </div>
       )}
       {entregables.length === 0 && !showForm && <p className="text-muted-sm">No hay piezas cargadas.</p>}

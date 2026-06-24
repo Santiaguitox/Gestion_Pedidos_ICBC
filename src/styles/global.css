@@ -2182,8 +2182,13 @@ select:focus {
   box-shadow: var(--shadow-sm);
 }
 
+.det-acc-header-wrap {
+  display: flex;
+  align-items: center;
+}
+
 .det-acc-header {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.875rem;
@@ -2193,6 +2198,39 @@ select:focus {
   cursor: pointer;
   text-align: left;
   font-family: inherit;
+}
+
+.det-acc-header-action {
+  padding-right: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* Botón descargar todas las piezas */
+.entregables-descarga-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-descargar-piezas {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+.btn-descargar-piezas:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
 }
 
 .det-acc-icon {

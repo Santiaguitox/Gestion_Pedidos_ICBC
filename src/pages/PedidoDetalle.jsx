@@ -243,7 +243,8 @@ export default function PedidoDetalle() {
             defaultOpen={true}
           >
             <EntregablesSection pedidoId={id} entregables={entregables} canWrite={canWrite}
-              isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm} />
+              isSuperAdmin={isSuperAdmin} onUpdate={fetchPedido} setConfirm={setConfirm}
+              nombrePedido={pedido.nombre_campana || pedido.id} />
           </DetalleAcordeon>
 
           <DetalleAcordeon
