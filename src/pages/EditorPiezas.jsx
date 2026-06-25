@@ -46,9 +46,20 @@ div[style*='margin: 16px 0;'] { margin: 0 !important; }
 const LEGAL_FIJO_HTML = `El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los mismos en forma gratuita a intervalos no inferiores a 6 meses, salvo que acredite un interés legítimo al efecto conforme lo establecido en el art. 14 inc. 3 de la ley 25.326. La agencia de acceso a la información pública, en su carácter de órgano de control de la ley 25.326 tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales. Para contactar a la misma: Av. Pte. Gral. Julio A. Roca 710, piso 2 - C1067ABP – CABA / Tel.: +54 (11) 3988-3968 <a style="color: #333333; text-decoration: underline;" target="_blank" href="https://www.argentina.gob.ar/aaip/datospersonales">https://www.argentina.gob.ar/aaip/datospersonales</a> - <a style="color: #333333; text-decoration: underline;" target="_blank" href="mailto:datospersonales@aaip.gob.ar">datospersonales@aaip.gob.ar</a>. Nuestra política de envío de correo electrónico no incluye la solicitud de ningún tipo de información por este medio de comunicación, es por tal motivo que, ante la llegada de una comunicación que le parezca no habitual, le recomendamos no responder ni ingresar en el mismo datos personales y/o claves de acceso y/o información de sus productos, por favor, háganos llegar la misma a la siguiente dirección de correo: <a style="color: #333333; text-decoration: underline;" target="_blank" href="mailto:seguridadinternet@icbc.com.ar">seguridadinternet@icbc.com.ar</a> o contáctenos al 0810-555-9200 de lunes a viernes de 8 a 20 horas o, sábados, domingos y feriados de 10 a 18 horas, o bien desde el exterior, al (54-11) 4820-9200. Los links adjuntos en esta pieza remiten únicamente a páginas de publicidad. Industrial and Commercial Bank of China (Argentina) S.A.U. es una Sociedad Anónima Unipersonal bajo la Ley Argentina. Su accionista limita su responsabilidad al capital aportado. Florida 99, CABA, CUIT 30709447846.`
 
 // ─── Bloques ────────────────────────────────────────────────────────────────
+// IMPORTANTE: { as: 'raw' } es la sintaxis VIEJA de import.meta.glob,
+// removida en Vite 5+. Este proyecto usa Vite 8 (ver package.json) —
+// con la sintaxis vieja, Vite cae al comportamiento default del glob
+// (importar el módulo completo, no el string crudo), y cada entrada de
+// BLOQUES_RAW termina siendo un objeto Module en vez de un string. Eso
+// explica el bug real visto en producción: el HTML del bloque se
+// mostraba como el texto literal "[object Module]" en vez de su
+// contenido — pasaba solo en Vercel (que reinstala node_modules según
+// package.json, trayendo Vite 8 real) y no en local, donde
+// probablemente había quedado una instalación vieja de Vite que sí
+// soportaba la sintaxis deprecada sin avisar con un error.
 const BLOQUES_RAW = import.meta.glob(
   '/src/data/Templates/ICBC/{Header,Contenido,Botones}/*.html',
-  { as: 'raw', eager: true }
+  { query: '?raw', import: 'default', eager: true }
 )
 const BLOQUES = Object.entries(BLOQUES_RAW).map(([path, html]) => {
   const partes = path.split('/')
@@ -634,7 +645,7 @@ function RichEditor({ value, onChange }) {
       </div>
       {showLink && (
         <div className="ep-rich-link-popup">
-          <input className="ep-rich-link-input" placeholder="https://..." value={linkUrl}
+          <input className="ep-rich-link-input" autoComplete="off" placeholder="https://..." value={linkUrl}
             onChange={e => setLinkUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && aplicarLink()} autoFocus
             autoComplete="off" />
@@ -710,14 +721,14 @@ function CampoImagen({ campo, onActualizar, onReset }) {
   return (
     <div className="ep-campo">
       <label className="ep-campo-label">{campo.label} — URL</label>
-      <input className="ep-campo-input" value={srcLocal}
+      <input className="ep-campo-input" autoComplete="off" value={srcLocal}
         onChange={e => setSrcLocal(e.target.value)} onBlur={e => onSrcBlur(e.target.value)}
         placeholder="https://cdn.ejemplo.com/imagen.png" />
       <label className="ep-campo-label" style={{ marginTop: 6 }}>Alt — {campo.label}</label>
-      <input className="ep-campo-input" value={altLocal}
+      <input className="ep-campo-input" autoComplete="off" value={altLocal}
         onChange={e => setAltLocal(e.target.value)} onBlur={commit} placeholder="Texto alternativo" />
       <label className="ep-campo-label" style={{ marginTop: 6 }}>Title — {campo.label}</label>
-      <input className="ep-campo-input" value={titleLocal}
+      <input className="ep-campo-input" autoComplete="off" value={titleLocal}
         onChange={e => setTitleLocal(e.target.value)} onBlur={commit} placeholder="Título de la imagen" />
 
       {dimAlert && (
@@ -730,11 +741,11 @@ function CampoImagen({ campo, onActualizar, onReset }) {
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <div style={{ flex: 1 }}>
               <label className="ep-campo-label">Ancho (px)</label>
-              <input className="ep-campo-input" value={widthLocal} onChange={e => setWidthLocal(e.target.value)} onBlur={commit} />
+              <input className="ep-campo-input" autoComplete="off" value={widthLocal} onChange={e => setWidthLocal(e.target.value)} onBlur={commit} />
             </div>
             <div style={{ flex: 1 }}>
               <label className="ep-campo-label">Alto (px)</label>
-              <input className="ep-campo-input" value={heightLocal} onChange={e => setHeightLocal(e.target.value)} onBlur={commit} />
+              <input className="ep-campo-input" autoComplete="off" value={heightLocal} onChange={e => setHeightLocal(e.target.value)} onBlur={commit} />
             </div>
           </div>
         </div>
@@ -1106,7 +1117,7 @@ export default function EditorPiezas() {
       <aside className="ep-biblioteca">
         <div className="ep-biblioteca-header">
           <span className="ep-biblioteca-titulo">Bloques disponibles</span>
-          <input className="ep-search" placeholder="Buscar bloque…" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          <input className="ep-search" autoComplete="off" placeholder="Buscar bloque…" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
           {/* Spacer — fila fija siempre visible (no dentro de una
               categoría colapsable ni escondido en un botón flotante):
               es de los elementos que más se usan al armar una pieza,
@@ -1180,7 +1191,7 @@ export default function EditorPiezas() {
       {/* ── Canvas ── */}
       <main className="ep-canvas-wrap">
         <div className="ep-canvas-header">
-          <input className="ep-nombre-pieza" value={nombre} onChange={e => setNombre(e.target.value)} title="Nombre de la pieza" />
+          <input className="ep-nombre-pieza" autoComplete="off" value={nombre} onChange={e => setNombre(e.target.value)} title="Nombre de la pieza" />
           <div className="ep-canvas-actions">
             <button className="ep-btn ep-btn-disabled" disabled>🔗 Importar desde link</button>
             <button className="ep-btn ep-btn-ghost" onClick={() => setShowPreview(true)}><Eye size={14} /> Vista previa</button>
@@ -1214,16 +1225,16 @@ export default function EditorPiezas() {
             {imgPrincipal.activo && (
               <div className="ep-zona-toggle-body">
                 <label className="ep-img-label">URL (600px de ancho)</label>
-                <input className="ep-img-input" placeholder="https://cdn.ejemplo.com/imagen.png"
+                <input className="ep-img-input" autoComplete="off" placeholder="https://cdn.ejemplo.com/imagen.png"
                   value={imgPrincipal.src} onChange={e => setImgPrincipal(p => ({ ...p, src: e.target.value }))} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Alt</label>
-                <input className="ep-img-input" placeholder="Texto alternativo"
+                <input className="ep-img-input" autoComplete="off" placeholder="Texto alternativo"
                   value={imgPrincipal.alt} onChange={e => setImgPrincipal(p => ({ ...p, alt: e.target.value }))} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Title</label>
-                <input className="ep-img-input" placeholder="Título de la imagen"
+                <input className="ep-img-input" autoComplete="off" placeholder="Título de la imagen"
                   value={imgPrincipal.title || ''} onChange={e => setImgPrincipal(p => ({ ...p, title: e.target.value }))} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Link (opcional)</label>
-                <input className="ep-img-input" placeholder="https://... (dejar vacío si no tiene link)"
+                <input className="ep-img-input" autoComplete="off" placeholder="https://... (dejar vacío si no tiene link)"
                   value={imgPrincipal.link || ''} onChange={e => setImgPrincipal(p => ({ ...p, link: e.target.value }))} />
                 {imgPrincipal.src && (
                   <div style={{ marginTop: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
@@ -1298,12 +1309,12 @@ export default function EditorPiezas() {
             {imgFooter.activo && (
               <div className="ep-zona-toggle-body">
                 <label className="ep-img-label">URL de la imagen</label>
-                <input className="ep-img-input" placeholder="https://cdn.ejemplo.com/footer.gif"
+                <input className="ep-img-input" autoComplete="off" placeholder="https://cdn.ejemplo.com/footer.gif"
                   value={imgFooter.src} onChange={e => setImgFooter(p => ({ ...p, src: e.target.value }))} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Link destino</label>
                 <input className="ep-img-input" placeholder="https://..." autoComplete="off"
                   value={imgFooter.link} onChange={e => setImgFooter(p => ({ ...p, link: e.target.value }))} />
-                <input className="ep-img-input" placeholder="Alt" style={{ marginTop: 4 }}
+                <input className="ep-img-input" autoComplete="off" placeholder="Alt" style={{ marginTop: 4 }}
                   value={imgFooter.alt} onChange={e => setImgFooter(p => ({ ...p, alt: e.target.value }))} />
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button className="ep-btn ep-btn-primary ep-btn-aplicar" style={{ flex: 1 }} onClick={() => confirmarSeccion('imgFooter')} disabled={confirmando.imgFooter}>
@@ -1369,11 +1380,11 @@ export default function EditorPiezas() {
               <div className="ep-zona-toggle-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {indicadores.map(ind => (
                   <div key={ind.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <input className="ep-img-input" style={{ width: 52, flexShrink: 0 }} value={ind.ref} placeholder="(*)"
+                    <input className="ep-img-input" autoComplete="off" style={{ width: 52, flexShrink: 0 }} value={ind.ref} placeholder="(*)"
                       onChange={e => actualizarIndicador(ind.id, 'ref', e.target.value)} title="Referencia" />
-                    <input className="ep-img-input" style={{ width: 80, flexShrink: 0 }} value={ind.sigla} placeholder="CFTNA"
+                    <input className="ep-img-input" autoComplete="off" style={{ width: 80, flexShrink: 0 }} value={ind.sigla} placeholder="CFTNA"
                       onChange={e => actualizarIndicador(ind.id, 'sigla', e.target.value)} />
-                    <input className="ep-img-input" style={{ flex: 1 }} value={ind.valor} placeholder="0,00%"
+                    <input className="ep-img-input" autoComplete="off" style={{ flex: 1 }} value={ind.valor} placeholder="0,00%"
                       onChange={e => actualizarIndicador(ind.id, 'valor', e.target.value)} />
                     <button onClick={() => eliminarIndicador(ind.id)}
                       style={{ flexShrink: 0, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>
