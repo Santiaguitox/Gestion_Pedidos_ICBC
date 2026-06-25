@@ -13,6 +13,7 @@ import Notificaciones from '@/pages/Notificaciones'
 import RevisionEmail from '@/pages/RevisionEmail'
 import RevisionBase from '@/pages/RevisionBase'
 import RevisionEnvios from '@/pages/RevisionEnvios'
+import EditorPiezas from '@/pages/EditorPiezas'
 import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
 import Configuracion from '@/pages/Configuracion'
@@ -44,6 +45,11 @@ export default function App() {
                 <Route path="revision-envios" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <RevisionEnvios />
+                  </ProtectedRoute>
+                } />
+                <Route path="editor-piezas" element={
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
+                    <EditorPiezas />
                   </ProtectedRoute>
                 } />
                 <Route path="usuarios" element={

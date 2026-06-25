@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search, MailCheck } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search, MailCheck, PenLine } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
 import BuscadorGlobal from '@/components/layout/BuscadorGlobal'
@@ -155,6 +155,13 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? 'Revisión de envíos' : undefined}>
             <MailCheck size={18} />{!collapsed && <span>Revisión de envíos</span>}
+          </NavLink>
+        )}
+        {!isViewer && (
+          <NavLink to="/app/editor-piezas" onClick={onNavClick}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            title={collapsed ? 'Editor de piezas' : undefined}>
+            <PenLine size={18} />{!collapsed && <span>Editor de piezas</span>}
           </NavLink>
         )}
       </nav>
