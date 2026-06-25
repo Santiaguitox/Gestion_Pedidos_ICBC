@@ -113,7 +113,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '0.875rem 1rem 0.75rem', borderBottom: '1px solid var(--border)',
           }}>
-            <button onClick={() => setViewDate(subMonths(viewDate, 1))}
+            <button type="button" onClick={() => setViewDate(subMonths(viewDate, 1))}
               style={{ display:'flex', alignItems:'center', padding:'0.25rem', borderRadius:'var(--radius-sm)', color:'var(--text-muted)', transition:'all 150ms' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -122,7 +122,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
 
             <div style={{ display: 'flex', gap: '0.375rem' }}>
               {/* Selector de mes */}
-              <button
+              <button type="button"
                 onClick={() => setMode(mode === 'months' ? 'days' : 'months')}
                 style={{
                   fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700,
@@ -138,7 +138,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
               </button>
 
               {/* Selector de año */}
-              <button
+              <button type="button"
                 onClick={() => setMode(mode === 'years' ? 'days' : 'years')}
                 style={{
                   fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700,
@@ -154,7 +154,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
               </button>
             </div>
 
-            <button onClick={() => setViewDate(addMonths(viewDate, 1))}
+            <button type="button" onClick={() => setViewDate(addMonths(viewDate, 1))}
               style={{ display:'flex', alignItems:'center', padding:'0.25rem', borderRadius:'var(--radius-sm)', color:'var(--text-muted)', transition:'all 150ms' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -168,7 +168,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
               {MESES.map(m => {
                 const isActive = m.value === viewDate.getMonth()
                 return (
-                  <button key={m.value}
+                  <button type="button" key={m.value}
                     onClick={() => { setViewDate(new Date(viewDate.getFullYear(), m.value, 1)); setMode('days') }}
                     style={{
                       padding: '0.5rem 0.25rem', borderRadius: 'var(--radius-sm)',
@@ -193,7 +193,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
               {AÑOS.map(y => {
                 const isActive = y === viewDate.getFullYear()
                 return (
-                  <button key={y}
+                  <button type="button" key={y}
                     onClick={() => { setViewDate(new Date(y, viewDate.getMonth(), 1)); setMode('days') }}
                     style={{
                       padding: '0.5rem 0.25rem', borderRadius: 'var(--radius-sm)',
@@ -235,7 +235,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
                   const isCurrentMonth = isSameMonth(day, viewDate)
 
                   return (
-                    <button key={day.toISOString()} onClick={() => handleSelectDay(day)}
+                    <button type="button" key={day.toISOString()} onClick={() => handleSelectDay(day)}
                       style={{
                         position: 'relative',
                         width: '100%', aspectRatio: '1',
@@ -267,7 +267,7 @@ export function DatePicker({ value, onChange, placeholder = 'Seleccionar fecha',
 
               {/* Botón hoy */}
               <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--border)' }}>
-                <button
+                <button type="button"
                   onClick={() => { handleSelectDay(today) }}
                   style={{
                     width: '100%', padding: '0.4rem', borderRadius: 'var(--radius-sm)',
