@@ -126,12 +126,21 @@ function detectarCampos(html) {
   const campos = []
   const SOCIALES = ['twitter.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'icbcargentina', 'icbc.argentina']
 
-  // Textos en <td>: extraer innerHTML de cada td que tenga texto visible
+  // Textos en <td>: extraer innerHTML de cada td que tenga texto visible.
+  // posicionReal = posición entre TODOS los <td> del HTML (sin filtrar
+  // por contenido) — a diferencia de idx (que solo cuenta los <td> que
+  // pasan el filtro de "tiene texto real"), posicionReal es estable
+  // incluso si el usuario vacía el campo por completo después. Se usa
+  // para volver a encontrar la celda correcta en actualizarCampoEnHtml
+  // y para extraer el valor actual al re-renderizar el panel, sin
+  // depender de cuánto texto tiene en este momento.
   let textoIdx = 0
+  let posicionTd = 0
   const tdRegex = /<td([^>]*)>([\s\S]*?)<\/td>/gi
   let tdMatch
   while ((tdMatch = tdRegex.exec(html)) !== null) {
     const inner = tdMatch[2]
+    const posicionReal = posicionTd++
     // Ignorar tds que solo tienen &nbsp; o una tabla anidada (textoLimpio
     // ya excluye automáticamente las celdas que son SOLO una imagen,
     // porque el alt/title son atributos dentro del tag, no contenido de
@@ -144,17 +153,27 @@ function detectarCampos(html) {
     // cuando en realidad sí tenían texto para editar.
     const textoLimpio = inner.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim()
     if (textoLimpio.length > 2 && !inner.trim().startsWith('<table')) {
-      campos.push({ tipo: 'texto', label: `Texto ${textoIdx + 1}`, idx: textoIdx, contenido: inner })
+      campos.push({ tipo: 'texto', label: `Texto ${textoIdx + 1}`, idx: textoIdx, posicionReal, contenido: inner })
       textoIdx++
     }
   }
 
-  // Imágenes: extraer src, alt, title, width, height
+  // Imágenes: extraer src, alt, title, width, height. Se excluyen las
+  // puramente estructurales (separadores transparentes, líneas
+  // punteadas decorativas — mismo patrón que ya se excluye de la
+  // validación de proporciones en CampoImagen) porque no son contenido
+  // real para editar, son parte fija de la estructura del template.
+  // posicionReal = posición entre TODOS los <img> sin filtrar — mismo
+  // motivo que en texto: actualizarCampoEnHtml cuenta TODOS los <img>
+  // sin excluir nada, así que si acá se filtrara sin avisar el idx
+  // quedaría desalineado con la posición real en el HTML.
   let imgIdx = 0
+  let posicionImg = 0
   const imgRegex = /<img([^>]*)>/gi
   let imgMatch
   while ((imgMatch = imgRegex.exec(html)) !== null) {
     const attrs = imgMatch[1]
+    const posicionReal = posicionImg++
     const getAttr = (name) => {
       const m = attrs.match(new RegExp(`${name}=["']([^"']*)["']`, 'i'))
       return m ? m[1] : ''
@@ -163,9 +182,11 @@ function detectarCampos(html) {
       const m = attrs.match(new RegExp(`${prop}:\\s*([\\d.]+)px`, 'i'))
       return m ? m[1] : ''
     }
+    const src = getAttr('src')
+    if (/img[_-]?separador|lineapunteada/i.test(src)) continue
     campos.push({
-      tipo: 'imagen', label: `Imagen ${imgIdx + 1}`, idx: imgIdx,
-      src: getAttr('src'), alt: getAttr('alt'), title: getAttr('title'),
+      tipo: 'imagen', label: `Imagen ${imgIdx + 1}`, idx: imgIdx, posicionReal,
+      src, alt: getAttr('alt'), title: getAttr('title'),
       width: getAttr('width') || getStyleProp('width'),
       height: getAttr('height') || getStyleProp('height'),
     })
@@ -192,20 +213,25 @@ function detectarCampos(html) {
 // Actualizar un campo específico en el HTML como string puro
 function actualizarCampoEnHtml(html, tipo, idx, cambios) {
   if (tipo === 'texto') {
+    // idx acá es en realidad la posicionReal (ver detectarCampos) — un
+    // contador simple de TODOS los <td> en orden, sin filtrar por
+    // contenido. Esto es necesario para que la celda correcta se siga
+    // encontrando incluso después de vaciarla por completo: si en vez
+    // de esto se filtrara por "tiene texto real" como antes, vaciar un
+    // campo de texto cuando hay más de uno en el mismo bloque corría
+    // los índices de los campos siguientes, terminando por editar la
+    // celda equivocada.
     let count = 0
     return html.replace(/<td([^>]*)>([\s\S]*?)<\/td>/gi, (match, attrs, inner) => {
-      // Mismo filtro EXACTO que detectarCampos — si se desincronizan,
-      // el índice que devuelve detectarCampos para un campo ya no
-      // coincide con el que encuentra esta función, y se termina
-      // editando una celda distinta a la que el usuario seleccionó.
-      const textoLimpio = inner.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim()
-      if (textoLimpio.length > 2 && !inner.trim().startsWith('<table')) {
-        if (count++ === idx) return `<td${attrs}>${cambios.contenido}</td>`
-      }
+      if (count++ === idx) return `<td${attrs}>${cambios.contenido}</td>`
       return match
     })
   }
   if (tipo === 'imagen') {
+    // Igual que en texto: cuenta TODOS los <img> sin filtrar — quien
+    // llama a esta función debe pasar posicionReal (la posición entre
+    // TODOS los <img>, sin excluir los estructurales), no el idx
+    // filtrado que devuelve detectarCampos.
     let count = 0
     return html.replace(/<img([^>]*)>/gi, (match, attrs) => {
       if (count++ !== idx) return match
@@ -691,14 +717,17 @@ function CampoImagen({ campo, onActualizar, onReset }) {
 
   function onSrcBlur(nuevoSrc) {
     setSrcLocal(nuevoSrc)
-    // Imágenes "separador" (ej. Img_Separador_265x2.png) son píxeles
-    // transparentes usados para forzar espacios en el layout de la
-    // tabla — su aspect ratio real no tiene ningún significado visual,
-    // así que no tiene sentido alertar por una "desproporción" que en
-    // los hechos no se ve. Se detecta por el nombre de archivo en la
-    // URL, no por el contenido real de la imagen.
-    const esSeparador = /img[_-]?separador/i.test(nuevoSrc)
-    if (!nuevoSrc || !origW || !origH || esSeparador) { commit({ src: nuevoSrc }); return }
+    // Imágenes puramente estructurales — "separador" (Img_Separador_*)
+    // y "línea punteada" (MediaLineaPunteada*, la línea divisoria del
+    // Módulo Doble Con Imagen Punteada, visible solo en mobile) son
+    // píxeles transparentes usados para forzar espacios o decoración
+    // de layout, no contenido real — su aspect ratio no tiene ningún
+    // significado visual, así que no tiene sentido alertar por una
+    // "desproporción" que en los hechos no se ve. Se detecta por el
+    // nombre de archivo en la URL, no por el contenido real de la
+    // imagen.
+    const esEstructural = /img[_-]?separador|lineapunteada/i.test(nuevoSrc)
+    if (!nuevoSrc || !origW || !origH || esEstructural) { commit({ src: nuevoSrc }); return }
     const img = new window.Image()
     img.onload = () => {
       if (img.naturalWidth !== origW || img.naturalHeight !== origH) {
@@ -758,8 +787,24 @@ function CampoImagen({ campo, onActualizar, onReset }) {
 function PanelEditor({ bloque, onActualizar }) {
   const [htmlLocal, setHtmlLocal] = useState(bloque.htmlEditado || bloque.html)
   const [saving, setSaving] = useState(false)
+  // IMPORTANTE: siempre contra bloque.html (el HTML original del
+  // archivo fuente), NUNCA contra bloque.htmlEditado. Bug real que
+  // esto corrige: si detectarCampos corriera contra el HTML ya
+  // editado, un campo de texto vaciado por completo por el usuario
+  // (selección + borrar, o el ícono de limpiar) deja de matchear el
+  // filtro de "longitud > 2 caracteres reales" — el campo "desaparece"
+  // de la lista, y como esta lista es la única fuente de qué editar,
+  // se pierde la posibilidad de volver a escribir algo ahí. Pasaba
+  // también en bloques con imagen+texto en la misma celda: vaciar el
+  // texto hacía que ESA celda dejara de contarse como campo de texto,
+  // aunque la imagen (detectada por separado) siguiera bien. La
+  // estructura de campos (cuántos hay, de qué tipo, en qué posición)
+  // tiene que ser estable y depender solo del original — el VALOR
+  // actual de cada campo (lo que se muestra/edita) sí debe reflejar lo
+  // editado, y eso se resuelve por separado más abajo con
+  // valorActualDelCampo, no mezclando ambas cosas en una sola pasada.
   const camposOriginales = useRef(null)
-  if (!camposOriginales.current) camposOriginales.current = detectarCampos(bloque.htmlEditado || bloque.html)
+  if (!camposOriginales.current) camposOriginales.current = detectarCampos(bloque.html)
   const esCodigo = bloque.tipo === 'codigo'
   const esEspaciador = bloque.slug === 'Espaciador'
   const sinCampos = !esCodigo && !esEspaciador && camposOriginales.current.length === 0
@@ -830,6 +875,18 @@ function PanelEditor({ bloque, onActualizar }) {
   }
 
   const campos = camposOriginales.current
+  // Valor actual de cada <td> en orden — SIN filtrar por contenido (a
+  // diferencia de detectarCampos), porque acá lo que importa es poder
+  // indexar por posicionReal de forma estable. Si en cambio se llamara
+  // a detectarCampos(htmlLocal) de nuevo, un campo vaciado dejaría de
+  // aparecer en esa lista y correría los índices de los campos
+  // siguientes — el mismo bug que ya se corrigió en detectarCampos /
+  // actualizarCampoEnHtml, pero del lado de la lectura en vez de la
+  // escritura.
+  const todosLosTdActuales = [...htmlLocal.matchAll(/<td(?:[^>]*)>([\s\S]*?)<\/td>/gi)].map(m => m[1])
+  function valorActualDeTexto(campo) {
+    return todosLosTdActuales[campo.posicionReal] ?? campo.contenido
+  }
 
   return (
     <>
@@ -845,13 +902,13 @@ function PanelEditor({ bloque, onActualizar }) {
           if (campo.tipo === 'texto') return (
             <div key={i} className="ep-campo">
               <label className="ep-campo-label">{campo.label}</label>
-              <RichEditor value={campo.contenido}
-                onChange={v => actualizarCampo('texto', campo.idx, { contenido: v })} />
+              <RichEditor value={valorActualDeTexto(campo)}
+                onChange={v => actualizarCampo('texto', campo.posicionReal, { contenido: v })} />
             </div>
           )
           if (campo.tipo === 'imagen') return (
             <CampoImagen key={i} campo={campo}
-              onActualizar={c => actualizarCampo('imagen', campo.idx, c)}
+              onActualizar={c => actualizarCampo('imagen', campo.posicionReal, c)}
               onReset={() => { setHtmlLocal(bloque.html); onActualizar(bloque.instanceId, null) }} />
           )
           if (campo.tipo === 'link') return (
@@ -960,6 +1017,13 @@ export default function EditorPiezas() {
   // momento del drop, junto con el mismo flujo de drag and drop que ya
   // usan los bloques de la biblioteca.
   const [spacerPxArrastrando, setSpacerPxArrastrando] = useState(null)
+  // Igual concepto que spacerPxArrastrando: "Código personalizado" no
+  // tiene un archivo .html real detrás (es un bloque vacío que el
+  // usuario llena con su propio HTML), así que no existe en BLOQUES y
+  // el onDropZona normal nunca lo encuentra por id. Antes esto hacía
+  // que el card no fuera arrastrable en absoluto — solo tenía onClick,
+  // siempre se agregaba al final del canvas sin poder elegir posición.
+  const [arrastrandoCodigoPersonalizado, setArrastrandoCodigoPersonalizado] = useState(false)
 
   const bloquesFiltradosHeader = BLOQUES_HEADER.filter(b => b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
   const bloquesFiltradosContenido = BLOQUES_CONTENIDO.filter(b =>
@@ -1040,6 +1104,24 @@ export default function EditorPiezas() {
       setDragOverId(null)
       return
     }
+    // Caso 1b: se soltó el card de "Código personalizado" — no existe
+    // en BLOQUES (no tiene archivo .html real), así que se construye
+    // la instancia a mano con la misma forma que crea agregarCodigo().
+    if (arrastrandoCodigoPersonalizado) {
+      const inst = { id: 'codigo', instanceId: `codigo-${Date.now()}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: '', htmlEditado: null, tipo: 'codigo', slug: 'codigo' }
+      setCanvas(prev => {
+        if (targetId == null) return [...prev, inst]
+        const idx = prev.findIndex(b => b.instanceId === targetId)
+        if (idx === -1) return [...prev, inst]
+        const arr = [...prev]
+        arr.splice(pos === 'arriba' ? idx : idx + 1, 0, inst)
+        return arr
+      })
+      setSelectedId(inst.instanceId)
+      setArrastrandoCodigoPersonalizado(false)
+      setDragOverId(null)
+      return
+    }
     // Caso 2: bloque normal de la biblioteca
     if (!draggingBibliotecaId) return
     const bloque = BLOQUES.find(b => b.id === draggingBibliotecaId)
@@ -1064,7 +1146,7 @@ export default function EditorPiezas() {
 
   function onDragOverBloque(e, instanceId) {
     e.preventDefault()
-    if (draggingBibliotecaId || draggingCanvasId || spacerPxArrastrando != null) {
+    if (draggingBibliotecaId || draggingCanvasId || spacerPxArrastrando != null || arrastrandoCodigoPersonalizado) {
       const rect = e.currentTarget.getBoundingClientRect()
       const posicion = e.clientY < rect.top + rect.height / 2 ? 'arriba' : 'abajo'
       setDragOverId({ id: instanceId, posicion })
@@ -1073,7 +1155,7 @@ export default function EditorPiezas() {
 
   function onDropBloque(e, targetInstanceId) {
     e.preventDefault()
-    if (draggingBibliotecaId || spacerPxArrastrando != null) {
+    if (draggingBibliotecaId || spacerPxArrastrando != null || arrastrandoCodigoPersonalizado) {
       onDropZona(e, targetInstanceId, dragOverId?.posicion ?? 'abajo')
       return
     }
@@ -1177,11 +1259,18 @@ export default function EditorPiezas() {
           ))}
 
           <CategoriaColapsable titulo="Personalizado">
-            <div className="ep-bloque-card" style={{ cursor: 'pointer' }} onClick={agregarCodigo}>
+            <div
+              className={`ep-bloque-card ${arrastrandoCodigoPersonalizado ? 'dragging-source' : ''}`}
+              style={{ cursor: 'pointer' }}
+              draggable
+              onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; setArrastrandoCodigoPersonalizado(true) }}
+              onDragEnd={() => setArrastrandoCodigoPersonalizado(false)}
+              onClick={agregarCodigo}
+            >
               <div className="ep-bloque-thumb-placeholder"><Code size={18} /><span>HTML libre</span></div>
               <div className="ep-bloque-footer">
                 <span className="ep-bloque-nombre">Código personalizado</span>
-                <button className="ep-bloque-add">+</button>
+                <button className="ep-bloque-add" onClick={e => { e.stopPropagation(); agregarCodigo() }}>+</button>
               </div>
             </div>
           </CategoriaColapsable>
@@ -1261,7 +1350,7 @@ export default function EditorPiezas() {
               <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{canvas.length} bloque{canvas.length !== 1 ? 's' : ''}</span>
             </div>
             <div className={`ep-zona-drop ${dragOverZona && !dragOverId ? 'drag-over' : ''}`}
-              onDragOver={e => { e.preventDefault(); if (draggingBibliotecaId || spacerPxArrastrando != null) setDragOverZona(true) }}
+              onDragOver={e => { e.preventDefault(); if (draggingBibliotecaId || spacerPxArrastrando != null || arrastrandoCodigoPersonalizado) setDragOverZona(true) }}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverZona(false) }}
               onDrop={e => { if (!dragOverId) onDropZona(e) }}>
               {canvas.length === 0 && <div className="ep-zona-drop-empty">Arrastrá bloques desde la biblioteca o usá el botón +</div>}
@@ -1314,8 +1403,14 @@ export default function EditorPiezas() {
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Link destino</label>
                 <input className="ep-img-input" placeholder="https://..." autoComplete="off"
                   value={imgFooter.link} onChange={e => setImgFooter(p => ({ ...p, link: e.target.value }))} />
-                <input className="ep-img-input" autoComplete="off" placeholder="Alt" style={{ marginTop: 4 }}
+                <label className="ep-img-label" style={{ marginTop: 4 }}>Alt</label>
+                <input className="ep-img-input" autoComplete="off" placeholder="Texto alternativo"
                   value={imgFooter.alt} onChange={e => setImgFooter(p => ({ ...p, alt: e.target.value }))} />
+                {imgFooter.src && (
+                  <div style={{ marginTop: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <img src={imgFooter.src} alt={imgFooter.alt || ''} style={{ width: '100%', height: 'auto', display: 'block' }} onError={e => { e.target.style.display = 'none' }} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button className="ep-btn ep-btn-primary ep-btn-aplicar" style={{ flex: 1 }} onClick={() => confirmarSeccion('imgFooter')} disabled={confirmando.imgFooter}>
                     {confirmando.imgFooter ? <Loader2 size={14} className="ep-spin" /> : <Check size={14} />}
