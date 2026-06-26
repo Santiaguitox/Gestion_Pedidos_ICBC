@@ -1,6 +1,34 @@
 import { useState, useRef, useEffect } from 'react'
-import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2 } from 'lucide-react'
+import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import '@/styles/EditorPiezas.css'
+
+// ─── Temas de template — ICBC (fondo blanco), Avisos (fondo beige,
+// comunicaciones especiales tipo regulaciones bancarias), Mall (fondo
+// negro, ofertas de ICBC Mall). La ESTRUCTURA del email es la misma
+// en los 3 — header, imagen principal, contenido por bloques, footer
+// con legales — lo que cambia, confirmado contra HTML reales de
+// Avisos y Mall:
+//  - bgContenido: el fondo del bloque de contenido (antes siempre
+//    #ffffff fijo).
+//  - colorTexto: el color base del texto dentro de cada bloque de
+//    contenido (cada bloque trae #333333 hardcodeado en su propio
+//    HTML, no heredado — por eso aplicarColorTexto lo reemplaza al
+//    vuelo al exportar, no al cargar el bloque).
+//  - conBorde: si la tabla principal de 600px lleva el borde rojo de
+//    1px — ICBC y Mall sí, Avisos NO (confirmado: el HTML real de
+//    Avisos no tiene ningún border en esa tabla).
+// El fondo de la página detrás del email (#ffffff exterior) y el
+// fondo del bloque de footer/legales (#ffffff) NO cambian en ningún
+// tema — en los 2 ejemplos reales (Avisos y Mall) ambos siguen siendo
+// blancos siempre, solo el contenido del medio cambia.
+const TEMAS = {
+  icbc:   { label: 'ICBC',   bgContenido: '#ffffff', colorTexto: '#333333', conBorde: true },
+  avisos: { label: 'Avisos', bgContenido: '#dcd2c9', colorTexto: '#333333', conBorde: false },
+  mall:   { label: 'Mall',   bgContenido: '#2e2f31', colorTexto: '#ffffff', conBorde: true },
+}
+const TEMA_DEFAULT = 'icbc'
 
 // ─── Estilos del email — EXACTOS al canvas entregado ───────────────────────
 const CANVAS_STYLES = `<style type="text/css"><!--
@@ -285,9 +313,27 @@ function wrapPreview(html, esHeader = false) {
 // ─── Miniatura visual para la biblioteca ───────────────────────────────────
 // En lugar de renderizar el HTML complejo (que se ve raro a tamaño miniatura),
 // generamos una miniatura SVG descriptiva basada en el nombre y categoría del bloque.
+// El color "de marca" de una banda de Header depende del PREFIJO del
+// nombre de archivo, no de un valor fijo — confirmado por la
+// convención real: CG_* (Comercial Generalista) es rojo de marca,
+// EB_* (Exclusive Banking) es negro, PAY_* (Payroll/Sueldos) es el
+// marrón institucional de esa línea (#635843). Si en el futuro se
+// suma un prefijo nuevo, cae al rojo de marca por default en vez de
+// romper o quedar sin color. Se usa tanto para el thumb de la
+// biblioteca (generarThumbSVG) como para el borde de la pieza en el
+// export (generarExport, ver conBorde) — una sola fuente de verdad,
+// para que cambiar el color de un prefijo no requiera tocar dos
+// lugares por separado y arriesgar que se desincronicen.
+function colorPorPrefijoHeader(slug) {
+  const slugUpper = (slug || '').toUpperCase()
+  if (slugUpper.startsWith('EB_')) return '#000000'
+  if (slugUpper.startsWith('PAY_')) return '#635843'
+  return '#c4161c' // CG_* y cualquier otro prefijo no reconocido
+}
+
 function generarThumbSVG(bloque) {
   const colores = {
-    Header: { bg: '#c4161c', fg: '#ffffff', accent: '#ffffff' },
+    Header: { bg: colorPorPrefijoHeader(bloque.slug), fg: '#ffffff', accent: '#ffffff' },
     Contenido: { bg: '#f5f5f5', fg: '#333333', accent: '#c4161c' },
     Botones: { bg: '#f5f5f5', fg: '#333333', accent: '#c4161c' },
   }
@@ -300,9 +346,14 @@ function generarThumbSVG(bloque) {
 
   let contenido = ''
 
-  // Thumbs específicos por slug
-  if (bloque.slug === 'CG_Banda_Roja_Header') {
-    // 4 círculos blancos (redes) + línea de texto simulada
+  // Cualquier banda de Header usa el MISMO thumb (4 círculos blancos
+  // simulando los íconos de redes + 2 líneas simulando el logo/firma)
+  // — antes solo CG_Banda_Roja_Header lo tenía, y los demás headers
+  // (Mall, Comex, y los nuevos Pay/EB) caían al genérico de 4 barras
+  // grises sin sentido, ya que las 3 (ahora 5) bandas de header
+  // comparten exactamente la misma estructura visual, solo cambia el
+  // color de fondo (ya resuelto arriba con bgHeaderPorPrefijo).
+  if (bloque.categoria === 'Header') {
     contenido = `
       <circle cx="30" cy="40" r="9" fill="white" opacity="0.9"/>
       <circle cx="55" cy="40" r="9" fill="white" opacity="0.9"/>
@@ -376,10 +427,17 @@ function generarThumbSVG(bloque) {
 // específico, indicadores) sin tener que adivinar por estructura de
 // tags. La funcionalidad de lectura en sí no se construye ahora, esto
 // es solo dejar el export ya preparado para cuando se construya.
-function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalEspecifico, legalEspecificoActivo, indicadores }) {
+function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales = [], legalesSeparados = false, indicadores, tema = TEMA_DEFAULT, redesOrden = null }) {
+  const { bgContenido, colorTexto, conBorde } = TEMAS[tema] || TEMAS[TEMA_DEFAULT]
+  // El color del borde (y el fondo de esa misma tabla cuando el tema
+  // no lleva borde, ej. Avisos) sigue al HEADER elegido, no al tema:
+  // CG_* -> rojo, EB_* -> negro, PAY_* -> marrón Payroll. Antes
+  // quedaba fijo en el rojo de marca sin importar qué header se
+  // hubiera elegido.
+  const colorMarca = colorPorPrefijoHeader(bandaHeader?.slug)
   const contenidoRows = canvas.map(b => {
     const slug = b.slug || b.id || 'bloque'
-    const html = limpiarHtmlExport(b.htmlEditado || b.html)
+    const html = aplicarColorTexto(limpiarHtmlExport(b.htmlEditado || b.html), colorTexto)
     return `<!--BLOQUE:${slug}-->\n${html}\n<!--/BLOQUE-->`
   }).join('\n')
 
@@ -394,22 +452,42 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalEspe
     ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center"><a href="${imgFooter.link || '#'}" target="_blank"><img src="${imgFooter.src}" alt="${imgFooter.alt || ''}" class="img-max" width="600" border="0" /></a></td>\n</tr>\n<!--/IMG_FOOTER-->`
     : ''
 
-  // El legal específico se concatena dentro de la MISMA celda que el
-  // legal fijo, como texto corrido — un comentario HTML suelto ahí en
-  // medio (<!--LEGAL_ESPECIFICO-->texto<!--/LEGAL_ESPECIFICO-->) es
-  // distinto a los demás marcadores: esos rodean filas de tabla
-  // (<tr>/<td>) ya cerradas, mientras que este quedaría flotando en
-  // medio de párrafo. Algunos proveedores de correo sanitizan o
-  // reescriben agresivamente el HTML y podrían no tratarlo como
-  // comentario en ese contexto, dejándolo visible como texto literal
-  // en medio del legal — riesgo real que no corren los otros
-  // marcadores. Un <span data-legal-especifico> es estructuralmente
-  // inequívoco para cualquier parser (es un tag real, no texto suelto)
-  // y no se renderiza como contenido visible adicional.
-  const legalEspecificoHtml = legalEspecificoActivo && legalEspecifico.trim()
-    ? `<span data-legal-especifico="true">${legalHtmlExport(legalEspecifico)}</span> `
-    : ''
-  const legalContenido = `${legalEspecificoHtml}<span data-legal-fijo="true">${LEGAL_FIJO_HTML}</span>`
+  // Dos modos de concatenar los legales adicionales (el legal FIJO
+  // siempre va al final, en los dos modos):
+  //  - "corrido" (DEFAULT): todos pegados como texto seguido, un punto
+  //    y seguido tras otro, en la MISMA celda — es el comportamiento
+  //    normal/de siempre, no cambia nada para el caso común (un legal
+  //    o ninguno).
+  //  - "separado": cada legal en su PROPIA fila/celda, separados por
+  //    un espaciador de 14px — solo tiene sentido activarlo cuando se
+  //    van a sumar varios legales largos, para evitar que algunos
+  //    proveedores de correo detecten el bloque de texto corrido como
+  //    sospechoso y lo bloqueen (confirmado contra el HTML real de
+  //    Mall). Es una opción explícita, no el default, porque la
+  //    mayoría de las piezas tienen un legal corto o ninguno y no
+  //    necesitan esto.
+  const ESPACIADOR_14 = `<tr>\n<td colspan="3" style="height: 14px; font-size: 0px;" height="14">&nbsp;</td>\n</tr>`
+  function filaLegal(html, dataAttr) {
+    return `<tr>\n<td width="35"></td>\n<td class="Texto_Legales" style="font-family: Arial, Helvetica, Open Sans, sans-serif; font-size: 14px; font-weight: bold; line-height: 16px; color: #333333; text-align: justify; word-break: break-word; overflow-wrap: anywhere; word-wrap: break-word;" align="center"><span ${dataAttr}="true">${html}</span></td>\n<td width="35"></td>\n</tr>`
+  }
+  const legalesConTexto = legalesAdicionales.filter(l => l.texto.trim())
+
+  let legalesHtml
+  if (legalesSeparados) {
+    const filasLegalesAdicionales = legalesConTexto.map(l => filaLegal(legalHtmlExport(l.texto), 'data-legal-especifico'))
+    const todasLasFilasLegal = [...filasLegalesAdicionales, filaLegal(LEGAL_FIJO_HTML, 'data-legal-fijo')]
+    legalesHtml = todasLasFilasLegal.join(`\n${ESPACIADOR_14}\n`)
+  } else {
+    // Texto corrido — mismo formato que el comportamiento original:
+    // todos los legales adicionales (cada uno como su propio <span>,
+    // por los marcadores invisibles que preparan la futura lectura
+    // por link) seguidos por un espacio, y el legal fijo al final,
+    // todo en una sola fila/celda.
+    const especificosHtml = legalesConTexto
+      .map(l => `<span data-legal-especifico="true">${legalHtmlExport(l.texto)}</span> `)
+      .join('')
+    legalesHtml = `<tr>\n<td width="35"></td>\n<td class="Texto_Legales" style="font-family: Arial, Helvetica, Open Sans, sans-serif; font-size: 14px; font-weight: bold; line-height: 16px; color: #333333; text-align: justify; word-break: break-word; overflow-wrap: anywhere; word-wrap: break-word;" align="center">${especificosHtml}<span data-legal-fijo="true">${LEGAL_FIJO_HTML}</span></td>\n<td width="35"></td>\n</tr>`
+  }
 
   const indicadoresHtml = indicadores.length > 0
     ? `<!--INDICADORES-->\n` + indicadores.map(ind =>
@@ -425,16 +503,16 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalEspe
 <tbody>
 <tr>
 <td style="background-color: #ffffff;" bgcolor="#ffffff" align="center"><!--[if (gte mso 9)|(IE)]><table align='center' border='0' cellspacing='0' cellpadding='0' width='600'><tr><td align='center' valign='top' width='600'><![endif]-->
-<table style="max-width: 600px; background-color: #ffffff; border: solid 1px #c4161c;" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#c4161c" align="center"><!--HEADER:${bandaHeader?.slug || 'ninguno'}-->
+<table style="max-width: 600px; ${conBorde ? `background-color: #ffffff; border: solid 1px ${colorMarca};` : `background-color: ${colorMarca};`}" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${conBorde ? '#ffffff' : colorMarca}" align="center"><!--HEADER:${bandaHeader?.slug || 'ninguno'}-->
 <tbody>
 <tr>
-<td width="100%" valign="top" bgcolor="#c4161c" align="center"><!--[if (gte mso 9)|(IE)]><table align='center' border='0' cellspacing='0' cellpadding='0' width='600'><tr><td align='center' valign='top' width='600'><![endif]-->
-${bandaHeader?.html || ''}
+<td width="100%" valign="top" bgcolor="${colorMarca}" align="center"><!--[if (gte mso 9)|(IE)]><table align='center' border='0' cellspacing='0' cellpadding='0' width='600'><tr><td align='center' valign='top' width='600'><![endif]-->
+${reordenarRedesSociales(bandaHeader?.html || '', redesOrden)}
 <!--/HEADER--><!--[if (gte mso 9)|(IE)]></td></tr></table><![endif]--></td>
 </tr>
 ${imgPrincipalHtml}
 <tr>
-<td style="background-color: #ffffff;" width="100%" valign="top" bgcolor="#ffffff" align="center">
+<td style="background-color: ${bgContenido};" width="100%" valign="top" bgcolor="${bgContenido}" align="center">
 <table width="100%" cellspacing="0" cellpadding="0" border="0">
 <tbody>
 <tr>
@@ -462,11 +540,7 @@ ${imgFooterHtml}
 <tr>
 <td colspan="3" style="height: 28px; font-size: 0px;" height="28">&nbsp;</td>
 </tr>
-<tr>
-<td width="35"></td>
-<td class="Texto_Legales" style="font-family: Arial, Helvetica, Open Sans, sans-serif; font-size: 14px; font-weight: bold; line-height: 16px; color: #333333; text-align: justify; word-break: break-word; overflow-wrap: anywhere; word-wrap: break-word;" align="center">${legalContenido}</td>
-<td width="35"></td>
-</tr>
+${legalesHtml}
 <tr>
 <td colspan="3" style="height: 28px; font-size: 0px;" height="28">&nbsp;</td>
 </tr>
@@ -519,6 +593,151 @@ function quitarWrapperSiEnvuelveTodo(html) {
 // Limpia el HTML del legal específico para el export: quita wrappers externos
 function legalHtmlExport(html) {
   return quitarWrapperSiEnvuelveTodo(limpiarHtmlExport(html)).trim()
+}
+
+// Reemplaza el color BASE de texto (#333333) por el del tema activo —
+// se aplica recién al exportar/previsualizar, nunca al guardar el
+// htmlEditado del bloque en sí. Esto es deliberado: si se aplicara al
+// cargar el bloque al canvas, el HTML guardado quedaría "teñido" con
+// el color de ESE momento, y cambiar de tema después no actualizaría
+// nada sin re-aplicar el reemplazo a mano. Aplicándolo siempre como
+// el último paso antes de generar el HTML final, cambiar de tema
+// (ICBC/Avisos/Mall) en cualquier momento refleja el color correcto
+// de inmediato, sin tocar el contenido real editado por el usuario.
+// Nunca toca #c4161c (el rojo de marca/acento) — ese es intencional
+// en los 3 temas, no es "texto base".
+function aplicarColorTexto(html, colorTexto) {
+  if (colorTexto === '#333333') return html // tema ICBC, color original, nada que cambiar
+  return html.replace(/color:\s*#333333/gi, `color: ${colorTexto}`)
+}
+
+// ─── Redes sociales en bandas de Header ────────────────────────────────────
+// Cualquier banda de header (ICBC, Mall, Comex, las que se sumen a
+// futuro) puede traer hasta 4 íconos de redes — algunas comunicaciones
+// puntuales no las usan (ver CG_Banda_Roja_Header_Comex.html, que ya
+// viene con los <td class="IconoRedes"> vacíos). En vez de modelar 2
+// versiones de cada header (con/sin redes), se detectan las redes
+// presentes por el dominio del <a href> dentro de cada
+// <td class="IconoRedes">, y se reordenan/desactivan al vuelo al
+// exportar/previsualizar — mismo criterio que aplicarColorTexto: la
+// transformación se aplica recién al generar el HTML final, nunca se
+// "quema" en el bandaHeader guardado. El ORDEN del array de abajo es
+// el orden real en el que aparecen hoy en los headers existentes —
+// no tiene ningún significado especial más que ser el default antes
+// de que el usuario reordene.
+// Íconos de redes sociales como SVG propios — lucide-react eliminó
+// todos los íconos de marca registrada (Twitter/X, Facebook,
+// Instagram, GitHub, etc.) en su versión 1.0 por motivos legales y de
+// mantenimiento, recomendando reemplazarlos por un SVG propio o el
+// paquete aparte Simple Icons. Como son solo 4 íconos chicos y fijos,
+// se escriben acá inline en vez de sumar una dependencia nueva al
+// proyecto solo para esto. Mismo patrón de props (size, currentColor
+// vía CSS) que los íconos de lucide-react que ya se usan en el resto
+// del archivo, para que el resto del código no tenga que tratarlos
+// distinto.
+function IconoTwitter({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M18.9 1.9h3.7l-8.1 9.3 9.5 12.6h-7.5l-5.9-7.7-6.7 7.7H.2l8.7-9.9L0 1.9h7.6l5.3 7.1zM17 22h2L7.1 3.6H5z" />
+    </svg>
+  )
+}
+function IconoFacebook({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M22 12.06C22 6.5 17.5 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.91h2.54V9.84c0-2.5 1.49-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.78l-.45 2.91h-2.33V22c4.78-.79 8.44-4.94 8.44-9.94z" />
+    </svg>
+  )
+}
+function IconoInstagram({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </svg>
+  )
+}
+function IconoLinkedin({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.34 18.34V9.75H5.67v8.59zM7 8.6a1.55 1.55 0 1 0 0-3.1 1.55 1.55 0 0 0 0 3.1zm11.34 9.74v-4.7c0-2.52-1.35-3.69-3.15-3.69a2.72 2.72 0 0 0-2.46 1.35h-.04V9.75H10v8.59h2.67v-4.27c0-1.13.21-2.22 1.61-2.22 1.38 0 1.4 1.29 1.4 2.29v4.2z" />
+    </svg>
+  )
+}
+
+const REDES_SOCIALES = [
+  { key: 'twitter',   dominio: 'twitter.com',   label: 'Twitter',   Icono: IconoTwitter },
+  { key: 'facebook',  dominio: 'facebook.com',  label: 'Facebook',  Icono: IconoFacebook },
+  { key: 'instagram', dominio: 'instagram.com', label: 'Instagram', Icono: IconoInstagram },
+  { key: 'linkedin',  dominio: 'linkedin.com',  label: 'LinkedIn',  Icono: IconoLinkedin },
+]
+
+// Qué redes están REALMENTE presentes en el HTML de este header en
+// particular (algunos headers, como Comex, ya vienen sin ninguna) —
+// no tiene sentido mostrar un pill para una red que el header ni
+// trae, así que el panel solo lista las que detectarRedesSociales
+// encuentra de verdad.
+function detectarRedesSociales(html) {
+  if (!html) return []
+  const tdRegex = /<td class="IconoRedes"[^>]*>([\s\S]*?)<\/td>/gi
+  const presentes = []
+  let m
+  while ((m = tdRegex.exec(html)) !== null) {
+    const social = REDES_SOCIALES.find(s => m[1].includes(s.dominio))
+    if (social) presentes.push(social.key)
+  }
+  return presentes
+}
+
+// Reconstruye el bloque de <td class="IconoRedes"> según el orden y
+// actividad elegidos por el usuario: las ACTIVAS primero (en el orden
+// que el usuario armó arrastrando los pills), las inactivas después
+// pero vacías — así nunca cambia la CANTIDAD de celdas (no se rompe
+// el ancho reservado para el grupo de redes en la tabla), pero las
+// visibles quedan agrupadas sin huecos en el medio si, por ejemplo,
+// solo se activan Twitter y LinkedIn.
+// ordenActivo: array de { key, activa }, en el orden elegido por el
+// usuario (drag and drop en el panel de edición del header).
+function reordenarRedesSociales(html, ordenActivo) {
+  if (!html || !ordenActivo) return html
+  const tdRegex = /<td class="IconoRedes"([^>]*)>([\s\S]*?)<\/td>/gi
+  const celdas = []
+  let m
+  while ((m = tdRegex.exec(html)) !== null) {
+    const social = REDES_SOCIALES.find(s => m[2].includes(s.dominio))
+    celdas.push({ attrs: m[1], inner: m[2], key: social?.key ?? null })
+  }
+  // Si ninguna celda tiene una red real detectada (ej. Comex, que ya
+  // viene con las 4 celdas vacías), no hay nada que reordenar.
+  if (!celdas.some(c => c.key)) return html
+
+  // IMPORTANTE: el padding-left de cada celda es una propiedad de la
+  // POSICIÓN en la fila, no de la red en sí — la primera celda nunca
+  // tiene padding (no hay nada antes), las que siguen sí (separación
+  // del ícono anterior). Confirmado contra el HTML real: solo el
+  // primer <td class="IconoRedes"> no tiene style="padding-left:
+  // 10px", los otros 3 sí. Por eso se reconstruye usando el attrs de
+  // la POSICIÓN de destino (celdas[i].attrs, por índice), nunca el
+  // attrs original de la red que se mueve ahí — si no, mover una red
+  // con padding a la primera posición dejaría un hueco antes del
+  // ícono donde no debería haber ninguno, o viceversa.
+  const innerPorKey = {}
+  celdas.forEach(c => { if (c.key) innerPorKey[c.key] = c.inner })
+  const activasKeys = ordenActivo.filter(r => r.activa).map(r => r.key)
+  const inactivasKeys = ordenActivo.filter(r => !r.activa).map(r => r.key)
+  const ordenFinal = [...activasKeys, ...inactivasKeys]
+
+  const nuevasCeldas = ordenFinal.map((key, posicion) => {
+    const celdaPosicion = celdas[posicion]
+    if (!celdaPosicion) return null
+    const activa = activasKeys.includes(key)
+    const inner = activa ? (innerPorKey[key] ?? '') : ''
+    return `<td class="IconoRedes"${celdaPosicion.attrs}>${inner}</td>`
+  }).filter(Boolean)
+
+  let idx = 0
+  return html.replace(tdRegex, () => nuevasCeldas[idx++] ?? '')
 }
 
 // ─── Mini editor rich text ──────────────────────────────────────────────────
@@ -783,7 +1002,69 @@ function CampoImagen({ campo, onActualizar, onReset }) {
   )
 }
 
-// ─── Panel editor ───────────────────────────────────────────────────────────
+// ─── Panel de edición de la banda Header (redes sociales) ──────────────────
+// Una sola lista de pills (uno por red detectada en el header actual),
+// cada pill con el ícono de la red en gris neutro (sin colores de
+// marca — desentonaban del resto del diseño del editor, que usa un
+// único acento violeta para todo estado activo/hover) — click para
+// tachar/activar (igual idea visual que ya usa el resto del editor
+// para "incluida/no incluida"), arrastrable para reordenar. El orden
+// del array ES el orden final en el export — no hay una zona separada
+// de "disponibles" vs "activas", todo vive en una sola lista, más
+// simple de entender de un vistazo.
+function PanelEditorHeader({ bandaHeader, redesOrden, onToggle, onReordenar }) {
+  const [dragKey, setDragKey] = useState(null)
+  const redes = redesOrden ?? []
+
+  if (redes.length === 0) {
+    return (
+      <div className="ep-editor-empty">
+        <Layout size={28} style={{ color: 'var(--border)' }} />
+        <span>Esta banda de header no tiene redes sociales para editar.</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ep-editor-body">
+      <div className="ep-campo">
+        <label className="ep-campo-label">Redes sociales</label>
+        <p className="ep-header-redes-hint">
+          Click para mostrar/ocultar — arrastrá para reordenar.
+        </p>
+        <div className="ep-header-redes-pills">
+          {redes.map(r => {
+            const red = REDES_SOCIALES.find(s => s.key === r.key)
+            if (!red) return null
+            const Icono = red.Icono
+            return (
+              <div
+                key={r.key}
+                className={`ep-header-red-pill ${!r.activa ? 'inactiva' : ''} ${dragKey === r.key ? 'dragging' : ''}`}
+                draggable
+                onDragStart={() => setDragKey(r.key)}
+                onDragEnd={() => setDragKey(null)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault()
+                  if (dragKey && dragKey !== r.key) onReordenar(dragKey, redes.findIndex(x => x.key === r.key))
+                  setDragKey(null)
+                }}
+                onClick={() => onToggle(r.key)}
+                title={r.activa ? `Ocultar ${red.label}` : `Mostrar ${red.label}`}
+              >
+                <GripVertical size={12} className="ep-header-red-grip" />
+                <Icono size={14} />
+                <span>{red.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PanelEditor({ bloque, onActualizar }) {
   const [htmlLocal, setHtmlLocal] = useState(bloque.htmlEditado || bloque.html)
   const [saving, setSaving] = useState(false)
@@ -981,23 +1262,94 @@ function CategoriaColapsable({ titulo, children }) {
 }
 
 // ─── Componente principal ───────────────────────────────────────────────────
+// Reconstruye el objeto bandaHeader completo a partir del slug guardado
+// — localStorage solo guarda el slug (string liviano), no el HTML
+// completo del template (que ya vive en BLOQUES y no tiene sentido
+// duplicar en storage).
+function headerDesdeSlag(slug) {
+  return BLOQUES_HEADER.find(b => b.slug === slug) ?? BLOQUES_HEADER[0] ?? null
+}
+
 export default function EditorPiezas() {
   const [busqueda, setBusqueda] = useState('')
-  const [nombre, setNombre] = useState('Nueva pieza')
-  const [bandaHeader, setBandaHeader] = useState(BLOQUES_HEADER[0] ?? null)
-  const [canvas, setCanvas] = useState([])
+
+  // ── Borrador persistido en localStorage ────────────────────────────
+  // useLocalStorage encapsula lectura lazy + try/catch de escritura.
+  // El borrador es un objeto compuesto (nombre, tema, canvas, etc.) —
+  // se lee UNA vez al montar para inicializar cada estado individual,
+  // y se escribe en el useEffect de guardado automático vía setBorrador.
+  const [borrador, setBorrador] = useLocalStorage('ep_borrador', null)
+  const [nombre, setNombre] = useState(() => borrador?.nombre ?? 'Nueva pieza')
+  // ICBC / Avisos / Mall — cambiable en cualquier momento (no solo al
+  // crear la pieza), ya que afecta solo colores en el momento de
+  // exportar/previsualizar, nunca el contenido editado por el usuario.
+  const [tema, setTema] = useState(() => borrador?.tema ?? TEMA_DEFAULT)
+  const [bandaHeader, setBandaHeader] = useState(() => borrador?.bandaHeaderSlug ? headerDesdeSlag(borrador.bandaHeaderSlug) : (BLOQUES_HEADER[0] ?? null))
+  // Array de { key, activa } en el ORDEN elegido por el usuario
+  // (arrastrando los pills en el panel de edición del header) — null
+  // hasta que se inicializa por primera vez con las redes reales que
+  // trae el header actual (ver inicializarRedesOrdenSiHaceFalta), así
+  // se resetea automáticamente al cambiar a un header distinto.
+  const [redesOrden, setRedesOrden] = useState(() => borrador?.redesOrden ?? null)
+  function toggleRedActiva(key) {
+    setRedesOrden(prev => (prev ?? []).map(r => r.key === key ? { ...r, activa: !r.activa } : r))
+  }
+  function reordenarPillRed(fromKey, toIndex) {
+    setRedesOrden(prev => {
+      const arr = [...(prev ?? [])]
+      const fromIdx = arr.findIndex(r => r.key === fromKey)
+      if (fromIdx === -1) return prev
+      const [item] = arr.splice(fromIdx, 1)
+      arr.splice(toIndex, 0, item)
+      return arr
+    })
+  }
+  const [canvas, setCanvas] = useState(() => {
+    const guardado = borrador?.canvas
+    if (!guardado) return []
+    // Reconstruir el html original de cada bloque desde BLOQUES —
+    // no se guarda en localStorage (solo htmlEditado y metadata),
+    // así que hay que cruzarlo de vuelta con la fuente real.
+    return guardado.map(b => {
+      const original = BLOQUES.find(x => x.id === b.id)
+      return original ? { ...b, html: original.html } : b
+    }).filter(b => b.html != null) // descartar bloques cuyo template ya no existe
+  })
   const [selectedId, setSelectedId] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+  // Desktop (600px, ancho real del email) / Mobile (375px) — angostar
+  // el propio iframe con width fijo es lo que dispara los media
+  // queries reales del HTML (@media max-width: 600px en CANVAS_STYLES,
+  // que ya trae todo el responsive real: Ocultar_Desktop, tamaños de
+  // imagen, paddings). Un simple CSS de "achicar visualmente" el
+  // iframe no alcanza — el viewport interno que ve el contenido sigue
+  // siendo el mismo si no se cambia el width real del elemento.
+  const [previewModo, setPreviewModo] = useState('desktop')
   const [draggingBibliotecaId, setDraggingBibliotecaId] = useState(null)
   const [draggingCanvasId, setDraggingCanvasId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null) // { id, posicion: 'arriba'|'abajo' }
   const [dragOverZona, setDragOverZona] = useState(false)
   const [dragOverHeader, setDragOverHeader] = useState(false)
-  const [imgPrincipal, setImgPrincipal] = useState({ activo: false, src: '', alt: '' })
-  const [imgFooter, setImgFooter] = useState({ activo: false, src: '', alt: '', link: '' })
-  const [legalEspecifico, setLegalEspecifico] = useState('')
-  const [legalEspecificoActivo, setLegalEspecificoActivo] = useState(false)
-  const [indicadores, setIndicadores] = useState([])
+  const [imgPrincipal, setImgPrincipal] = useState(() => borrador?.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '' })
+  const [imgFooter, setImgFooter] = useState(() => borrador?.imgFooter ?? { activo: false, src: '', alt: '', link: '' })
+  // Array de legales adicionales — mismo patrón que indicadores (cada
+  // uno con su id, botón Agregar, eliminar individual). Disponible en
+  // los 3 templates, no es exclusivo de Mall.
+  const [legalesAdicionales, setLegalesAdicionales] = useState(() => borrador?.legalesAdicionales ?? [])
+  function agregarLegalAdicional() { setLegalesAdicionales(p => [...p, { id: Date.now(), texto: '' }]) }
+  function actualizarLegalAdicional(id, texto) { setLegalesAdicionales(p => p.map(l => l.id === id ? { ...l, texto } : l)) }
+  function eliminarLegalAdicional(id) { setLegalesAdicionales(p => p.filter(l => l.id !== id)) }
+  // DEFAULT false = texto corrido, un punto y seguido tras otro, igual
+  // que el comportamiento de siempre — es lo normal para la mayoría de
+  // las piezas (un legal corto o ninguno). true = cada legal en su
+  // propia fila/celda separada por un espaciador de 14px — opción
+  // explícita, solo tiene sentido cuando se van a sumar varios legales
+  // largos, para evitar que algunos proveedores de correo detecten el
+  // bloque de texto corrido como sospechoso y lo bloqueen (confirmado
+  // contra el HTML real de Mall, donde el legal completo viene
+  // partido así).
+  const [legalesSeparados, setLegalesSeparados] = useState(() => borrador?.legalesSeparados ?? false)
+  const [indicadores, setIndicadores] = useState(() => borrador?.indicadores ?? [])
   // Estado visual de "guardando" para los botones Confirmar de las
   // secciones especiales (imagen principal/footer, legal específico,
   // indicadores) — mismo criterio que ya usa PanelEditor.aplicar() para
@@ -1029,6 +1381,48 @@ export default function EditorPiezas() {
   const bloquesFiltradosContenido = BLOQUES_CONTENIDO.filter(b =>
     b.slug !== 'Espaciador' && b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
   const categoriasContenido = [...new Set(bloquesFiltradosContenido.map(b => b.categoria))]
+
+  // ── Guardado automático en localStorage ────────────────────────────
+  // setBorrador viene de useLocalStorage — ya tiene el try/catch
+  // encapsulado, no hace falta repetirlo acá. Debounce de 500ms para
+  // no escribir en cada keystroke sino cuando el usuario para un momento.
+  // El html original de cada bloque no se guarda — se reconstruye
+  // desde BLOQUES al cargar (ver inicialización de canvas más arriba).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setBorrador({
+        nombre,
+        tema,
+        bandaHeaderSlug: bandaHeader?.slug ?? null,
+        redesOrden,
+        canvas: canvas.map(b => ({ ...b, html: undefined })),
+        imgPrincipal,
+        imgFooter,
+        legalesAdicionales,
+        legalesSeparados,
+        indicadores,
+      })
+    }, 500)
+    return () => clearTimeout(t)
+  }, [nombre, tema, bandaHeader, redesOrden, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, indicadores])
+
+  // ── Nueva pieza — resetea todo el estado al default ────────────────
+  // También borra el borrador del localStorage para que al recargar
+  // no vuelva a aparecer la pieza anterior.
+  function nuevaPieza() {
+    setNombre('Nueva pieza')
+    setTema(TEMA_DEFAULT)
+    setBandaHeader(BLOQUES_HEADER[0] ?? null)
+    setRedesOrden(null)
+    setCanvas([])
+    setSelectedId(null)
+    setImgPrincipal({ activo: false, src: '', alt: '', title: '', link: '' })
+    setImgFooter({ activo: false, src: '', alt: '', link: '' })
+    setLegalesAdicionales([])
+    setLegalesSeparados(false)
+    setIndicadores([])
+    setBorrador(null)
+  }
 
   function crearInstancia(bloque) {
     return { ...bloque, instanceId: `${bloque.id}-${Date.now()}`, htmlEditado: null }
@@ -1135,7 +1529,7 @@ export default function EditorPiezas() {
     setDragOverHeader(false)
     if (!draggingBibliotecaId) return
     const bloque = BLOQUES.find(b => b.id === draggingBibliotecaId)
-    if (bloque?.categoria === 'Header') setBandaHeader(bloque)
+    if (bloque?.categoria === 'Header') { setBandaHeader(bloque); setRedesOrden(null) }
     setDraggingBibliotecaId(null)
   }
 
@@ -1178,7 +1572,7 @@ export default function EditorPiezas() {
   function eliminarIndicador(id) { setIndicadores(p => p.filter(i => i.id !== id)) }
 
   function exportar() {
-    const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalEspecifico, legalEspecificoActivo, indicadores })
+    const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, indicadores, tema, redesOrden })
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
     const slug = nombre.replace(/[ñÑ]/g, m => m === 'ñ' ? 'n' : 'N').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 80) || 'pieza'
     const url = URL.createObjectURL(blob)
@@ -1187,9 +1581,31 @@ export default function EditorPiezas() {
     URL.revokeObjectURL(url)
   }
 
+  const [copiado, setCopiado] = useState(false)
+  async function copiar() {
+    const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, indicadores, tema, redesOrden })
+    await navigator.clipboard.writeText(html)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
+  }
+
+  const [showConfirmReinicio, setShowConfirmReinicio] = useState(false)
+
   const selectedBloque = canvas.find(b => b.instanceId === selectedId)
+  const redesDetectadas = bandaHeader ? detectarRedesSociales(bandaHeader.html) : []
+
+  // Inicializa redesOrden la primera vez que se carga un header con
+  // redes reales — todas activas, en el orden en que aparecen en el
+  // HTML original. Se vuelve a disparar cada vez que redesOrden se
+  // resetea a null (cambio de header), no en cada render.
+  useEffect(() => {
+    if (redesOrden == null && redesDetectadas.length > 0) {
+      setRedesOrden(redesDetectadas.map(key => ({ key, activa: true })))
+    }
+  }, [redesOrden, bandaHeader])
+
   const previewSrcdoc = showPreview
-    ? `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalEspecifico, legalEspecificoActivo, indicadores })}</body></html>`
+    ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:99px}</style></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, indicadores, tema, redesOrden })}</body></html>`
     : ''
 
   return (
@@ -1233,7 +1649,7 @@ export default function EditorPiezas() {
                   <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
                   <div className="ep-bloque-footer">
                     <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                    <button className="ep-bloque-add" onClick={() => setBandaHeader(bloque)}>
+                    <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
                       {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
                     </button>
                   </div>
@@ -1282,15 +1698,33 @@ export default function EditorPiezas() {
         <div className="ep-canvas-header">
           <input className="ep-nombre-pieza" autoComplete="off" value={nombre} onChange={e => setNombre(e.target.value)} title="Nombre de la pieza" />
           <div className="ep-canvas-actions">
-            <button className="ep-btn ep-btn-disabled" disabled>🔗 Importar desde link</button>
+            <button className="ep-btn ep-btn-disabled" disabled title="Importar desde link">🔗 Exportar</button>
             <button className="ep-btn ep-btn-ghost" onClick={() => setShowPreview(true)}><Eye size={14} /> Vista previa</button>
+            <button className="ep-btn ep-btn-ghost" onClick={copiar}>{copiado ? <ClipboardCheck size={14} /> : <Copy size={14} />}{copiado ? 'Copiado' : 'Copiar HTML'}</button>
             <button className="ep-btn ep-btn-primary" onClick={exportar}><Download size={14} /> Exportar HTML</button>
+            <div className="ep-canvas-actions-sep" />
+            <button className="ep-btn ep-btn-ghost ep-btn-reiniciar" onClick={() => setShowConfirmReinicio(true)}><RotateCcw size={14} /> Reiniciar</button>
+          </div>
+        </div>
+        <div className="ep-canvas-header ep-canvas-header-tema">
+          <span className="ep-tema-label">Template</span>
+          <div className="re-tabs">
+            {Object.entries(TEMAS).map(([key, t]) => (
+              <button key={key} className={tema === key ? 'active' : ''} onClick={() => setTema(key)}>
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="ep-canvas-body">
 
-          {/* Banda Header */}
-          <div className={`ep-zona-fija ${dragOverHeader ? 'drag-over-header' : ''}`}
+          {/* Banda Header — seleccionable igual que cualquier bloque del
+              canvas (click abre su edición en el panel derecho, mismo
+              patrón que PanelEditor para bloques normales). 'HEADER' es
+              un id reservado: bandaHeader no vive en el array canvas,
+              así que no puede compartir instanceId con nada real ahí. */}
+          <div className={`ep-zona-fija ${dragOverHeader ? 'drag-over-header' : ''} ${selectedId === 'HEADER' ? 'selected' : ''}`}
+            onClick={() => bandaHeader && setSelectedId('HEADER')}
             onDragOver={e => { e.preventDefault(); const b = BLOQUES.find(x => x.id === draggingBibliotecaId); if (b?.categoria === 'Header') setDragOverHeader(true) }}
             onDragLeave={() => setDragOverHeader(false)} onDrop={onDropHeader}>
             <div className="ep-zona-fija-header">
@@ -1298,7 +1732,28 @@ export default function EditorPiezas() {
               <span className="ep-zona-fija-badge">{bandaHeader?.nombre || 'Sin seleccionar'}</span>
             </div>
             {bandaHeader
-              ? <AutoIframe className="ep-zona-fija-preview" srcDoc={wrapPreview(bandaHeader.html, true)} title="Banda header" />
+              ? (
+                <div className="ep-zona-fija-preview-wrap">
+                  <AutoIframe className="ep-zona-fija-preview" srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="Banda header" />
+                  {/* Overlay transparente — un <iframe> tiene su propio
+                      documento interno, y los eventos dragover/drop del
+                      navegador se entregan a ESE documento cuando el
+                      mouse está encima, no al documento padre de React.
+                      Sin esta capa, soltar un bloque de Header sobre el
+                      preview ya cargado no funcionaba (solo se podía
+                      soltar sobre ep-zona-fija-header, que es texto
+                      plano sin iframe de por medio). El overlay
+                      reenvía los mismos handlers que ya tiene el
+                      contenedor padre, así el comportamiento es
+                      idéntico en toda la zona; también es la capa que
+                      recibe el click de selección, ya que el iframe
+                      tampoco entrega clicks normales al padre. */}
+                  <div className="ep-zona-fija-preview-overlay"
+                    onClick={() => setSelectedId('HEADER')}
+                    onDragOver={e => { e.preventDefault(); const b = BLOQUES.find(x => x.id === draggingBibliotecaId); if (b?.categoria === 'Header') setDragOverHeader(true) }}
+                    onDragLeave={() => setDragOverHeader(false)} onDrop={onDropHeader} />
+                </div>
+              )
               : <div className="ep-zona-drop-empty">Arrastrá un bloque de Header acá</div>}
           </div>
 
@@ -1424,26 +1879,44 @@ export default function EditorPiezas() {
             )}
           </div>
 
-          {/* Legal específico */}
+          {/* Legales adicionales */}
           <div className="ep-zona-toggle">
             <div className="ep-zona-toggle-header">
-              <span className="ep-zona-toggle-label"><FileText size={12} /> Legal específico</span>
-              <button className={`ep-toggle-btn ${legalEspecificoActivo ? 'activo' : ''}`}
-                onClick={() => setLegalEspecificoActivo(v => !v)}>
-                {legalEspecificoActivo ? 'Incluido' : 'No incluido'}
-              </button>
+              <span className="ep-zona-toggle-label"><FileText size={12} /> Legales adicionales</span>
+              <button className={`ep-toggle-btn ${legalesAdicionales.length > 0 ? 'activo' : ''}`} onClick={agregarLegalAdicional}>+ Agregar</button>
             </div>
-            {legalEspecificoActivo && (
-              <div className="ep-zona-toggle-body">
-                <label className="ep-img-label">Texto legal de la promo — se agrega antes del legal genérico, sin separación</label>
-                <RichEditor key="legal-especifico" value={legalEspecifico} onChange={setLegalEspecifico} />
-                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            {legalesAdicionales.length > 0 && (
+              <div className="ep-zona-toggle-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {/* Default: texto corrido (igual que siempre). Activar
+                    esto solo tiene sentido si se van a sumar varios
+                    legales largos — separa cada uno en su propia
+                    sección con un espacio entre cada una, para que
+                    algunos proveedores de correo no detecten un bloque
+                    de texto muy largo como sospechoso. */}
+                <label className="ep-legales-separar-toggle">
+                  <input type="checkbox" checked={legalesSeparados} onChange={e => setLegalesSeparados(e.target.checked)} />
+                  <span>Separar cada legal en su propia sección</span>
+                </label>
+                <p className="ep-legales-hint">
+                  {legalesSeparados
+                    ? 'Cada legal va en su propia sección, separado por un espacio — recomendado solo si los textos son largos.'
+                    : 'Los legales se concatenan seguidos, como texto corrido (comportamiento normal).'}
+                </p>
+                {legalesAdicionales.map((legal, i) => (
+                  <div key={legal.id} className="ep-legal-adicional-item">
+                    <div className="ep-legal-adicional-header">
+                      <span className="ep-legal-adicional-label">Legal {i + 1}</span>
+                      <button onClick={() => eliminarLegalAdicional(legal.id)} className="ep-legal-adicional-eliminar" title="Eliminar este legal">
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <RichEditor key={`legal-${legal.id}`} value={legal.texto} onChange={v => actualizarLegalAdicional(legal.id, v)} />
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                   <button className="ep-btn ep-btn-primary ep-btn-aplicar" style={{ flex: 1 }} onClick={() => confirmarSeccion('legal')} disabled={confirmando.legal}>
                     {confirmando.legal ? <Loader2 size={14} className="ep-spin" /> : <Check size={14} />}
-                    {confirmando.legal ? 'Confirmando…' : 'Confirmar texto'}
-                  </button>
-                  <button className="ep-btn ep-btn-ghost" style={{ flex: 0 }} onClick={() => setLegalEspecifico('')} title="Reiniciar">
-                    <RotateCcw size={13} />
+                    {confirmando.legal ? 'Confirmando…' : 'Confirmar legales'}
                   </button>
                 </div>
               </div>
@@ -1504,11 +1977,14 @@ export default function EditorPiezas() {
       <aside className="ep-editor">
         <div className="ep-editor-header">
           <span className="ep-editor-titulo">Panel de edición</span>
+          {selectedId === 'HEADER' && <span className="ep-editor-bloque-nombre">Banda Header</span>}
           {selectedBloque && <span className="ep-editor-bloque-nombre">{selectedBloque.nombre}</span>}
         </div>
-        {!selectedBloque
-          ? <div className="ep-editor-empty"><FileText size={28} style={{ color: 'var(--border)' }} /><span>Seleccioná un bloque del canvas para editar su contenido</span></div>
-          : <PanelEditor key={selectedBloque.instanceId} bloque={selectedBloque} onActualizar={actualizarBloque} />}
+        {selectedId === 'HEADER'
+          ? <PanelEditorHeader bandaHeader={bandaHeader} redesOrden={redesOrden} onToggle={toggleRedActiva} onReordenar={reordenarPillRed} />
+          : !selectedBloque
+            ? <div className="ep-editor-empty"><FileText size={28} style={{ color: 'var(--border)' }} /><span>Seleccioná un bloque del canvas para editar su contenido</span></div>
+            : <PanelEditor key={selectedBloque.instanceId} bloque={selectedBloque} onActualizar={actualizarBloque} />}
       </aside>
 
       {/* ── Modal preview ── */}
@@ -1516,13 +1992,35 @@ export default function EditorPiezas() {
         <div className="ep-preview-overlay" onClick={() => setShowPreview(false)}>
           <div className="ep-preview-modal" onClick={e => e.stopPropagation()}>
             <div className="ep-preview-header">
-              <span className="ep-preview-titulo">Vista previa — {nombre}</span>
+              <div className="ep-preview-titulo-wrap">
+                <span className="ep-preview-titulo">Vista previa</span>
+                <span className="ep-preview-subtitulo">{nombre}</span>
+              </div>
+              <div className="re-tabs ep-preview-modo-tabs">
+                <button className={previewModo === 'desktop' ? 'active' : ''} onClick={() => setPreviewModo('desktop')}>Desktop</button>
+                <button className={previewModo === 'mobile' ? 'active' : ''} onClick={() => setPreviewModo('mobile')}>Mobile</button>
+              </div>
               <button className="ep-preview-close" onClick={() => setShowPreview(false)}><X size={16} /></button>
             </div>
-            <iframe className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" />
+            <div className={`ep-preview-iframe-wrap ${previewModo === 'mobile' ? 'modo-mobile' : ''}`}>
+              {previewModo === 'desktop'
+                ? <AutoIframe className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" />
+                : <iframe className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" style={{ width: '375px' }} />}
+            </div>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={showConfirmReinicio}
+        variant="warning"
+        title="¿Reiniciar la pieza?"
+        message="Se van a eliminar todos los bloques, imágenes, legales e indicadores que cargaste. El borrador guardado también se va a borrar. Esta acción no se puede deshacer."
+        confirmLabel="Sí, reiniciar"
+        cancelLabel="Cancelar"
+        onConfirm={() => { nuevaPieza(); setShowConfirmReinicio(false) }}
+        onCancel={() => setShowConfirmReinicio(false)}
+      />
     </div>
   )
 }
