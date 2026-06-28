@@ -1822,6 +1822,20 @@ function clasificarPorEstructuraDirecta(filaHtml) {
           return wm && Number(wm[1]) > 30
         })
         if (tieneIconoGrandeSinSubTabla) return 'Destacado_Icono_Texto'
+
+        // Modulo_Doble_Clasico / Modulo_Doble_Con_Imagen_Punteada:
+        // ambos tienen exactamente 2 <td> de nivel superior (class="top" y
+        // class="bottom"), cada uno con su propia sub-tabla y una imagen
+        // principal de 265px, sin texto visible. El discriminador entre los
+        // dos es la presencia de puntos-128-blanco.png (ver clasificarModuloDoble).
+        // La señal de confirmación de que estamos ante un Modulo_Doble real
+        // (y no Destacado_GiftCard_BigBox, que también usa class="top/bottom"
+        // pero tiene texto visible): class="top" o "bottom" presentes Y sin
+        // texto visible en el bloque completo (los Modulo_Doble son 100% imagen).
+        const tieneClasesTopBottom = /class=["'](?:top|bottom)["']/i.test(subTablaMatch[1])
+        const textoVisibleModulo = interior.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim()
+        const esModuloDoble = tieneClasesTopBottom && textoVisibleModulo.length === 0
+        if (esModuloDoble) return clasificarModuloDoble(interior)
       }
     }
     return null // bloque compuesto que no matchea el patrón anterior -> no es este caso simple
@@ -1921,6 +1935,23 @@ function clasificarPorEstructuraDirecta(filaHtml) {
   if (tieneImagen && tieneTexto && esIconoChico) return 'Bullet_Titular_Negro'
 
   return null // ninguno (celda vacía/espaciador), o imagen+texto sin ícono chico -> sigue al flujo normal
+}
+
+// Discriminador directo para el par Modulo_Doble_Clasico /
+// Modulo_Doble_Con_Imagen_Punteada — llamado desde clasificarPorEstructuraDirecta
+// una vez que se verificó que la estructura es un bloque de dos columnas (top/bottom).
+// La señal inequívoca: Punteada siempre lleva MediaLineaPunteada530x4.png (la línea
+// divisoria visible solo en mobile) — el Clásico nunca la tiene. El bgcolor de las
+// celdas NO se usa como señal porque varía por segmento (rojo CG, negro EB, etc.).
+function clasificarModuloDoble(interior) {
+  // MediaLineaPunteada530x4.png NO sirve como señal acá porque vive dentro de un
+  // comentario condicional <!--[if !mso]><!--> ... <!--<![endif]--> que
+  // importarHeuristico limpia ANTES de clasificar. puntos-128-blanco.png (el
+  // separador vertical de 2px entre las dos imágenes, exclusivo de la Punteada)
+  // sí sobrevive esa limpieza — es el discriminador correcto.
+  return /puntos-128-blanco/i.test(interior)
+    ? 'Modulo_Doble_Con_Imagen_Punteada'
+    : 'Modulo_Doble_Clasico'
 }
 
 // Punto de entrada de la Fase 2 — se usa solo cuando importarDesdeHtml
@@ -2025,10 +2056,54 @@ function importarHeuristico(html) {
       const match = BLOQUES_CONTENIDO.find(b => b.slug === slugFinal)
       if (match) {
         coincidencias++
-        const htmlNormalizado = slugFinal === 'Imagen_Libre'
-          ? normalizarImagenLibre(normalizarNegritas(filaHtml.trim()))
-          : normalizarNegritas(filaHtml.trim())
-        return { ...match, instanceId: `${match.id}-${Date.now()}-${idx}`, htmlEditado: htmlNormalizado }
+        // Modulo_Doble_Con_Imagen_Punteada: el htmlEditado NO puede venir
+        // de filaHtml porque importarHeuristico limpia todos los comentarios
+        // MSO al inicio — el bloque <!--[if !mso]><!--> que contiene la
+        // línea punteada (MediaLineaPunteada530x4.png) ya no está en filaHtml.
+        // Si se usara filaHtml como base, el export final quedaría sin esa
+        // sección y la pieza se vería mal en mobile (sin separador entre
+        // las dos imágenes al apilar en 1 columna). Solución: usar el
+        // match.html (template original con el bloque MSO intacto) como
+        // base del htmlEditado, trasplantando las URLs reales (src, alt,
+        // title) de las imágenes editables desde filaHtml. Las imágenes
+        // estructurales (puntos-128-blanco.png, MediaLineaPunteada) nunca
+        // se editan y no se trasplantan — quedan del template, que es lo
+        // correcto. bgcolor y otras propiedades de layout tampoco cambian
+        // entre segmentos en esta estructura; si en el futuro cambiaran,
+        // este criterio habría que extenderlo.
+        let htmlEditadoFinal
+        if (slugFinal === 'Modulo_Doble_Con_Imagen_Punteada') {
+          // Extraer src/alt/title de las imágenes EDITABLES de filaHtml
+          // (las dos imágenes principales, NO puntos-128-blanco ni MediaLinea)
+          const imgsEditables = [...filaHtml.matchAll(/<img([^>]*)>/gi)]
+            .map(m => m[1])
+            .filter(attrs => !/puntos-128-blanco|MediaLineaPunteada/i.test(attrs))
+          // Extraer el color de segmento desde filaHtml — todas las celdas
+          // que rodean imágenes en este bloque comparten el mismo bgcolor
+          // (CG: #c4161c, EB: #000000, Pay: #635843, Start: #f58220).
+          // Se toma el primer bgcolor no-blanco encontrado en las celdas
+          // que sobrevivieron la limpieza MSO.
+          const bgcolorSegmento = filaHtml.match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? null
+          // Trasplantar imágenes editables por posición, bgcolor en todas
+          // las celdas que el template tiene con su color base (#c4161c).
+          // Las imgs estructurales y el bloque <!--[if !mso]--> quedan
+          // intactos desde el template.
+          let editableIdx = 0
+          let htmlBase = match.html.replace(/<img([^>]*)>/gi, (m, attrs) => {
+            if (/puntos-128-blanco|MediaLineaPunteada/i.test(attrs)) return m
+            if (editableIdx >= imgsEditables.length) return m
+            return `<img${imgsEditables[editableIdx++]}>`
+          })
+          if (bgcolorSegmento) {
+            htmlBase = htmlBase.replace(/bgcolor="#c4161c"/gi, `bgcolor="${bgcolorSegmento}"`)
+          }
+          htmlEditadoFinal = htmlBase
+        } else {
+          htmlEditadoFinal = slugFinal === 'Imagen_Libre'
+            ? normalizarImagenLibre(normalizarNegritas(filaHtml.trim()))
+            : normalizarNegritas(filaHtml.trim())
+        }
+        return { ...match, instanceId: `${match.id}-${Date.now()}-${idx}`, htmlEditado: htmlEditadoFinal }
       }
     }
 
@@ -3579,6 +3654,46 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
             <span>Este bloque no tiene textos, imágenes ni links detectados para editar.</span>
           </div>
         )}
+        {bloque.slug === 'Modulo_Doble_Con_Imagen_Punteada' && (() => {
+          // Selector de color de segmento — los 4 bgcolor de las celdas de
+          // imagen de este bloque siempre son el mismo color (el del segmento).
+          // Se lee el color actual de htmlLocal para marcar el chip activo.
+          const SEGMENTOS = [
+            { label: 'CG',    color: '#c4161c' },
+            { label: 'EB',    color: '#000000' },
+            { label: 'Pay',   color: '#635843' },
+            { label: 'Start', color: '#f58220' },
+          ]
+          const colorActual = (htmlLocal.match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? '').toLowerCase()
+          function aplicarSegmento(nuevoColor) {
+            setHtmlLocal(prev => prev.replace(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/gi, `bgcolor="${nuevoColor}"`))
+          }
+          const esCustom = colorActual && !SEGMENTOS.some(s => s.color === colorActual)
+          return (
+            <div className="ep-campo">
+              <label className="ep-campo-label">Color de segmento</label>
+              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {SEGMENTOS.map(s => (
+                  <button key={s.label} title={s.color}
+                    onClick={() => aplicarSegmento(s.color)}
+                    className={`ep-espaciador-chip${colorActual === s.color ? ' activo' : ''}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: s.color, border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }} />
+                    {s.label}
+                  </button>
+                ))}
+                <label title="Color personalizado"
+                  className={`ep-espaciador-chip${esCustom ? ' activo' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                  <input type="color" value={esCustom ? colorActual : '#888888'}
+                    onChange={e => aplicarSegmento(e.target.value)}
+                    style={{ width: 12, height: 12, padding: 0, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }} />
+                  Custom
+                </label>
+              </div>
+            </div>
+          )
+        })()}
         {campos.map((campo, i) => {
           if (campo.tipo === 'texto') return (
             <div key={i} className="ep-campo">
