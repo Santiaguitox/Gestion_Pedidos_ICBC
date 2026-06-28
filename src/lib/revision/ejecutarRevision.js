@@ -1,7 +1,7 @@
 import { REVISION_CONFIG } from '@/lib/revision/config'
 import { templates } from '@/data/Templates/index'
 import { CompararConTemplates } from '@/lib/revision/templates'
-import { ValidarDominioImagenes, ValidarClasesDefinidas, ValidarLegal, ValidarLinks, ValidarAltImagenes, ValidarEstructuraHTML, ValidarPesoHTML } from '@/lib/revision/generales'
+import { ValidarDominioImagenes, ValidarClasesDefinidas, ValidarLegal, ValidarLinks, ValidarAltImagenes, ValidarEstructuraHTML, ValidarPesoHTML, ValidarEstructurasObsoletas } from '@/lib/revision/generales'
 import { ValidarDimensionesImagenes, ValidarPesoImagenes } from '@/lib/revision/imagenes'
 
 // El dominio/subdominio de icommarketing.com puede variar entre quien
@@ -74,7 +74,7 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     } catch {}
   }
 
-  const [dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates] = await Promise.all([
+  const [dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates, estructurasObsoletas] = await Promise.all([
     Promise.resolve(ValidarDominioImagenes(doc)),
     Promise.resolve(ValidarClasesDefinidas(doc)),
     Promise.resolve(ValidarLegal(doc)),
@@ -84,6 +84,7 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     ValidarPesoImagenes(doc, cacheDatos),
     Promise.resolve(ValidarEstructuraHTML(doc, htmlAAnalizar)),
     Promise.resolve(CompararConTemplates(doc, templates)),
+    Promise.resolve(ValidarEstructurasObsoletas(doc)),
   ])
 
   onProgreso?.('', 100)
@@ -93,11 +94,12 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     resultados: {
       pesoHTML: ValidarPesoHTML(htmlAAnalizar), pesoImagenes, estructuraHTML,
       dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, resumenTemplates,
+      estructurasObsoletas,
     },
   }
 }
 
-// Los 10 bloques que determinan el resumen (X de 10 pruebas).
+// Los 11 bloques que determinan el resumen (X de 11 pruebas).
 // 'resumenTemplates' es distinto a los otros 9: devuelve un ARRAY de
 // estructuras obsoletas detectadas (0 o más), no un objeto único con
 // .ok — se normaliza acá mismo ({ ok: encontró 0 obsoletas }) para que
@@ -106,7 +108,7 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
 // versiones anteriores de piezas que ya no debería usarse.
 const BLOQUES_RESUMEN = [
   'estructuraHTML', 'clasesCSS', 'legal', 'links',
-  'dominioImagenes', 'altImagenes', 'dimensiones', 'pesoImagenes', 'pesoHTML',
+  'dominioImagenes', 'altImagenes', 'dimensiones', 'pesoImagenes', 'pesoHTML', 'estructurasObsoletas',
 ]
 
 // Resume el objeto 'resultados' completo a los 3 valores livianos que

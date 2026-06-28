@@ -523,4 +523,36 @@ export function ValidarPesoHTML(htmlString) {
   }
 }
 
+export function ValidarEstructurasObsoletas(doc) {
+  // Detecta el patrón de layout de dos columnas con <div inline-block>
+  // que era la técnica vieja antes de la estructura class="top"/"bottom"
+  // actual. El indicador inequívoco: un <div> con display:inline-block
+  // en el área de contenido (no en <style>). Los templates modernos
+  // usan display:inline-block solo en <img>, nunca en <div>.
+  const divsInlineBlock = [...doc.querySelectorAll('div')].filter(div => {
+    const style = div.getAttribute('style') || ''
+    return /display\s*:\s*inline-block/i.test(style)
+  })
+
+  if (divsInlineBlock.length === 0) {
+    return {
+      ok: true,
+      tipo: 'Estructuras obsoletas',
+      detalle: 'No se encontraron estructuras de layout obsoletas',
+      checks: [],
+    }
+  }
+
+  return {
+    ok: false,
+    tipo: 'Estructuras obsoletas',
+    detalle: `Se encontró${divsInlineBlock.length > 1 ? 'ron' : ''} ${divsInlineBlock.length} bloque${divsInlineBlock.length > 1 ? 's' : ''} con layout obsoleto (<div inline-block>) — reemplazalos por la estructura actual con class="top"/"bottom"`,
+    checks: divsInlineBlock.map(div => {
+      const img = div.querySelector('img')
+      const nombre = img ? (img.getAttribute('src') || '').split('/').pop() : 'bloque sin imagen'
+      return { ok: false, detalle: `Bloque obsoleto con: ${nombre}` }
+    }),
+  }
+}
+
 

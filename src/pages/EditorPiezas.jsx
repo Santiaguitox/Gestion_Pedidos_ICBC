@@ -632,7 +632,7 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAd
     : ''
 
   const imgFooterHtml = imgFooter.activo && imgFooter.src
-    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center"><a href="${imgFooter.link || '#'}" target="_blank"><img src="${imgFooter.src}" alt="${imgFooter.alt || ''}" class="img-max" width="600" border="0" /></a></td>\n</tr>\n<!--/IMG_FOOTER-->`
+    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center">${imgFooter.link ? `<a href="${imgFooter.link}" target="_blank">` : ''}<img src="${imgFooter.src}" alt="${imgFooter.alt || ''}" class="img-max" width="600" border="0" />${imgFooter.link ? '</a>' : ''}</td>\n</tr>\n<!--/IMG_FOOTER-->`
     : ''
 
   // Dos modos de concatenar los legales adicionales (el legal FIJO
@@ -1078,6 +1078,88 @@ function marcarBloquesNoReconocidosParaPreview(html) {
       </td></tr>`
     }
   )
+}
+
+// Análogo a marcarBloquesNoReconocidosParaPreview pero para el patrón
+// de layout obsoleto (<div style="display:inline-block">). Usa balance
+// de tags para encontrar los <td> de nivel 0 (sin tablas anidadas
+// entre ellos y el <tr> padre) que contienen divs inline-block — el
+// regex simple sobre el string falla por el anidamiento profundo de
+// <tr> dentro de las tablas de los propios divs. Cada <td> que
+// contiene al menos un div inline-block es una estructura obsoleta,
+// independientemente de cuántos divs tenga (1 columna o 2 columnas).
+// Solo se usa en el preview de importación, nunca en el export real.
+function encontrarTdsConDivInlineBlock(html) {
+  // Usa un stack de <td> para rastrear cada td a cualquier nivel de
+  // anidamiento. Para cada td, extrae solo el texto entre el cierre
+  // de su tag de apertura y la primera <table> anidada — ahí es donde
+  // viven los <div inline-block> del patrón obsoleto. Acepta comillas
+  // simples o dobles en los atributos del div (el HTML original puede
+  // no haber pasado por la normalización de comillas todavía).
+  const tagRegex = /<\/?(td|table)\b[^>]*>/gi
+  const resultado = []
+  let profTabla = 0
+  const pilaTd = []
+  let m
+  tagRegex.lastIndex = 0
+  while ((m = tagRegex.exec(html)) !== null) {
+    const tag = m[0]
+    const nombre = m[1].toLowerCase()
+    const esApertura = !tag.startsWith('</')
+    if (nombre === 'table') {
+      if (esApertura) profTabla++
+      else profTabla--
+    } else if (nombre === 'td') {
+      if (esApertura) {
+        pilaTd.push({ inicio: m.index, finApertura: m.index + tag.length, profTablaAlAbrir: profTabla })
+      } else if (pilaTd.length > 0) {
+        const { inicio, finApertura } = pilaTd.pop()
+        const fin = m.index + tag.length
+        // Solo el contenido entre la apertura del td y su primera sub-tabla
+        const contenidoTd = html.slice(finApertura, m.index)
+        const primerSubTabla = contenidoTd.search(/<table\b/i)
+        const antes = primerSubTabla >= 0 ? contenidoTd.slice(0, primerSubTabla) : contenidoTd
+        if (/<div\b[^>]*style=["'][^"']*display\s*:\s*inline-block/i.test(antes)) {
+          resultado.push({ inicio, fin, contenido: html.slice(inicio, fin) })
+        }
+      }
+    }
+  }
+  return resultado
+}
+
+function marcarEstructurasObsoletasParaPreview(html) {
+  const tds = encontrarTdsConDivInlineBlock(html)
+  if (tds.length === 0) return html
+  // El marcado se aplica DIRECTAMENTE sobre el tag de apertura del <td>
+  // original — no se envuelve en un <div> extra porque <div> dentro de
+  // <tr> es HTML inválido y rompe el layout. Se agrega id, outline y
+  // background al propio <td>, y la etiqueta "Estructura obsoleta" se
+  // inyecta como primer hijo del contenido del td.
+  // Se reemplaza de atrás para adelante para no invalidar los índices.
+  let resultado = html
+  for (let i = tds.length - 1; i >= 0; i--) {
+    const { inicio, fin } = tds[i]
+    const tdHtml = html.slice(inicio, fin)
+    // Reemplazar el tag de apertura del <td> agregando id + estilos de marcado
+    const tdMarcado = tdHtml.replace(
+      /^<td\b([^>]*)>/i,
+      (m, attrs) => {
+        const nuevoStyle = 'outline:2px solid #DC2626;outline-offset:-2px;background:rgba(220,38,38,0.07);position:relative;'
+        // Si ya tiene style, mergear — no agregar un segundo atributo style
+        const conStyle = /\bstyle=["'][^"']*["']/i.test(attrs)
+          ? attrs.replace(/\bstyle=(["'])([^"']*)\1/i, (_m, q, val) => `style="${nuevoStyle}${val}"`)
+          : attrs + ` style="${nuevoStyle}"`
+        return `<td id="preview-obsoleto-${i}"${conStyle}>`
+      }
+    ).replace(
+      // Inyectar la etiqueta flotante como primer hijo, justo después del tag de apertura
+      /^(<td\b[^>]*>)/i,
+      `$1<span style="position:absolute;top:2px;left:2px;z-index:1;background:#DC2626;color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:3px;line-height:1;">Estructura obsoleta</span>`
+    )
+    resultado = resultado.slice(0, inicio) + tdMarcado + resultado.slice(fin)
+  }
+  return resultado
 }
 
 // ─── Heurística sin marcadores (Fase 2 — piezas EXTERNAS, sin
@@ -1838,6 +1920,33 @@ function clasificarPorEstructuraDirecta(filaHtml) {
         if (esModuloDoble) return clasificarModuloDoble(interior)
       }
     }
+    // Caso real encontrado: una imagen de ancho completo (530px o similar,
+    // class="img-max") envuelta en una tabla de layout con class="top" — no
+    // tiene segunda columna (tdsSubTabla.length === 1), no tiene texto visible
+    // y la imagen es claramente de contenido (ancho >= 400px o class img-max),
+    // no un botón (que siempre es angosto, ≤ 250px). Sin esta regla cae al
+    // flujo de similitud donde Btn puede ganar por forma coincidente
+    // (imagen + link, sin texto) a pesar de ser un template completamente
+    // distinto. Señal inequívoca: imagen ≥ 400px O con class img-max, sin
+    // texto visible, en un bloque de 1 solo td con sub-tabla de 1 columna.
+    const textoVisibleWrapper = interior.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim()
+    const imgGrande = /<img\b[^>]*(?:width="(\d+)"|class="[^"]*img-max[^"]*")[^>]*>/i.exec(interior)
+    if (!textoVisibleWrapper && imgGrande) {
+      const wAttr = interior.match(/<img\b[^>]*\swidth="(\d+)"/i)
+      const anchoImg = wAttr ? Number(wAttr[1]) : 0
+      const tieneImgMax = /class="[^"]*img-max[^"]*"/i.test(interior)
+      if (tieneImgMax || anchoImg >= 400) return 'Imagen_Libre'
+    }
+    // Caso real encontrado: grilla de logos o múltiples imágenes chicas en
+    // línea dentro de un solo <td> (ej. logos de shoppings, 19 imágenes de
+    // 100px en un mismo <td>). Ningún template de la biblioteca tiene más de
+    // 2 imágenes en un solo td — con 3 o más, es siempre código personalizado.
+    // Sin esta regla, similitudDeForma le da ~0.78 contra Btn porque la
+    // diferencia en cantidad de imgs (1 vs 19) queda diluida al normalizar
+    // por max(19,1)=19, y el promedio de las otras dimensiones similares
+    // arrastra el puntaje por encima del umbral.
+    const cantidadImgs = (interior.match(/<img\b/gi) || []).length
+    if (!textoVisibleWrapper && cantidadImgs >= 3) return 'codigo'
     return null // bloque compuesto que no matchea el patrón anterior -> no es este caso simple
   }
 
@@ -1982,6 +2091,12 @@ function importarHeuristico(html) {
   // vacíos (o con solo espacios) que los envolvían — los sacamos para
   // no corromper el balance de tags al separar filas.
   html = html.replace(/<strong>\s*<\/strong>/gi, '')
+  // Normalizar dominio viejo de imágenes al CDN actual — piezas
+  // históricas pueden tener recursos en icommktrepo.s3.amazonaws.com
+  // en vez de d343t93odde9ul.cloudfront.net. Normalizar acá garantiza
+  // que tanto la detección de logos de header como el htmlEditado
+  // guardado usen siempre el dominio correcto.
+  html = html.replace(/https?:\/\/icommktrepo\.s3\.amazonaws\.com\//gi, 'https://d343t93odde9ul.cloudfront.net/')
 
   const tabla = encontrarTablaContenido(html)
   if (!tabla) {
@@ -2545,6 +2660,15 @@ function importarHeuristico(html) {
       .map(m => m[1])
       .filter(src => !ESDistintivoGenerico.test(src))
   }
+  // Extraer solo el nombre de archivo de una URL de imagen (la parte
+  // después del último "/"). Se usa para comparar logos distintivos
+  // entre el template y la pieza importada sin depender del dominio —
+  // piezas viejas pueden tener el logo en icommktrepo.s3.amazonaws.com
+  // en vez del CDN actual (d343t93odde9ul.cloudfront.net), y el nombre
+  // del archivo es suficientemente específico para identificar el logo.
+  function nombreArchivo(src) {
+    return src.split('/').pop()
+  }
   // Bug real encontrado con una pieza real (evento MALBA): el mismo
   // socio institucional puede tener banda de header en MÁS DE UN
   // segmento (EB_Banda_Negra_Header_Malba con fondo negro,
@@ -2577,13 +2701,15 @@ function importarHeuristico(html) {
   for (let i = 0; i < BLOQUES_HEADER.length; i++) {
     const candidato = BLOQUES_HEADER[i]
     const distintivosCandidato = logosDistintivos(candidato.html)
-    const logoEncontrado = distintivosCandidato.some(src => htmlAntesDeContenido.includes(src))
+    const nombresDistintivos = distintivosCandidato.map(nombreArchivo)
+    const logosEnPieza = [...htmlAntesDeContenido.matchAll(/<img\b[^>]*\ssrc="([^"]*)"/gi)].map(m => nombreArchivo(m[1]))
+    const logoEncontrado = nombresDistintivos.some(n => logosEnPieza.includes(n))
     if (!logoEncontrado) continue
     // ¿Algún OTRO candidato comparte alguno de estos mismos logos
     // distintivos? Si no, el match por logo solo ya es inequívoco —
     // mismo comportamiento que antes para todos los headers actuales
     // que no comparten logo con ningún otro.
-    const logoCompartido = BLOQUES_HEADER.some((otro, j) => j !== i && logosDistintivos(otro.html).some(src => distintivosCandidato.includes(src)))
+    const logoCompartido = BLOQUES_HEADER.some((otro, j) => j !== i && logosDistintivos(otro.html).map(nombreArchivo).some(n => nombresDistintivos.includes(n)))
     if (!logoCompartido) { bandaHeader = candidato; break }
     // Logo compartido entre varios headers: desempatar por color de
     // fondo real de la banda en el HTML importado, comparado contra
@@ -2667,6 +2793,19 @@ function importarHeuristico(html) {
   }
 
   const confianza = (proporcionReconocida >= 0.85 && tabla.viaShow) ? 'alta' : (proporcionReconocida >= 0.5 ? 'media' : 'baja')
+
+  // Detectar estructuras obsoletas (<div style="display:inline-block">)
+  // usando balance de tags para encontrar los <td> de nivel 0 que
+  // contienen divs inline-block. Cada <td> con al menos un div
+  // inline-block = una estructura obsoleta (puede tener 1 o 2 divs).
+  const filasConObsoletos = encontrarTdsConDivInlineBlock(html).length
+  if (filasConObsoletos > 0) {
+    avisos.push({
+      texto: `⚠ Esta pieza usa ${filasConObsoletos === 1 ? 'una estructura de layout obsoleta' : `${filasConObsoletos} estructuras de layout obsoletas`} (<div inline-block>) — hacé click para verla${filasConObsoletos > 1 ? 's' : ''} en el preview. Reemplazalas por la estructura actual (class="top"/"bottom") antes de usar esta pieza.`,
+      tipo: 'obsoleto',
+      canvasIdx: null,
+    })
+  }
 
   return {
     resultado: {
@@ -3785,15 +3924,15 @@ const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, he
 })
 
 // ─── Categoría colapsable ───────────────────────────────────────────────────
-function CategoriaColapsable({ titulo, children }) {
-  const [abierto, setAbierto] = useState(true)
+function CategoriaColapsable({ titulo, children, sub = false }) {
+  const [abierto, setAbierto] = useState(!sub) // sub-acordeones empiezan cerrados
   return (
     <div>
-      <button className="ep-categoria-header" onClick={() => setAbierto(v => !v)}>
+      <button className={sub ? 'ep-categoria-header ep-categoria-header-sub' : 'ep-categoria-header'} onClick={() => setAbierto(v => !v)}>
         <span className="ep-categoria-titulo">{titulo}</span>
         <ChevronDown size={13} style={{ transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
       </button>
-      {abierto && <div className="ep-categoria-body">{children}</div>}
+      {abierto && <div className={sub ? 'ep-categoria-body ep-categoria-body-sub' : 'ep-categoria-body'}>{children}</div>}
     </div>
   )
 }
@@ -4252,6 +4391,18 @@ export default function EditorPiezas() {
     void el.offsetWidth
     el.style.animation = 'ep-preview-pulso 1100ms ease-out 2'
   }
+
+  // Lleva la vista al primer <div inline-block> marcado como obsoleto
+  // en el preview de importación (id="preview-obsoleto-0").
+  function irAObsoletoEnPreview() {
+    const iframeDoc = previewIframeRef.current?.contentDocument
+    const el = iframeDoc?.getElementById('preview-obsoleto-0')
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.style.outline = 'none'
+    void el.offsetWidth
+    el.style.outline = '3px solid #DC2626'
+  }
   // Switch Desktop/Mobile del preview del resultado — mismo patrón
   // que showPreview/previewModo del modal de Vista previa, pero
   // independiente (este modal puede abrirse sin que el otro esté
@@ -4339,7 +4490,9 @@ export default function EditorPiezas() {
         const valEscapado = val.replace(/>/g, '&gt;').replace(/</g, '&lt;')
         return `${attr}=${q}${valEscapado}${q}`
       })
-      const htmlNormalizado = htmlSinMayorQueSuelto.replace(/(\s[a-zA-Z-]+)='([^']*)'/g, (_m, attr, val) => `${attr}="${val}"`)
+      const htmlNormalizado = htmlSinMayorQueSuelto
+        .replace(/(\s[a-zA-Z-]+)='([^']*)'/g, (_m, attr, val) => `${attr}="${val}"`)
+        .replace(/https?:\/\/icommktrepo\.s3\.amazonaws\.com\//gi, 'https://d343t93odde9ul.cloudfront.net/')
 
       // importarDesdeHtml primero (100% determinístico si la pieza
       // tiene marcadores de este editor) — solo si devuelve resultado
@@ -4442,37 +4595,87 @@ export default function EditorPiezas() {
 
           {bloquesFiltradosHeader.length > 0 && (
             <CategoriaColapsable titulo="Header">
-              {bloquesFiltradosHeader.map(bloque => (
-                <div key={bloque.id}
-                  className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
-                  draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
-                  <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
-                  <div className="ep-bloque-footer">
-                    <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                    <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
-                      {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {(() => {
+                const GRUPOS_HEADER = [
+                  { prefijo: 'CG', label: 'CG' },
+                  { prefijo: 'EB', label: 'EB' },
+                  { prefijo: 'Pay', label: 'Pay' },
+                ]
+                const agrupados = GRUPOS_HEADER.map(g => ({
+                  ...g,
+                  bloques: bloquesFiltradosHeader.filter(b => b.slug.startsWith(g.prefijo + '_')),
+                })).filter(g => g.bloques.length > 0)
+                // Bloques que no matchean ningún prefijo conocido (por si se agregan nuevos)
+                const prefijosConocidos = GRUPOS_HEADER.map(g => g.prefijo + '_')
+                const sinGrupo = bloquesFiltradosHeader.filter(b => !prefijosConocidos.some(p => b.slug.startsWith(p)))
+                return (
+                  <>
+                    {agrupados.map(g => (
+                      <CategoriaColapsable key={g.prefijo} titulo={g.label} sub>
+                        {g.bloques.map(bloque => (
+                          <div key={bloque.id}
+                            className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
+                            draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
+                            <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
+                            <div className="ep-bloque-footer">
+                              <span className="ep-bloque-nombre">{bloque.nombre}</span>
+                              <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
+                                {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </CategoriaColapsable>
+                    ))}
+                    {sinGrupo.map(bloque => (
+                      <div key={bloque.id}
+                        className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
+                        draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
+                        <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
+                        <div className="ep-bloque-footer">
+                          <span className="ep-bloque-nombre">{bloque.nombre}</span>
+                          <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
+                            {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )
+              })()}
             </CategoriaColapsable>
           )}
 
-          {categoriasContenido.map(cat => (
-            <CategoriaColapsable key={cat} titulo={cat}>
-              {bloquesFiltradosContenido.filter(b => b.categoria === cat).map(bloque => (
-                <div key={bloque.id}
-                  className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''}`}
-                  draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
-                  <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
-                  <div className="ep-bloque-footer">
-                    <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                    <button className="ep-bloque-add" onClick={() => agregarAlCanvas(bloque)}>+</button>
-                  </div>
-                </div>
-              ))}
-            </CategoriaColapsable>
-          ))}
+          {(() => {
+            const GRUPOS_CONTENIDO = [
+              { label: 'Texto', slugs: ['Bloque_Texto_Base', 'Borde_Izq_Rojo_Texto'] },
+              { label: 'Bullets', slugs: ['Bullet_Bull_Rojo', 'Bullet_Bull_Rojo_Margen', 'Bullet_Titular_Negro'] },
+              { label: 'Módulos de imagen', slugs: ['Imagen_Libre', 'Modulo_Doble_Clasico', 'Modulo_Doble_Con_Imagen_Punteada'] },
+              { label: 'Mix Texto + Imagen', slugs: ['Destacado_Icono_Texto', 'Icono_Separador_Rojo_Texto', 'Icono_Grande_Separador_Rojo_Texto', 'Destacado_Topes_Promo', 'Modulo_Canal_Feriado', 'CG_Modulo_Simple_Editable_PF', 'Destacado_GiftCard_BigBox'] },
+              { label: 'Extras', slugs: ['Btn', 'Redes_Sociales_Invitaciones'] },
+            ]
+            return GRUPOS_CONTENIDO.map(g => {
+              const bloques = g.slugs
+                .map(slug => bloquesFiltradosContenido.find(b => b.slug === slug))
+                .filter(Boolean)
+              if (bloques.length === 0) return null
+              return (
+                <CategoriaColapsable key={g.label} titulo={g.label}>
+                  {bloques.map(bloque => (
+                    <div key={bloque.id}
+                      className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''}`}
+                      draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
+                      <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
+                      <div className="ep-bloque-footer">
+                        <span className="ep-bloque-nombre">{bloque.nombre}</span>
+                        <button className="ep-bloque-add" onClick={() => agregarAlCanvas(bloque)}>+</button>
+                      </div>
+                    </div>
+                  ))}
+                </CategoriaColapsable>
+              )
+            })
+          })()}
 
           <CategoriaColapsable titulo="Personalizado">
             <div
@@ -4954,9 +5157,10 @@ export default function EditorPiezas() {
                           {importarResultado.avisos.map((a, i) => (
                             <li
                               key={i}
-                              data-tipo={a.canvasIdx != null ? a.tipo : undefined}
-                              onClick={a.canvasIdx != null ? () => irABloqueEnPreview(a.canvasIdx) : undefined}
-                              title={a.canvasIdx != null ? 'Ver en el preview' : undefined}
+                              data-tipo={a.canvasIdx != null ? a.tipo : a.tipo === 'obsoleto' ? 'obsoleto' : undefined}
+                              onClick={a.canvasIdx != null ? () => irABloqueEnPreview(a.canvasIdx) : a.tipo === 'obsoleto' ? irAObsoletoEnPreview : undefined}
+                              title={a.canvasIdx != null || a.tipo === 'obsoleto' ? 'Ver en el preview' : undefined}
+                              style={a.tipo === 'obsoleto' ? { cursor: 'pointer' } : undefined}
                             >
                               {a.texto}
                             </li>
@@ -4984,7 +5188,7 @@ export default function EditorPiezas() {
                       // redes que después desaparecían al confirmar,
                       // muy confuso. Ahora el preview usa el mismo
                       // redesOrden real que se va a aplicar de verdad.
-                      const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] }))}</body></html>`
+                      const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`
                       return (
                         <div className={`ep-importar-preview-wrap ${importarModoPreview === 'mobile' ? 'modo-mobile' : ''}`}>
                           {importarModoPreview === 'desktop'

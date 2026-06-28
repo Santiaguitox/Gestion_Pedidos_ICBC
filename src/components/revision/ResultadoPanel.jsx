@@ -129,6 +129,10 @@ export default function ResultadoPanel({ resultados }) {
         )
       })()}
 
+      <ResultadoCard resultado={{ ...resultados.estructurasObsoletas, numero: '11' }} delay={800}>
+        <ItemsList label="Bloques a reemplazar" items={resultados.estructurasObsoletas?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+      </ResultadoCard>
+
     </div>
   )
 }
