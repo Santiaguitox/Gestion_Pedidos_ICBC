@@ -1172,17 +1172,57 @@ function encontrarTablaContenido(html) {
   // encontrar el cierre genuino de ESTA tabla (no el primer </table>
   // que aparezca, que casi siempre es de una tabla anidada de un
   // bloque interno).
-  const tablaRegex = /<table\b|<\/table>/gi
-  tablaRegex.lastIndex = inicioTag
-  let profundidad = 0
-  let m
-  let finTag = null
-  while ((m = tablaRegex.exec(html)) !== null) {
-    if (m[0].toLowerCase().startsWith('<table')) profundidad++
-    else profundidad--
-    if (profundidad === 0) { finTag = m.index + m[0].length; break }
+  function balanceDeTabla(desde) {
+    const tablaRegex = /<table\b|<\/table>/gi
+    tablaRegex.lastIndex = desde
+    let profundidad = 0
+    let m
+    while ((m = tablaRegex.exec(html)) !== null) {
+      if (m[0].toLowerCase().startsWith('<table')) profundidad++
+      else profundidad--
+      if (profundidad === 0) return m.index + m[0].length
+    }
+    return null // HTML roto/truncado — no balancea
   }
-  if (finTag == null) return null // HTML roto/truncado — no balancea
+
+  const finTag = balanceDeTabla(inicioTag)
+  if (finTag == null) return null
+
+  // Bug real encontrado con una pieza real (Jubilados): el programador
+  // de la pieza armó DOS contenedores de contenido completos y
+  // separados (dos <table id="Show"> distintos, cada uno con sus
+  // propios bloques reales — no un fragmento corto de HTML roto), con
+  // una imagen suelta de "marcas auspiciantes" entre medio. El
+  // mecanismo de "fuera de rango" de más abajo está pensado para
+  // rescatar un tramo CHICO de contenido mal ubicado (ventana fija de
+  // 4000 caracteres, busca un cierre de tabla "pronto") — con un
+  // segundo contenedor completo, esa ventana corta el tramo mucho
+  // antes de llegar a él (encuentra el cierre de la tabla wrapper
+  // intermedia que envuelve la imagen de marcas) y el segundo
+  // contenedor entero se pierde en silencio, sin aviso ni rastro en el
+  // canvas. La distinción real: un id="Show" (o una tabla de 530px de
+  // Familia B) que aparece DESPUÉS del primer contenedor es, con
+  // altísima probabilidad, un contenedor de contenido real — esa
+  // estructura nunca aparece en la zona de legales/footer de ninguna
+  // pieza vista hasta ahora — así que se buscan TODAS las ocurrencias
+  // adicionales (no solo la primera) y se procesan igual que el
+  // contenedor principal, en vez de tratarlas como ruido.
+  const contenedoresAdicionales = []
+  {
+    const showRegex = /<table[^>]*\bid="Show"[^>]*>/g
+    const tablas530Regex = /<table[^>]*style="[^"]*(?:max-)?width:\s*530px[^"]*"[^>]*>/g
+    const regexAdicional = viaShow ? showRegex : tablas530Regex
+    let cursor = finTag
+    let proximoMatch
+    regexAdicional.lastIndex = cursor
+    while ((proximoMatch = regexAdicional.exec(html)) !== null) {
+      const inicioAdicional = proximoMatch.index
+      const finAdicional = balanceDeTabla(inicioAdicional)
+      if (finAdicional == null) break // HTML roto a partir de acá, no seguir buscando más
+      contenedoresAdicionales.push({ inicioTag: inicioAdicional, finTag: finAdicional })
+      regexAdicional.lastIndex = finAdicional
+    }
+  }
 
   // Bug real encontrado con una pieza real (China/Feria de Cantón):
   // a veces hay contenido real (ej. una imagen de cierre) ubicado
@@ -1208,9 +1248,19 @@ function encontrarTablaContenido(html) {
   // en el preview de importación (mismo overlay que cualquier otro
   // bloque no reconocido) en vez de tener que adivinar a partir de
   // solo un aviso de texto qué falta y dónde.
+  //
+  // IMPORTANTE: esta búsqueda ahora arranca DESPUÉS del último
+  // contenedor adicional encontrado (no después del primero) — si no,
+  // el tramo entre el primer contenedor y el segundo (la imagen de
+  // marcas, en el caso real que motivó el fix de arriba) se detectaría
+  // por error como "fuera de rango" además de procesarse ya
+  // correctamente como contenedor adicional.
+  const finReal = contenedoresAdicionales.length > 0
+    ? contenedoresAdicionales[contenedoresAdicionales.length - 1].finTag
+    : finTag
   let avisoContenidoFueraDeRango = null
   let htmlFueraDeRango = null
-  const ventanaPosterior = html.slice(finTag, finTag + 4000)
+  const ventanaPosterior = html.slice(finReal, finReal + 4000)
   const cierrePronto = ventanaPosterior.search(/<\/td>\s*<\/tr>\s*<\/tbody>\s*<\/table>/i)
   let tramoAVerificar = cierrePronto !== -1 ? ventanaPosterior.slice(0, cierrePronto) : ''
   // El tramo recortado suele empezar con el cierre huérfano de tags
@@ -1227,7 +1277,7 @@ function encontrarTablaContenido(html) {
     htmlFueraDeRango = tramoAVerificar
   }
 
-  return { inicioTag, finTag, viaShow, avisoContenidoFueraDeRango, htmlFueraDeRango }
+  return { inicioTag, finTag, viaShow, avisoContenidoFueraDeRango, htmlFueraDeRango, contenedoresAdicionales }
 }
 
 // Separa el CONTENIDO interno de la tabla (ya sin el <table ...> de
@@ -1379,7 +1429,14 @@ function formaDeTags(html) {
   // el texto del bloque dentro del mismo span de color por error), el
   // regex sigue sin matchear, porque exige que después del espacio
   // opcional venga directo el cierre, no cualquier contenido.
-  const esIconoBulletCaracter = /<span\b[^>]*>&bull;(?:\s|&nbsp;)?<\/span>/i.test(html) ? 1 : 0
+  // Bug real encontrado con una pieza real, accedida vía el editor
+  // "limpio" de la plataforma (sin el bug de comillas simples del
+  // acceso por link, ver normalización en el modal de importar): el
+  // texto venía con el carácter Unicode literal • (U+2022) en vez de
+  // la entidad HTML &bull; — visualmente IDÉNTICOS en cualquier
+  // navegador o cliente de correo, pero el regex solo reconocía la
+  // entidad. Se acepta cualquiera de los dos formatos.
+  const esIconoBulletCaracter = /<span\b[^>]*>(?:&bull;|•)(?:\s|&nbsp;)?<\/span>/i.test(html) ? 1 : 0
   const normalizado = normalizarNegritas(html)
   const tags = ['tr', 'td', 'table', 'img', 'a', 'span', 'strong', 'sup']
   const conteoTags = tags.map(t => (normalizado.match(new RegExp(`<${t}\\b`, 'gi')) || []).length)
@@ -1770,7 +1827,12 @@ function clasificarPorEstructuraDirecta(filaHtml) {
   // esIconoBulletCaracter (formaDeTags) — los dos regex deben
   // mantenerse en sincro, son la misma señal evaluada en dos lugares
   // distintos del flujo de matching.
-  const esBulletDeCaracter = /<span\b[^>]*>&bull;(?:\s|&nbsp;)?<\/span>/i.test(contenidoTd)
+  //
+  // Tercer bug real encontrado (sesión de auditoría de comillas en el
+  // modal de importar): la pieza venía con el carácter Unicode literal
+  // • (U+2022) en vez de la entidad &bull; — mismo fix que en
+  // esIconoBulletCaracter, se acepta cualquiera de los dos.
+  const esBulletDeCaracter = /<span\b[^>]*>(?:&bull;|•)(?:\s|&nbsp;)?<\/span>/i.test(contenidoTd)
   if (esBulletDeCaracter) {
     // Solo hay DOS templates con bullet de carácter en toda la
     // biblioteca (Bullet_Bull_Rojo y Bullet_Bull_Rojo_Margen) y la
@@ -1886,9 +1948,28 @@ function importarHeuristico(html) {
   const aperturaCompleta = html.slice(tabla.inicioTag).match(/^<table\b[^>]*>/)[0]
   const htmlInterno = html.slice(tabla.inicioTag + aperturaCompleta.length, tabla.finTag - '</table>'.length)
 
-  const filas = separarFilasDeNivelSuperior(htmlInterno)
+  let filas = separarFilasDeNivelSuperior(htmlInterno)
   if (filas.length === 0) {
     return { resultado: null, avisos: [{ texto: 'Se encontró la tabla de contenido pero no se pudieron separar los bloques — preferible armar la pieza a mano.', tipo: 'general', canvasIdx: null }], confianza: 'baja' }
+  }
+
+  // Bug real encontrado con una pieza real (Jubilados): la pieza traía
+  // DOS contenedores de contenido completos y separados (dos
+  // <table id="Show"> distintos, con una imagen de "marcas
+  // auspiciantes" entre medio) — ver comentario grande en
+  // encontrarTablaContenido. Cada contenedor adicional se procesa
+  // exactamente igual que el principal (separar filas, clasificar) y
+  // sus bloques se insertan en el canvas en su posición real (después
+  // del contenedor principal, en el orden en que aparecen en el HTML),
+  // no al final como código personalizado — son bloques reales y
+  // reconocibles, no HTML roto.
+  for (const adicional of tabla.contenedoresAdicionales) {
+    const aperturaAdicional = html.slice(adicional.inicioTag).match(/^<table\b[^>]*>/)[0]
+    const htmlInternoAdicional = html.slice(adicional.inicioTag + aperturaAdicional.length, adicional.finTag - '</table>'.length)
+    filas = filas.concat(separarFilasDeNivelSuperior(htmlInternoAdicional))
+  }
+  if (tabla.contenedoresAdicionales.length > 0) {
+    avisos.push({ texto: `Se detectaron ${tabla.contenedoresAdicionales.length} ${tabla.contenedoresAdicionales.length === 1 ? 'sección adicional de contenido' : 'secciones adicionales de contenido'} además de la principal — sus bloques se agregaron en orden, revisá que el resultado sea el esperado.`, tipo: 'general', canvasIdx: null })
   }
 
   // Bug real encontrado con una pieza real (China/Feria de Cantón):
@@ -4004,15 +4085,68 @@ export default function EditorPiezas() {
             return r.text()
           })
 
+      // Bug real encontrado con una pieza real, accedida por LINK (no
+      // pegando el HTML directo desde el editor de la plataforma): el
+      // HTML resultante traía 166 atributos con comillas SIMPLES
+      // ('...') en vez de dobles ("...") — confirmado comparando ese
+      // mismo HTML "limpio" pegado a mano (comillas dobles, se
+      // importa bien) contra el obtenido por URL (comillas simples,
+      // no se importa nada). Todo el resto de la estructura era
+      // idéntico entre ambos — la causa concreta de por qué la
+      // plataforma reescribe a comillas simples específicamente en el
+      // camino de acceso por URL no se pudo confirmar (puede ser un
+      // paso de minificación o sanitización propio de esa vía), pero
+      // no hace falta entenderla para resolver el síntoma: TODOS los
+      // regex de importarDesdeHtml/importarHeuristico (524 ocurrencias
+      // de ="..." en el archivo) asumen comillas dobles literales —
+      // reescribir cada uno para tolerar ambas sería un cambio enorme
+      // y arriesgado. Normalizar una sola vez, acá, antes de que el
+      // HTML llegue a cualquiera de las dos funciones, es la solución
+      // estándar para HTML con comillas simples en atributos (válido
+      // en el estándar HTML desde siempre, cualquier navegador real lo
+      // acepta sin distinción) — no es un parche del síntoma puntual,
+      // es tolerancia genérica que cualquier importador de HTML
+      // debería tener. El regex exige que la comilla de apertura venga
+      // pegada a `nombre-de-atributo=`, con un espacio antes del
+      // nombre — así nunca toca un apóstrofe de texto visible (ej.
+      // "Spider-Man's web" queda intacto, confirmado con pruebas).
+      //
+      // Segundo bug real encontrado AL CORREGIR el de arriba (estaba
+      // tapado por él, nunca se veía mientras toda la pieza fallaba
+      // entera): un <img alt='>'> con el carácter > SIN ESCAPAR como
+      // valor literal del atributo (el diseñador tipeó '>' directo en
+      // vez de la entidad &gt; — los templates propios de este editor
+      // siempre usan &gt;, confirmado, así que es un error puntual de
+      // esta pieza, no un patrón de la plataforma). El problema es
+      // INDEPENDIENTE de las comillas: cualquier regex genérico de tag
+      // (ej. /<img\b[^>]*>/, hay muchos en el archivo) usa [^>]* para
+      // "todo hasta el cierre del tag" — no entiende de comillas, así
+      // que un > suelto DENTRO de un atributo corta el match ahí
+      // mismo, mucho antes del cierre real, dejando el resto del tag
+      // (style, width, height, el >) como texto suelto en el bloque
+      // siguiente. Se escapan > y < a sus entidades SOLO cuando viven
+      // dentro de un valor de atributo completo (con su comilla de
+      // apertura Y cierre, cualquiera de los dos tipos) — nunca se
+      // tocan los > y < reales que delimitan tags, que viven afuera de
+      // cualquier comilla. Tiene que aplicarse ANTES de normalizar
+      // comillas simples a dobles (no cambia el resultado si se aplica
+      // antes o después, pero mantiene cada fix enfocado en una sola
+      // cosa).
+      const htmlSinMayorQueSuelto = html.replace(/([a-zA-Z-]+)=(['"])([^'"]*)\2/g, (_m, attr, q, val) => {
+        const valEscapado = val.replace(/>/g, '&gt;').replace(/</g, '&lt;')
+        return `${attr}=${q}${valEscapado}${q}`
+      })
+      const htmlNormalizado = htmlSinMayorQueSuelto.replace(/(\s[a-zA-Z-]+)='([^']*)'/g, (_m, attr, val) => `${attr}="${val}"`)
+
       // importarDesdeHtml primero (100% determinístico si la pieza
       // tiene marcadores de este editor) — solo si devuelve resultado
       // null (ningún <!--BLOQUE--> encontrado) se cae a la heurística
       // sin marcadores, mucho más trabajosa y de menor certeza.
-      const porMarcadores = importarDesdeHtml(html)
+      const porMarcadores = importarDesdeHtml(htmlNormalizado)
       if (porMarcadores.resultado) {
         setImportarResultado({ ...porMarcadores, confianza: 'alta', viaMarcadores: true })
       } else {
-        const porHeuristica = importarHeuristico(html)
+        const porHeuristica = importarHeuristico(htmlNormalizado)
         setImportarResultado({ ...porHeuristica, viaMarcadores: false })
       }
     } catch (err) {
