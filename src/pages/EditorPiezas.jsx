@@ -245,30 +245,43 @@ function detectarCampos(html) {
   const SOCIALES = ['twitter.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'icbcargentina', 'icbc.argentina']
 
   // Textos en <td>: extraer innerHTML de cada td-hoja con contenido
-  // real. posicionReal = posicionContenido (NO posicionOrden) — la
-  // posición SOLO entre celdas que YA tenían contenido real en este
-  // mismo html, ignorando las vacías/decorativas (ver comentario
-  // grande junto a extraerTdsConBalance). Esto resuelve el bug
-  // reportado: el template puede traer más o menos celdas decorativas
-  // que el HTML real importado (ej. Borde_Izq_Rojo_Texto trae 2
-  // espaciadores extra dentro de su sub-tabla que una pieza real
-  // puede no tener) — numerando con posicionOrden (todas las celdas,
-  // sin filtrar), la posición del texto real quedaba CORRIDA de forma
-  // distinta entre uno y otro, y el panel mostraba el texto de EJEMPLO
-  // del template en vez del texto REAL importado.
+  // real. posicionReal = posicionContenido — la posición SOLO entre
+  // celdas que YA tenían contenido real en este mismo html, ignorando
+  // las vacías/decorativas (ver comentario grande junto a
+  // extraerTdsConBalance). Esto resuelve el bug original: el template
+  // puede traer más o menos celdas decorativas que el HTML real
+  // importado (ej. Borde_Izq_Rojo_Texto trae 2 espaciadores extra
+  // dentro de su sub-tabla que una pieza real puede no tener) —
+  // numerando con posicionOrden (todas las celdas, sin filtrar), la
+  // posición del texto real quedaba CORRIDA de forma distinta entre
+  // uno y otro, y el panel mostraba el texto de EJEMPLO del template
+  // en vez del texto REAL importado.
   //
-  // Esto sigue siendo estable durante una misma sesión de edición
-  // aunque el usuario vacíe el campo: las celdas DECORATIVAS (las que
-  // nunca tuvieron contenido — espaciadores, márgenes) siguen vacías
-  // siempre, nunca "ganan" contenido durante la edición normal de OTRO
-  // campo del mismo bloque, así que el conteo de "cuántas celdas con
-  // contenido hay ANTES de esta" no cambia por vaciar la celda actual
-  // — vaciar el campo 0 no afecta dónde está el campo 1, porque ambos
-  // ya estaban marcados como "con contenido" desde el primer cálculo y
-  // la función de lectura (valorActualDeTexto) sigue recalculando
-  // sobre el htmlLocal vigente, no sobre uno fijo — ver esa función
-  // para el detalle de por qué esto no se rompe en el caso de un único
-  // campo de texto vaciándose a sí mismo (el caso real reportado).
+  // Bug real reportado (uso normal, sin necesidad de importar nada —
+  // pasa igual con un bloque recién arrastrado): vaciar el ÚNICO
+  // campo de texto de un bloque y después intentar escribir algo
+  // nuevo no aplicaba el cambio — quedaba vacío para siempre. Causa
+  // raíz: posicionContenido es estable SOLO mientras se calcula una
+  // vez y no se vuelve a recalcular contra el HTML ya mutado —
+  // actualizarCampoEnHtml y valorActualDeTexto (más abajo, en
+  // PanelEditor) SÍ recalculaban extraerTdsConBalance(html) en cada
+  // llamada, contra el HTML actual — si la celda ya estaba vacía
+  // (porque el usuario la vació en una edición previa, ya confirmada
+  // en htmlLocal), esa celda deja de contar como "con contenido" en
+  // ESE recálculo, su posicionContenido pasa a ser null, y buscar
+  // "la celda con posicionContenido === idx" ya no encuentra nada —
+  // el cambio se pierde en silencio. Fix: además de posicionReal
+  // (posicionContenido, calculado UNA SOLA VEZ al detectar los campos
+  // — sigue resolviendo el problema original de templates con distinta
+  // cantidad de celdas decorativas), cada campo guarda también
+  // posicionOrden — la posición física entre TODAS las celdas-hoja,
+  // sin filtrar por contenido. posicionOrden de una celda dada NUNCA
+  // cambia, esté vacía o no — es una propiedad de su posición en el
+  // árbol, no de su contenido. actualizarCampoEnHtml y
+  // valorActualDeTexto ahora anclan por posicionOrden, no por
+  // posicionContenido, así que vaciar y reescribir el mismo campo
+  // cualquier cantidad de veces en la misma sesión sigue encontrando
+  // la celda correcta siempre.
   //
   // rangosDeTextoEditable guarda el rango [inicio, fin] de cada <td>
   // que SÍ quedó como campo de texto — se usa más abajo para excluir
@@ -277,19 +290,14 @@ function detectarCampos(html) {
   let textoIdx = 0
   const tds = extraerTdsConBalance(html)
   const rangosDeTextoEditable = []
-  for (const { index: tdIndex, contenido: inner, posicionContenido, tieneContenidoReal } of tds) {
+  for (const { index: tdIndex, contenido: inner, posicionOrden, posicionContenido, tieneContenidoReal } of tds) {
     if (!tieneContenidoReal) continue
     // Una celda con contenido real puede ser SOLO una imagen (sin
     // texto) — eso ya se filtra acá por longitud de texto, y se
     // detecta por separado más abajo como campo de imagen.
     const textoLimpio = inner.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim()
     if (textoLimpio.length > 2) {
-      // posicionReal = posicionOrden (NO posicionContenido) — ver
-      // comentario grande junto a extraerTdsConBalance. Esto es lo
-      // que se guarda y viaja como identidad del campo: estable
-      // durante toda la sesión de edición, sin importar cuántas veces
-      // se vacíe y reescriba el contenido.
-      campos.push({ tipo: 'texto', label: `Texto ${textoIdx + 1}`, idx: textoIdx, posicionReal: posicionContenido, contenido: inner })
+      campos.push({ tipo: 'texto', label: `Texto ${textoIdx + 1}`, idx: textoIdx, posicionReal: posicionContenido, posicionOrden, contenido: inner })
       textoIdx++
       rangosDeTextoEditable.push([tdIndex, tdIndex + inner.length])
     }
@@ -365,19 +373,27 @@ function detectarCampos(html) {
 // Actualizar un campo específico en el HTML como string puro
 function actualizarCampoEnHtml(html, tipo, idx, cambios) {
   if (tipo === 'texto') {
-    // idx acá es en realidad posicionContenido (ver detectarCampos /
-    // extraerTdsConBalance) — la posición entre celdas con CONTENIDO
-    // REAL al momento de este cálculo, ignorando decoración vacía. Es
-    // estable durante una sesión de edición normal porque las celdas
-    // decorativas (las que nunca tuvieron contenido) no cambian de
-    // estado al editar OTRO campo del mismo bloque — solo importaría
-    // si la celda actual se vacía y el RECÁLCULO siguiente la
-    // descuenta del total, pero acá se recalcula sobre `html` tal cual
-    // viene (antes de aplicar este cambio), así que la celda que se
-    // busca todavía contaba como "con contenido" en este mismo
-    // llamado.
+    // idx acá es posicionOrden (ver detectarCampos / extraerTdsConBalance)
+    // — la posición física entre TODAS las celdas-hoja, sin filtrar
+    // por contenido. A diferencia de posicionContenido (la posición
+    // SOLO entre celdas con contenido real en el momento del cálculo),
+    // posicionOrden de una celda dada nunca cambia, esté vacía o no —
+    // es una propiedad de su posición en el árbol, no de su estado.
+    //
+    // Bug real reportado (uso normal — pasa con cualquier bloque, no
+    // solo importados): antes esto buscaba por posicionContenido,
+    // recalculado en cada llamada contra el `html` actual. Si el
+    // usuario ya había vaciado esa celda en una edición previa
+    // (confirmada en htmlLocal), la celda dejaba de contar como "con
+    // contenido" en ESTE recálculo — su posicionContenido pasaba a
+    // ser null, "la celda con posicionContenido === idx" ya no
+    // encontraba nada, y el texto nuevo que el usuario quería escribir
+    // se perdía en silencio, el campo quedaba vacío para siempre. Con
+    // posicionOrden esto no puede pasar: la celda sigue teniendo el
+    // mismo posicionOrden esté vacía, llena, o se vacíe y rellene
+    // cualquier cantidad de veces en la misma sesión.
     const celdas = extraerTdsConBalance(html)
-    const celda = celdas.find(c => c.posicionContenido === idx)
+    const celda = celdas.find(c => c.posicionOrden === idx)
     if (!celda) return html
     const aperturaCompleta = html.slice(celda.index).match(/^<td\b[^>]*>/)[0]
     return html.slice(0, celda.index) + aperturaCompleta + cambios.contenido + '</td>' + html.slice(celda.index + aperturaCompleta.length + celda.contenido.length + '</td>'.length)
@@ -2512,8 +2528,47 @@ function importarHeuristico(html) {
   if (bandaHeader) {
     avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}".`, tipo: 'general', canvasIdx: null })
   } else {
-    bandaHeader = BLOQUES_HEADER[0] ?? null
-    avisos.push({ texto: 'El header de la pieza original no se pudo identificar automáticamente — se dejó uno por defecto, revisalo y volvé a seleccionarlo si corresponde (puede no coincidir con el segmento real de la pieza).', tipo: 'general', canvasIdx: null })
+    // Bug real encontrado al agregar el EB básico real (hasta ahora,
+    // el archivo EB_Banda_Negra_Header.html guardado era en realidad
+    // el de EB Exclusive — mal nombrado desde el origen, el usuario lo
+    // corrigió): un header "básico puro" (solo redes + el isologo
+    // genérico ICBC, sin ningún logo de marca propio) nunca puede
+    // matchear por logo — el genérico está excluido a propósito (ver
+    // ESDistintivoGenerico). Hasta ahora esto no era un problema
+    // porque el ÚNICO header así era CG_Banda_Roja_Header, que
+    // resultaba ser, por casualidad de orden alfabético, el propio
+    // default global (BLOQUES_HEADER[0]) — funcionaba bien sin que el
+    // código lo garantizara a propósito. Con un segundo header básico
+    // puro (EB, fondo negro) ese mismo camino feliz ya no alcanza: una
+    // pieza EB básica real terminaría cayendo al default CG (rojo),
+    // cambiando el segmento de marca — el mismo tipo de bug ya visto
+    // con Malba, pero por ausencia total de logo en vez de logo
+    // compartido. Antes de caer al default global sin distinguir
+    // nada, se intenta un segundo desempate: entre los headers que NO
+    // tienen NINGÚN logo no-genérico (los "básicos puros" — hoy son
+    // exactamente dos: CG y EB), ¿el color de fondo de la pieza
+    // coincide con alguno de ellos? Si coincide con exactamente uno,
+    // se usa ese — sigue siendo más confiable que el default ciego,
+    // aunque no haya ningún logo de marca que lo confirme. Si no
+    // coincide con ninguno (pieza realmente irreconocible) o coincide
+    // con más de uno (no debería pasar mientras cada básico puro tenga
+    // un color de fondo distinto, pero por si acaso), se cae al
+    // default de siempre.
+    const basicosPuros = BLOQUES_HEADER.filter(b => logosDistintivos(b.html).length === 0)
+    const basicosPorColor = basicosPuros.filter(b => {
+      const color = colorDeFondoHeader(b.html)
+      if (!color || !htmlAntesDeContenido.includes(`#${color.slice(1)}`)) return false
+      const coincideStyle = new RegExp(`background-color\\s*:\\s*${color}`, 'i').test(htmlAntesDeContenido)
+      const coincideBgcolor = new RegExp(`bgcolor\\s*=\\s*["']${color}["']`, 'i').test(htmlAntesDeContenido)
+      return coincideStyle || coincideBgcolor
+    })
+    if (basicosPorColor.length === 1) {
+      bandaHeader = basicosPorColor[0]
+      avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}" (por color de fondo, sin logo de marca propio para confirmar — revisalo si no es el esperado).`, tipo: 'general', canvasIdx: null })
+    } else {
+      bandaHeader = BLOQUES_HEADER[0] ?? null
+      avisos.push({ texto: 'El header de la pieza original no se pudo identificar automáticamente — se dejó uno por defecto, revisalo y volvé a seleccionarlo si corresponde (puede no coincidir con el segmento real de la pieza).', tipo: 'general', canvasIdx: null })
+    }
   }
 
   // redesOrden: bug real reportado — el header elegido es el TEMPLATE
@@ -3451,24 +3506,29 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
   // los campos siguientes — el mismo bug que ya se corrigió en
   // detectarCampos / actualizarCampoEnHtml, pero del lado de la
   // lectura en vez de la escritura.
+  //
+  // Bug real reportado, ya resuelto (uso normal, sin necesidad de
+  // importar nada — pasaba con cualquier bloque, recién arrastrado o
+  // importado): este código YA decía en el comentario que indexaba
+  // por posicionOrden, pero efectivamente buscaba por
+  // campo.posicionReal (= posicionContenido, ver detectarCampos) —
+  // una discrepancia real entre lo documentado y lo implementado.
+  // posicionContenido de una celda vacía pasa a ser null en cuanto esa
+  // celda deja de tener contenido real, así que después de vaciar el
+  // ÚNICO campo de texto de un bloque, buscar por posicionContenido ya
+  // no encontraba nada — ni para LEER el valor actual (esta función)
+  // ni para ESCRIBIR uno nuevo (actualizarCampoEnHtml, ver ese
+  // comentario para el detalle completo), el campo quedaba vacío para
+  // siempre sin importar cuánto se reintentara escribir. Fix: tanto
+  // esta función como actualizarCampoEnHtml ahora anclan por
+  // posicionOrden (propiedad fija de la posición física de la celda,
+  // nunca cambia esté vacía o no) — detectarCampos ahora expone
+  // posicionOrden en cada campo de texto además de posicionReal.
   const todosLosTdActuales = extraerTdsConBalance(htmlLocal)
   function valorActualDeTexto(campo) {
-    const celda = todosLosTdActuales.find(c => c.posicionContenido === campo.posicionReal)
+    const celda = todosLosTdActuales.find(c => c.posicionOrden === campo.posicionOrden)
     return celda ? celda.contenido : campo.contenido
   }
-  // LIMITACIÓN CONOCIDA, no resuelta: si el usuario vacía el ÚNICO
-  // campo de texto de un bloque por completo y después intenta volver
-  // a escribir algo, esa celda deja de contar como "con contenido" en
-  // el próximo recálculo de posicionContenido — el campo "se pierde"
-  // y la próxima escritura cae de nuevo al texto de ejemplo del
-  // template. Es un caso límite (vaciar Y reescribir en la misma
-  // sesión), no el bug principal que motivó este cambio (que afectaba
-  // CUALQUIER edición normal, sin necesidad de vaciar nada primero).
-  // Arreglarlo bien requeriría calcular un mapeo FIJO de posiciones
-  // una sola vez al montar el panel y reusarlo sin recalcular durante
-  // toda la sesión — se evaluó pero no se implementó por falta de
-  // tiempo en la sesión que escribió este comentario; queda pendiente
-  // para una vuelta futura si se reporta como problema real.
 
   // Mismo problema que el de arriba, pero del lado de imagen: campo.src
   // (y alt/title/width/height) quedan FIJOS desde el detectarCampos
@@ -3524,7 +3584,7 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
             <div key={i} className="ep-campo">
               <label className="ep-campo-label">{campo.label}</label>
               <RichEditor value={valorActualDeTexto(campo)}
-                onChange={v => actualizarCampo('texto', campo.posicionReal, { contenido: v })} />
+                onChange={v => actualizarCampo('texto', campo.posicionOrden, { contenido: v })} />
             </div>
           )
           if (campo.tipo === 'imagen') {
