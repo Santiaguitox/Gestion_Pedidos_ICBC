@@ -545,6 +545,20 @@
   margin: 0;
   line-height: 1.4;
 }
+.ep-campo-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+  display: block;
+}
+.ep-campo-hint code {
+  font-family: monospace;
+  background: var(--bg-subtle, rgba(0,0,0,0.05));
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
 .ep-legal-adicional-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1228,4 +1242,267 @@ input[autocomplete="off"] { }
   color: var(--icbc-red);
   border-color: var(--icbc-red);
   background: rgba(208, 17, 27, 0.05);
+}
+
+/* ─── Modal Importar ──────────────────────────────────────────────────
+   Mismo overlay que el modal de Vista previa (.ep-preview-overlay),
+   variante propia de tamaño/estructura porque adentro convive el
+   formulario de entrada (textarea/URL) y, en el segundo paso, el
+   resumen + preview del resultado — más alto que el modal de preview
+   simple. Clases con prefijo ep-importar- propias, sin depender de
+   .re-tabs externo (esa clase no está definida en este archivo —
+   ver nota en EditorPiezas.jsx junto al primer uso de .re-tabs, es
+   una inconsistencia preexistente que no se resuelve acá). */
+.ep-importar-modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  width: 100%;
+  max-width: 680px;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ep-importar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* Tabs HTML/URL — mismo lenguaje visual que .re2-tabs de Revisión de
+   envíos (fondo suave + botón activo en color de marca), pero
+   definido localmente para no depender de CSS de otra herramienta. */
+.ep-importar-tabs {
+  display: inline-flex;
+  padding: 4px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+.ep-importar-tabs button {
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: none;
+  background: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.ep-importar-tabs button.active {
+  background: var(--icbc-red);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ep-importar-input {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.75rem;
+  color: var(--text-primary);
+  resize: vertical;
+}
+.ep-importar-input:focus { outline: 2px solid var(--icbc-red); outline-offset: -1px; }
+.ep-importar-input-url { resize: none; }
+
+.ep-importar-error {
+  font-size: 0.8125rem;
+  color: var(--icbc-red);
+  background: rgba(208, 17, 27, 0.06);
+  border: 1px solid rgba(208, 17, 27, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+}
+
+.ep-importar-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding-top: 0.25rem;
+  flex-shrink: 0;
+}
+
+/* Resumen del resultado — color del borde/fondo según confianza
+   ('alta' verde, 'media' ámbar, 'baja' nunca llega acá con este
+   bloque porque resultado es null y se muestra el otro caso). */
+.ep-importar-resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.75rem;
+  border: 1px solid;
+}
+.ep-importar-confianza-alta {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.ep-importar-confianza-media {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.ep-importar-confianza-baja {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.ep-importar-resumen-titulo {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ep-importar-resumen-detalle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Aviso de confianza baja / resultado null — mismo color ámbar que el
+   resumen de confianza media, pero con ícono y SIN el detalle de
+   "bloques detectados" (no hay nada confiable que contar). Nunca se
+   muestra en verde: confianza baja no es un éxito parcial, es un
+   "no se pudo, revisá o armá a mano". */
+.ep-importar-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.75rem;
+}
+.ep-importar-aviso-baja {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--text-primary);
+}
+.ep-importar-aviso-baja svg { color: #F59E0B; flex-shrink: 0; margin-top: 1px; }
+
+.ep-importar-avisos-titulo {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.ep-importar-avisos-lista {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Bullet explícito en vez de depender del list-style nativo del
+   navegador — con el <ul> en display:flex/column, el marcador
+   automático de cada <li> no se posicionaba bien (se veía como texto
+   corrido, sin separación visual entre avisos). Se agrega como
+   pseudo-elemento, con el mismo color que el texto del aviso (incluye
+   los clickeables, vía currentColor). */
+.ep-importar-avisos-lista li {
+  position: relative;
+  padding-left: 0.875rem;
+}
+.ep-importar-avisos-lista li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: currentColor;
+}
+
+/* Avisos con bloque asociado (no-reconocido / fuera-de-rango) son
+   clickeables — llevan al bloque marcado en el preview, mismo color
+   que el overlay que lo resalta ahí (#F59E0B ámbar / #DC2626 rojo).
+   Los avisos generales (sin bloque puntual: header, imagen principal,
+   redes sociales) se quedan con el estilo neutro de siempre, sin
+   cursor de click ni color — no hay ningún bloque al que llevar. */
+.ep-importar-avisos-lista li[data-tipo="no-reconocido"],
+.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"] {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+  padding-right: 0.375rem;
+  margin-left: -0.375rem;
+  transition: background 120ms;
+}
+.ep-importar-avisos-lista li[data-tipo="no-reconocido"] {
+  color: #92610A;
+}
+.ep-importar-avisos-lista li[data-tipo="no-reconocido"]:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"] {
+  color: #A32D2D;
+}
+.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"]:hover {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+/* Resaltado momentáneo del bloque en el preview al hacer click en su
+   aviso — mismo color que el overlay/aviso correspondiente, con un
+   pulso breve para que el ojo lo encuentre incluso si ya estaba
+   visible en pantalla (scrollIntoView no siempre mueve nada si el
+   bloque ya está a la vista, y sin el pulso el click no daría ningún
+   feedback en ese caso). Se inyecta dentro del documento del iframe,
+   no en este stylesheet — ver irABloqueEnPreview. Esta regla queda
+   documentada acá únicamente como referencia de los valores usados. */
+
+/* Switch Desktop/Mobile del header del modal — mismas clases propias
+   ep-importar-tabs ya definidas más arriba (no .re-tabs externo),
+   solo se agrega el ajuste de padding compacto para que entre junto
+   al título y el botón de cerrar en una sola fila, igual criterio que
+   .ep-preview-modo-tabs en el modal de Vista previa. */
+.ep-importar-modo-tabs {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+.ep-importar-modo-tabs button {
+  padding: 5px 11px;
+}
+
+/* Wrapper del iframe de preview — en modo Desktop el iframe ocupa
+   el 100% del ancho disponible. En modo Mobile pasa a un width FIJO
+   de 375px (necesario para que los media queries reales del email,
+   @media max-width:600px, se disparen — el viewport interno del
+   iframe depende de su width real, no de cómo se vea "achicado" con
+   CSS) — mismo criterio exacto que .ep-preview-iframe-wrap.modo-mobile
+   del modal de Vista previa. */
+.ep-importar-preview-wrap {
+  flex: 1;
+  min-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+}
+.ep-importar-preview-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+.ep-importar-preview-wrap::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+.ep-importar-preview-wrap.modo-mobile {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
+}
+.ep-importar-preview-wrap.modo-mobile .ep-importar-preview-iframe {
+  flex: none;
+  width: 375px;
+  height: 100%;
+  box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(0,0,0,0.1);
+  border-radius: var(--radius-sm);
+}
+.ep-importar-preview-iframe {
+  width: 100%;
+  border: none;
+  display: block;
+  background: #fff;
 }
