@@ -3923,31 +3923,59 @@ export default function EditorPiezas() {
   // el instanceId — usado por el intercambio Icono/IcónoGrande.
   function swapBloque(instanceId, nuevoSlug) {
     // Los únicos valores que cambian entre chico y grande son conocidos
-    // y fijos — se reemplazan directamente sobre el HTML actual.
-    // El src del ícono y el texto se preservan sin tocarlos.
-    const CHICO_A_GRANDE = [
-      // td contenedor del ícono
-      ['width="60" height="60" valign="middle"', 'width="80" height="80" valign="middle"'],
-      // img del ícono
-      ['width="60" height="60" />',              'width="75" height="75" />'],
-      // td espaciador izquierdo (antes del borde)
-      ['style="width: 10px;" width="10"',        'style="width: 5px;" width="5"'],
-      // borde separador
-      ['border-left: solid 2px #c4161c;',        'border-left: solid 5px #c4161c;'],
-    ]
-    const GRANDE_A_CHICO = CHICO_A_GRANDE.map(([a, b]) => [b, a])
+    // y fijos. El src del ícono y el texto se preservan sin tocarlos.
+    //
+    // Se usan reemplazos por REGEX (no string literal con .split/.join)
+    // por dos motivos encontrados en testing real:
+    // 1) Bug real: el espaciador ANTES del borde es 10px en la chica y
+    //    5px en la grande, pero el espaciador DESPUÉS del borde es 5px
+    //    en AMBAS versiones — al ir de chico a grande, el primero pasa
+    //    a "width: 5px" y queda IDÉNTICO al segundo. Un reemplazo de
+    //    string ciego para la vuelta (grande→chico) no puede saber
+    //    cuál de los dos "5px" corresponde a cuál — se resuelve
+    //    anclando el regex a que el <td> espaciador-antes-del-borde es
+    //    el que está INMEDIATAMENTE seguido por el <td> con
+    //    border-left (\s* tolera cualquier whitespace/indentación
+    //    entre ambos, a diferencia de un string literal con un salto
+    //    de línea fijo, que se rompía contra el CRLF + indentación
+    //    real del archivo en disco).
+    // 2) Bug real: un bloque con el separador de imagen real
+    //    (Img_Separador_265x2.png, presente en Modulo_Canal_Feriado y
+    //    en cualquier bloque armado con esa sub-estructura) tiene su
+    //    ancho FIJO en 445px (correcto para la chica: ícono 60px +
+    //    espaciadores = 85px ocupados, 530-85=445) — al pasar a
+    //    grande (ícono 80px + espaciadores = 105px ocupados,
+    //    530-105=425, confirmado contra Modulo_Canal_Feriado) ese
+    //    ancho quedaba sin actualizar, 20px más ancho de lo que el
+    //    espacio real disponible permite — desborda visualmente la
+    //    celda en un cliente de correo real.
+    function aGrande(html) {
+      return html
+        .replace(/width="60" height="60" valign="middle"/g, 'width="80" height="80" valign="middle"')
+        .replace(/width="60" height="60"\s*\/>/g, 'width="75" height="75" />')
+        .replace(/style="width:\s*10px;"\s*width="10"(\s*valign="top"\s*align="left"><\/td>\s*<td\s+style="border-left)/g, 'style="width: 5px;" width="5"$1')
+        .replace(/border-left:\s*solid\s*2px\s*#c4161c;/g, 'border-left: solid 5px #c4161c;')
+        .replace(/\b445(?=px|")/g, '425')
+    }
+    function aChico(html) {
+      return html
+        .replace(/width="80" height="80" valign="middle"/g, 'width="60" height="60" valign="middle"')
+        .replace(/width="75" height="75"\s*\/>/g, 'width="60" height="60" />')
+        .replace(/style="width:\s*5px;"\s*width="5"(\s*valign="top"\s*align="left"><\/td>\s*<td\s+style="border-left)/g, 'style="width: 10px;" width="10"$1')
+        .replace(/border-left:\s*solid\s*5px\s*#c4161c;/g, 'border-left: solid 2px #c4161c;')
+        .replace(/\b425(?=px|")/g, '445')
+    }
     const esGrandeActual = /border-left:\s*solid\s*5px/i.test(
       canvas.find(b => b.instanceId === instanceId)?.htmlEditado ||
       canvas.find(b => b.instanceId === instanceId)?.html || ''
     )
-    const reemplazos = esGrandeActual ? GRANDE_A_CHICO : CHICO_A_GRANDE
     setCanvas(prev => prev.map(b => {
       if (b.instanceId !== instanceId) return b
       const nuevo = BLOQUES_CONTENIDO.find(bl => bl.slug === nuevoSlug)
       if (!nuevo) return b
-      let html = b.htmlEditado || b.html
-      for (const [de, a] of reemplazos) html = html.split(de).join(a)
-      return { ...nuevo, instanceId, htmlEditado: html }
+      const html = b.htmlEditado || b.html
+      const htmlTransformado = esGrandeActual ? aChico(html) : aGrande(html)
+      return { ...nuevo, instanceId, htmlEditado: htmlTransformado }
     }))
   }
 
