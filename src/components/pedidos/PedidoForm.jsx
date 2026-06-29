@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { PRIORIDADES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
@@ -16,6 +17,7 @@ const TIPOS_ENVIO = [
 
 export default function PedidoForm({ pedido, onSave, onCancel }) {
   const isEdit = !!pedido
+  const { user } = useAuth()
   const { showSuccess, showError } = useNotificaciones()
   const [form, setForm] = useState({
     asunto:             pedido?.asunto ?? '',
@@ -25,7 +27,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     fecha_limite:       pedido?.fecha_limite ?? '',
     tags:               pedido?.tags ?? [],
     estados:            pedido?.estados ?? [],
-    asignados:          pedido?.pedido_asignados?.map(a => a.user_id) ?? [],
+    asignados:          pedido?.pedido_asignados?.map(a => a.user_id) ?? (user?.id ? [user.id] : []),
     instancia:          pedido?.instancia ?? '',
     tipo_envio:         pedido?.tipo_envio ?? '',
     tipo_envio_otro:    pedido?.tipo_envio_otro ?? '',
