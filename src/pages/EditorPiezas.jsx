@@ -32,7 +32,18 @@ const TEMAS = {
 const TEMA_DEFAULT = 'icbc'
 
 // ─── Estilos del email — EXACTOS al canvas entregado ───────────────────────
-const CANVAS_STYLES = `<style type="text/css"><!--
+// Función en vez de string fijo: permite sumar estilos custom de los
+// bloques de "código personalizado" del canvas (ver
+// actualizarEstilosBloque / generarExport) sin duplicar todo el bloque
+// de estilos base. estilosDesktop se inserta antes del primer @media
+// (aplica siempre); estilosMobile se inserta DENTRO del @media
+// max-width:600px existente (aplica solo en mobile) — el usuario solo
+// escribe las reglas CSS, sin el selector de media query.
+// wrapPreview (preview de un bloque individual, sin contexto del
+// resto del canvas) sigue llamando esta función sin argumentos —
+// mismo resultado que el string fijo de antes.
+function construirCanvasStyles(estilosDesktop = '', estilosMobile = '') {
+  return `<style type="text/css"><!--
 body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
 table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
 table { table-layout: fixed; margin: 0 auto; border: none; }
@@ -47,7 +58,7 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
 .m-show { display: none; max-height: none; overflow: hidden; }
 .Ocultar_Desktop { display: none; visibility: hidden; max-height: 0; height: 0; overflow: hidden; line-height: 0; mso-hide: all; }
 .PosicionFoot { padding-left: 0px !important; padding-right: 0px !important; }
-@media screen and (max-width: 600px) {
+${estilosDesktop ? `${estilosDesktop}\n` : ''}@media screen and (max-width: 600px) {
   .max-w { max-width: 400px !important; }
   .IconoRedes { max-width: 20px !important; width: 20px !important; }
   .mobile-hide { display: none !important; }
@@ -67,10 +78,11 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
   .bottom { display: table-footer-group !important; width: 100% !important; }
   .Texto_Legales { font-size: 18px !important; line-height: 22px !important; }
   .ahorroCenter { width: 265px !important; }
-}
+${estilosMobile ? `  ${estilosMobile}\n` : ''}}
 @media screen and (max-width: 480px) { .IconoRedes { max-width: 14px !important; width: 14px !important; } }
 div[style*='margin: 16px 0;'] { margin: 0 !important; }
 --></style>`
+}
 
 const LEGAL_FIJO_HTML = `El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los mismos en forma gratuita a intervalos no inferiores a 6 meses, salvo que acredite un interés legítimo al efecto conforme lo establecido en el art. 14 inc. 3 de la ley 25.326. La agencia de acceso a la información pública, en su carácter de órgano de control de la ley 25.326 tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales. Para contactar a la misma: Av. Pte. Gral. Julio A. Roca 710, piso 2 - C1067ABP – CABA / Tel.: +54 (11) 3988-3968 <a style="color: #333333; text-decoration: underline;" target="_blank" href="https://www.argentina.gob.ar/aaip/datospersonales">https://www.argentina.gob.ar/aaip/datospersonales</a> - <a style="color: #333333; text-decoration: underline;" target="_blank" href="mailto:datospersonales@aaip.gob.ar">datospersonales@aaip.gob.ar</a>. Nuestra política de envío de correo electrónico no incluye la solicitud de ningún tipo de información por este medio de comunicación, es por tal motivo que, ante la llegada de una comunicación que le parezca no habitual, le recomendamos no responder ni ingresar en el mismo datos personales y/o claves de acceso y/o información de sus productos, por favor, háganos llegar la misma a la siguiente dirección de correo: <a style="color: #333333; text-decoration: underline;" target="_blank" href="mailto:seguridadinternet@icbc.com.ar">seguridadinternet@icbc.com.ar</a> o contáctenos al 0810-555-9200 de lunes a viernes de 8 a 20 horas o, sábados, domingos y feriados de 10 a 18 horas, o bien desde el exterior, al (54-11) 4820-9200. Los links adjuntos en esta pieza remiten únicamente a páginas de publicidad. Industrial and Commercial Bank of China (Argentina) S.A.U. es una Sociedad Anónima Unipersonal bajo la Ley Argentina. Su accionista limita su responsabilidad al capital aportado. Florida 99, CABA, CUIT 30709447846.`
 
@@ -372,7 +384,7 @@ function detectarCampos(html) {
 }
 
 // Actualizar un campo específico en el HTML como string puro
-function actualizarCampoEnHtml(html, tipo, idx, cambios) {
+function actualizarCampoEnHtml(html, tipo, idx, cambios, idxFallback) {
   if (tipo === 'texto') {
     // idx acá es posicionOrden (ver detectarCampos / extraerTdsConBalance)
     // — la posición física entre TODAS las celdas-hoja, sin filtrar
@@ -393,8 +405,19 @@ function actualizarCampoEnHtml(html, tipo, idx, cambios) {
     // posicionOrden esto no puede pasar: la celda sigue teniendo el
     // mismo posicionOrden esté vacía, llena, o se vacíe y rellene
     // cualquier cantidad de veces en la misma sesión.
+    //
+    // idxFallback (= posicionReal/posicionContenido del campo): mismo
+    // fix que en valorActualDeTexto del lado de la lectura — si
+    // posicionOrden no encuentra celda (caso real: pieza importada con
+    // MENOS estructura decorativa que el template elegido como
+    // baseHtml, ej. Borde_Izq_Rojo_Texto sin su sub-tabla de
+    // espaciadores), se intenta de nuevo por posicionContenido antes
+    // de rendirse. Sin esto, escribir en un campo de texto detectado
+    // así de nunca se guardaba — el botón "Aplicar cambios" no daba
+    // ningún error, pero el texto nunca cambiaba en el HTML real.
     const celdas = extraerTdsConBalance(html)
-    const celda = celdas.find(c => c.posicionOrden === idx)
+    let celda = celdas.find(c => c.posicionOrden === idx)
+    if (!celda && idxFallback != null) celda = celdas.find(c => c.posicionContenido === idxFallback)
     if (!celda) return html
     const aperturaCompleta = html.slice(celda.index).match(/^<td\b[^>]*>/)[0]
     return html.slice(0, celda.index) + aperturaCompleta + cambios.contenido + '</td>' + html.slice(celda.index + aperturaCompleta.length + celda.contenido.length + '</td>'.length)
@@ -451,7 +474,7 @@ function wrapPreview(html, esHeader = false) {
   const body = esHeader
     ? html
     : `<table width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;margin:0 auto;"><tbody>${html}</tbody></table>`
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">${CANVAS_STYLES}${PREVIEW_OVERRIDE}</head><body style="margin:0;padding:0;background:#fff;">${body}</body></html>`
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">${construirCanvasStyles()}${PREVIEW_OVERRIDE}</head><body style="margin:0;padding:0;background:#fff;">${body}</body></html>`
 }
 
 // ─── Miniatura visual para la biblioteca ───────────────────────────────────
@@ -663,6 +686,20 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAd
     return `<!--BLOQUE slug="${slug}" idx="${idx}"${origenAttr}-->\n${html}\n<!--/BLOQUE-->`
   }).join('\n')
 
+  // Estilos custom de TODOS los bloques de código del canvas, sumados
+  // en una sola hoja — cada bloque de "código personalizado" puede
+  // traer los suyos (ver actualizarEstilosBloque/PanelEditor), no
+  // solo el bloque seleccionado en este momento. Los bloques sin
+  // estilos custom (la mayoría) simplemente no aportan nada acá.
+  const estilosDesktopCombinados = canvas
+    .filter(b => b.tipo === 'codigo' && b.estilosDesktop)
+    .map(b => b.estilosDesktop)
+    .join('\n')
+  const estilosMobileCombinados = canvas
+    .filter(b => b.tipo === 'codigo' && b.estilosMobile)
+    .map(b => b.estilosMobile)
+    .join('\n')
+
   const imgPrincipalContenido = imgPrincipal.activo && imgPrincipal.src
     ? `<img src="${imgPrincipal.src}" alt="${imgPrincipal.alt || ''}"${imgPrincipal.title ? ` title="${imgPrincipal.title}"` : ''} class="img-max" style="width: 600px; height: 425px; display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: #c4161c;" width="600" height="425" />`
     : null
@@ -671,7 +708,7 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAd
     : ''
 
   const imgFooterHtml = imgFooter.activo && imgFooter.src
-    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center">${imgFooter.link ? `<a href="${imgFooter.link}" target="_blank">` : ''}<img src="${imgFooter.src}" alt="${imgFooter.alt || ''}" class="img-max" width="600" border="0" />${imgFooter.link ? '</a>' : ''}</td>\n</tr>\n<!--/IMG_FOOTER-->`
+    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center">${imgFooter.link ? `<a href="${imgFooter.link}" target="_blank">` : ''}<img src="${imgFooter.src}" alt="${imgFooter.alt || ''}"${imgFooter.title ? ` title="${imgFooter.title}"` : ''} class="img-max" width="600" border="0" />${imgFooter.link ? '</a>' : ''}</td>\n</tr>\n<!--/IMG_FOOTER-->`
     : ''
 
   // Dos modos de concatenar los legales adicionales (el legal FIJO
@@ -768,7 +805,7 @@ function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAd
       ).join('\n') + `\n<tr>\n<td colspan="3" style="height: 28px; font-size: 0px;" height="28">&nbsp;</td>\n</tr>\n<!--/INDICADORES-->`
     : ''
 
-  return `${CANVAS_STYLES}
+  return `${construirCanvasStyles(estilosDesktopCombinados, estilosMobileCombinados)}
 <!-- INICIO TEXTO OCULTO EN INBOX -->
 <div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: Arial, Helvetica, Open Sans, sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">El Futuro nos Inspira.</div>
 <!-- FIN TEXTO OCULTO EN INBOX --> <!-- INICIO CONTENEDOR -->
@@ -3468,9 +3505,16 @@ function PanelEditorHeader({ bandaHeader, redesOrden, onToggle, onReordenar }) {
   )
 }
 
-function PanelEditor({ bloque, onActualizar, onSwap }) {
+function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
   const [htmlLocal, setHtmlLocal] = useState(bloque.htmlEditado || bloque.html)
   const [saving, setSaving] = useState(false)
+  // Estilos custom del bloque de código personalizado — CSS plano sin
+  // selector @media (ver actualizarEstilosBloque). Cada bloque de
+  // código guarda los suyos; al exportar, generarExport los recolecta
+  // de TODOS los bloques de código del canvas y los suma en una sola
+  // hoja (desktop antes del @media, mobile adentro).
+  const [estilosDesktopLocal, setEstilosDesktopLocal] = useState(bloque.estilosDesktop || '')
+  const [estilosMobileLocal, setEstilosMobileLocal] = useState(bloque.estilosMobile || '')
 
   // Estados para el panel de Imagen Libre — declarados siempre al
   // nivel del componente (reglas de hooks). Se inicializan leyendo
@@ -3549,13 +3593,20 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
   const esImagenLibre = bloque.slug === 'Imagen_Libre'
   const sinCampos = !esCodigo && !esEspaciador && !esImagenLibre && camposOriginales.current.length === 0
 
-  function actualizarCampo(tipo, idx, cambios) {
-    setHtmlLocal(prev => actualizarCampoEnHtml(prev, tipo, idx, cambios))
+  function actualizarCampo(tipo, idx, cambios, idxFallback) {
+    setHtmlLocal(prev => actualizarCampoEnHtml(prev, tipo, idx, cambios, idxFallback))
   }
 
   function aplicar() {
     setSaving(true)
-    setTimeout(() => { onActualizar(bloque.instanceId, htmlLocal); setSaving(false) }, 400)
+    setTimeout(() => {
+      onActualizar(bloque.instanceId, htmlLocal)
+      if (bloque.tipo === 'codigo' && onActualizarEstilos) {
+        onActualizarEstilos(bloque.instanceId, 'estilosDesktop', estilosDesktopLocal)
+        onActualizarEstilos(bloque.instanceId, 'estilosMobile', estilosMobileLocal)
+      }
+      setSaving(false)
+    }, 400)
   }
 
   function resetBloque() {
@@ -3566,10 +3617,31 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
   if (esCodigo) return (
     <>
       <div className="ep-editor-body">
-        <div className="ep-campo">
-          <label className="ep-campo-label">Código HTML</label>
+        <div className="ep-seccion">
+          <div className="ep-seccion-titulo">Código HTML</div>
           <textarea className="ep-codigo-textarea" value={htmlLocal}
             onChange={e => setHtmlLocal(e.target.value)} placeholder="Pegá el HTML del bloque acá..." />
+        </div>
+
+        {/* Estilos custom — CSS plano, SIN selector @media: el sistema
+            ya envuelve cada uno en la hoja correspondiente al
+            exportar (desktop directo en el <style> principal, mobile
+            adentro del @media max-width:600px). Si la pieza tiene
+            varios bloques de código, los estilos de TODOS se suman en
+            la hoja final — cada bloque aporta lo suyo, sin pisar lo
+            que aportó otro. */}
+        <div className="ep-seccion">
+          <div className="ep-seccion-titulo">Estilos — Desktop</div>
+          <textarea className="ep-codigo-textarea ep-codigo-textarea-estilos" value={estilosDesktopLocal}
+            onChange={e => setEstilosDesktopLocal(e.target.value)}
+            placeholder=".mi-clase { color: red; }" />
+        </div>
+        <div className="ep-seccion">
+          <div className="ep-seccion-titulo">Estilos — Mobile</div>
+          <textarea className="ep-codigo-textarea ep-codigo-textarea-estilos" value={estilosMobileLocal}
+            onChange={e => setEstilosMobileLocal(e.target.value)}
+            placeholder=".mi-clase { font-size: 14px !important; }" />
+          <span className="ep-codigo-hint">Se aplica dentro de @media screen and (max-width: 600px) — no hace falta escribir el selector de media query, solo las reglas.</span>
         </div>
       </div>
       <div className="ep-editor-footer">
@@ -3806,9 +3878,35 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
   // posicionOrden (propiedad fija de la posición física de la celda,
   // nunca cambia esté vacía o no) — detectarCampos ahora expone
   // posicionOrden en cada campo de texto además de posicionReal.
+  // Bug real reportado con una pieza real (Borde_Izq_Rojo_Texto en una
+  // pieza de "Viaje a China"): el panel siempre mostraba el texto de
+  // EJEMPLO del template ("Miércoles 15 de julio...") en vez del texto
+  // real importado. Causa: el criterio de baseHtml (más arriba, "cuál
+  // tiene más <td> totales") asume que el template SIEMPRE tiene igual
+  // o menos estructura decorativa que la pieza real — pero puede ser
+  // al revés: el template de este bloque envuelve el texto en una
+  // sub-tabla propia de 3 filas (2 espaciadores + texto), mientras que
+  // la pieza real real tenía el texto directo en el <td> de nivel
+  // superior, sin esa sub-tabla. El template termina con MÁS <td> que
+  // la pieza real, así que se elige como baseHtml — y el campo de
+  // texto queda con el posicionOrden correspondiente A LA ESTRUCTURA
+  // DEL TEMPLATE (3), que no existe en la pieza real (que solo llega
+  // hasta el índice 2). Buscar ese posicionOrden en htmlLocal no
+  // encuentra nada, y silenciosamente caía al texto del template.
+  // Fix: si posicionOrden no encuentra celda, fallback a
+  // posicionReal/posicionContenido — la posición ENTRE SOLO LAS
+  // CELDAS CON CONTENIDO REAL, que en el caso normal (1 único campo de
+  // texto en el bloque) sigue siendo la misma sin importar cuántas
+  // celdas decorativas haya alrededor en cada estructura. No reabre el
+  // bug viejo (campo vaciado quedando inaccesible): ese caso siempre
+  // encuentra la celda por posicionOrden primero (la celda física
+  // nunca deja de existir, vacía o no), así que el fallback nunca
+  // llega a activarse ahí.
   const todosLosTdActuales = extraerTdsConBalance(htmlLocal)
   function valorActualDeTexto(campo) {
-    const celda = todosLosTdActuales.find(c => c.posicionOrden === campo.posicionOrden)
+    let celda = todosLosTdActuales.find(c => c.posicionOrden === campo.posicionOrden)
+    if (celda) return celda.contenido
+    celda = todosLosTdActuales.find(c => c.posicionContenido === campo.posicionReal)
     return celda ? celda.contenido : campo.contenido
   }
 
@@ -3916,7 +4014,7 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
             <div key={i} className="ep-seccion">
               <div className="ep-seccion-titulo">{campo.label}</div>
               <RichEditor value={valorActualDeTexto(campo)}
-                onChange={v => actualizarCampo('texto', campo.posicionOrden, { contenido: v })} />
+                onChange={v => actualizarCampo('texto', campo.posicionOrden, { contenido: v }, campo.posicionReal)} />
             </div>
           )
           if (campo.tipo === 'imagen') {
@@ -3929,8 +4027,8 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
           }
           if (campo.tipo === 'link') return (
             <div key={i} className="ep-seccion">
-              <div className="ep-seccion-titulo">{campo.label}</div>
-              <input className="ep-campo-input" defaultValue={campo.valor} placeholder="https://..." autoComplete="off"
+              <div className="ep-seccion-titulo">{campo.label} (opcional)</div>
+              <input className="ep-campo-input" defaultValue={campo.valor} placeholder="https://... (dejar vacío si no tiene link)" autoComplete="off"
                 onBlur={e => actualizarCampo('link', campo.idx, { valor: e.target.value })} />
             </div>
           )
@@ -4055,7 +4153,7 @@ function SelectorPestanas({ opciones, activa, onCambiar }) {
 // estándar de cualquier menú de este tipo, así que vive en un componente
 // propio en vez de repetir la lógica de "click afuera" en cada lugar que
 // lo necesite.
-function MenuDesplegable({ trigger, children, alinear = 'derecha' }) {
+function MenuDesplegable({ trigger, children, alinear = 'derecha', popoverClassName = '' }) {
   const [abierto, setAbierto] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -4070,7 +4168,7 @@ function MenuDesplegable({ trigger, children, alinear = 'derecha' }) {
     <div className="ep-menu-wrap" ref={ref}>
       {trigger(() => setAbierto(v => !v), abierto)}
       {abierto && (
-        <div className={`ep-menu-popover ${alinear === 'izquierda' ? 'ep-menu-popover-izq' : ''}`}>
+        <div className={`ep-menu-popover ${alinear === 'izquierda' ? 'ep-menu-popover-izq' : ''} ${popoverClassName}`}>
           {children(() => setAbierto(false))}
         </div>
       )}
@@ -4179,7 +4277,7 @@ export default function EditorPiezas() {
   const [showPreview, setShowPreview] = useState(false)
   // Desktop (600px, ancho real del email) / Mobile (375px) — angostar
   // el propio iframe con width fijo es lo que dispara los media
-  // queries reales del HTML (@media max-width: 600px en CANVAS_STYLES,
+  // queries reales del HTML (@media max-width: 600px en construirCanvasStyles,
   // que ya trae todo el responsive real: Ocultar_Desktop, tamaños de
   // imagen, paddings). Un simple CSS de "achicar visualmente" el
   // iframe no alcanza — el viewport interno que ve el contenido sigue
@@ -4191,7 +4289,7 @@ export default function EditorPiezas() {
   const [dragOverZona, setDragOverZona] = useState(false)
   const [dragOverHeader, setDragOverHeader] = useState(false)
   const [imgPrincipal, setImgPrincipal] = useState(() => borrador?.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '' })
-  const [imgFooter, setImgFooter] = useState(() => borrador?.imgFooter ?? { activo: false, src: '', alt: '', link: '' })
+  const [imgFooter, setImgFooter] = useState(() => borrador?.imgFooter ?? { activo: false, src: '', alt: '', title: '', link: '' })
   // Array de legales adicionales — mismo patrón que indicadores (cada
   // uno con su id, botón Agregar, eliminar individual). Disponible en
   // los 3 templates, no es exclusivo de Mall.
@@ -4355,6 +4453,17 @@ export default function EditorPiezas() {
 
   function actualizarBloque(instanceId, htmlEditado) {
     setCanvas(prev => prev.map(b => b.instanceId === instanceId ? { ...b, htmlEditado } : b))
+  }
+
+  // Estilos custom de un bloque de código personalizado — CSS plano
+  // (sin selector @media, el sistema ya envuelve cada uno en su hoja
+  // correspondiente al exportar). Se guardan como campos propios del
+  // bloque (no como parte del htmlEditado), para que generarExport
+  // pueda recolectarlos de TODOS los bloques de código del canvas y
+  // sumarlos a una sola hoja final — cada bloque aporta lo suyo, sin
+  // pisar lo que aportó otro.
+  function actualizarEstilosBloque(instanceId, campo, valor) {
+    setCanvas(prev => prev.map(b => b.instanceId === instanceId ? { ...b, [campo]: valor } : b))
   }
 
   // Reemplaza un bloque en el canvas por otro template, preservando
@@ -4826,7 +4935,7 @@ export default function EditorPiezas() {
             ahora es un botón compacto con dropdown, integrado en la
             misma fila que el nombre de la pieza, así toda la barra
             superior entra en una sola línea. */}
-        <MenuDesplegable alinear="izquierda" trigger={(toggle) => (
+        <MenuDesplegable alinear="izquierda" popoverClassName="ep-menu-popover-tema" trigger={(toggle) => (
           <button className="ep-tema-selector" onClick={toggle}>
             <span className="ep-tema-selector-label">Tema</span>
             <span className="ep-tema-selector-swatch" style={{ background: TEMAS[tema].colorSwatch }} />
@@ -5162,12 +5271,15 @@ export default function EditorPiezas() {
                 <label className="ep-img-label">URL de la imagen</label>
                 <input className="ep-img-input" autoComplete="off" placeholder="https://cdn.ejemplo.com/footer.gif"
                   value={imgFooter.src} onChange={e => setImgFooter(p => ({ ...p, src: e.target.value }))} />
-                <label className="ep-img-label" style={{ marginTop: 4 }}>Link destino</label>
-                <input className="ep-img-input" placeholder="https://..." autoComplete="off"
-                  value={imgFooter.link} onChange={e => setImgFooter(p => ({ ...p, link: e.target.value }))} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Alt</label>
                 <input className="ep-img-input" autoComplete="off" placeholder="Texto alternativo"
                   value={imgFooter.alt} onChange={e => setImgFooter(p => ({ ...p, alt: e.target.value }))} />
+                <label className="ep-img-label" style={{ marginTop: 4 }}>Title</label>
+                <input className="ep-img-input" autoComplete="off" placeholder="Título de la imagen"
+                  value={imgFooter.title || ''} onChange={e => setImgFooter(p => ({ ...p, title: e.target.value }))} />
+                <label className="ep-img-label" style={{ marginTop: 4 }}>Link (opcional)</label>
+                <input className="ep-img-input" placeholder="https://... (dejar vacío si no tiene link)" autoComplete="off"
+                  value={imgFooter.link} onChange={e => setImgFooter(p => ({ ...p, link: e.target.value }))} />
                 {imgFooter.src && (
                   <div style={{ marginTop: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
                     <img src={imgFooter.src} alt={imgFooter.alt || ''} style={{ width: '100%', height: 'auto', display: 'block' }} onError={e => { e.target.style.display = 'none' }} />
@@ -5178,7 +5290,7 @@ export default function EditorPiezas() {
                     {confirmando.imgFooter ? <Loader2 size={14} className="ep-spin" /> : <Check size={14} />}
                     {confirmando.imgFooter ? 'Confirmando…' : 'Confirmar imagen'}
                   </button>
-                  <button className="ep-btn ep-btn-ghost" style={{ flex: 0 }} onClick={() => setImgFooter({ activo: true, src: '', alt: '', link: '' })} title="Reiniciar">
+                  <button className="ep-btn ep-btn-ghost" style={{ flex: 0 }} onClick={() => setImgFooter({ activo: true, src: '', alt: '', title: '', link: '' })} title="Reiniciar">
                     <RotateCcw size={13} />
                   </button>
                 </div>
@@ -5339,7 +5451,7 @@ export default function EditorPiezas() {
           ? <PanelEditorHeader bandaHeader={bandaHeader} redesOrden={redesOrden} onToggle={toggleRedActiva} onReordenar={reordenarPillRed} />
           : !selectedBloque
             ? <div className="ep-editor-empty"><FileText size={28} style={{ color: 'var(--border)' }} /><span>Seleccioná un bloque del canvas para editar su contenido</span></div>
-            : <PanelEditor key={`${selectedBloque.instanceId}-${selectedBloque.slug}`} bloque={selectedBloque} onActualizar={actualizarBloque} onSwap={swapBloque} />}
+            : <PanelEditor key={`${selectedBloque.instanceId}-${selectedBloque.slug}`} bloque={selectedBloque} onActualizar={actualizarBloque} onSwap={swapBloque} onActualizarEstilos={actualizarEstilosBloque} />}
       </aside>
 
       </div>
