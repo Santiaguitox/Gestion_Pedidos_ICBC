@@ -6,7 +6,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ROLES, ROLE_COLORS } from '@/lib/constants'
 import { Badge } from '@/components/ui/Badge'
-import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus } from 'lucide-react'
+import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus, KeyRound } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
@@ -39,6 +39,8 @@ export default function Usuarios() {
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [editForm, setEditForm] = useState({ role: '', area_equipo: '', avatar_color: '' })
   const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(null)
+  const [resetting, setResetting] = useState(false)
   const isMobile = useIsMobile()
   // Persiste entre sesiones, igual patrón que los filtros de
   // Notificaciones. En mobile se ignora (ver más abajo) y se fuerza
@@ -104,6 +106,27 @@ export default function Usuarios() {
   }
 
   function pedirEliminarUsuario(u) { setConfirmEliminar(u) }
+
+
+  async function resetearPassword(u) {
+    setResetting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-user-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: u.email }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error ?? 'Error al resetear contraseña')
+      showSuccess(`Se envió el link de reset a ${u.email}`)
+    } catch (err) {
+      showError(err.message || 'Error al resetear la contraseña')
+    } finally {
+      setResetting(false)
+      setConfirmReset(null)
+    }
+  }
 
   async function eliminarUsuario(u) {
     setConfirmEliminar(null)
@@ -394,25 +417,43 @@ export default function Usuarios() {
               </div>
 
               {myRole === ROLES.SUPER_ADMIN && usuarioEditando.id !== myUser?.id && (
-                <div className="danger-zone">
-                  <div>
-                    <p className="danger-zone-title">Eliminar usuario</p>
-                    <p className="danger-zone-text">
-                      Esta acción elimina el acceso del usuario y no se puede deshacer.
-                    </p>
+                <>
+                  <div className="danger-zone">
+                    <div>
+                      <p className="danger-zone-title">Resetear contraseña</p>
+                      <p className="danger-zone-text">
+                        Se le enviará un email a {usuarioEditando.email} con un link para que establezca una nueva contraseña.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmReset(usuarioEditando)}
+                      className="btn-secondary"
+                      disabled={resetting}
+                    >
+                      <KeyRound size={16} />Resetear
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const usuarioAEliminar = usuarioEditando
-                      cerrarEditarUsuario()
-                      pedirEliminarUsuario(usuarioAEliminar)
-                    }}
-                    className="btn-danger-outline"
-                  >
-                    <Trash2 size={16} />Eliminar
-                  </button>
-                </div>
+                  <div className="danger-zone">
+                    <div>
+                      <p className="danger-zone-title">Eliminar usuario</p>
+                      <p className="danger-zone-text">
+                        Esta acción elimina el acceso del usuario y no se puede deshacer.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const usuarioAEliminar = usuarioEditando
+                        cerrarEditarUsuario()
+                        pedirEliminarUsuario(usuarioAEliminar)
+                      }}
+                      className="btn-danger-outline"
+                    >
+                      <Trash2 size={16} />Eliminar
+                    </button>
+                  </div>
+                </>
               )}
 
               <div className="modal-footer">
@@ -436,6 +477,18 @@ export default function Usuarios() {
           variant="danger"
           onConfirm={() => eliminarUsuario(confirmEliminar)}
           onCancel={() => setConfirmEliminar(null)}
+        />
+      )}
+
+      {confirmReset && (
+        <ConfirmModal
+          open={true}
+          title="Resetear contraseña"
+          message={`Se enviará un email a ${confirmReset.email} con un link para que establezca una nueva contraseña. ¿Confirmás?`}
+          confirmLabel="Enviar link de reset"
+          variant="default"
+          onConfirm={() => resetearPassword(confirmReset)}
+          onCancel={() => setConfirmReset(null)}
         />
       )}
     </div>
