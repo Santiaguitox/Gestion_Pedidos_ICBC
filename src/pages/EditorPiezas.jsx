@@ -4927,8 +4927,8 @@ export default function EditorPiezas() {
         <div className="ep-nombre-pieza-wrap">
           {editandoNombre ? (
             <input ref={inputNombreRef} className="ep-nombre-pieza-input" autoComplete="off" value={nombre}
-              onChange={e => setNombre(e.target.value)} onBlur={() => setEditandoNombre(false)}
-              onKeyDown={e => { if (e.key === 'Enter') setEditandoNombre(false) }} />
+              onChange={e => setNombre(e.target.value)} onBlur={() => { if (!nombre.trim()) setNombre('Nueva pieza'); setEditandoNombre(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') { if (!nombre.trim()) setNombre('Nueva pieza'); setEditandoNombre(false) } }} />
           ) : (
             <button className="ep-nombre-pieza-texto" onClick={() => setEditandoNombre(true)} title="Editar nombre">
               <span>{nombre}</span>
