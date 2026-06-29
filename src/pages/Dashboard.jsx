@@ -194,6 +194,7 @@ export default function Dashboard() {
   const [filtroTag, setFiltroTag] = useLocalStorage('dashboard:filtroTag', '')
   const [vista, setVista] = useLocalStorage('dashboard:vista', 'compact')
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('dashboard:filtrosOpen', true)
+  const [excluirEsperando, setExcluirEsperando] = useLocalStorage('dashboard:excluirEsperando', false)
 
   const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag
 
@@ -249,9 +250,18 @@ export default function Dashboard() {
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
 
+  // Si el switch está activo, excluye los pedidos en estado
+  // "esperando_respuesta" antes de calcular grupos y conteos — así los
+  // stat cards y las listas reflejan solo lo que está pendiente de
+  // nuestro lado. Se aplica sobre el array crudo de la DB, antes de
+  // cualquier clasificación semántica.
+  const pedidosFiltrados = excluirEsperando
+    ? pedidos.filter(p => !p.estados?.includes('esperando_respuesta'))
+    : pedidos
+
   // "Vencidos" se separa del resto — tiene su propio componente de
   // alerta (VencidosAcordeon), no es uno de los 6 grupos "normales".
-  const vencidos = pedidos
+  const vencidos = pedidosFiltrados
     .filter(p => calcularGrupo(p, hoy) === 'vencidos')
     .sort((a, b) => new Date(a.fecha_limite) - new Date(b.fecha_limite))
 
@@ -262,7 +272,7 @@ export default function Dashboard() {
   // deja en el orden que llegó (created_at desc, heredado de la función
   // SQL).
   const gruposTodos = GRUPOS_META.map(meta => {
-    const pedidosGrupo = pedidos
+    const pedidosGrupo = pedidosFiltrados
       .filter(p => calcularGrupo(p, hoy) === meta.key)
       .sort((a, b) => {
         if (meta.key === 'sin_fecha') return 0
@@ -282,7 +292,7 @@ export default function Dashboard() {
     setGrupoFiltrado(actual => actual === key ? '' : key)
   }
 
-  const totalVisible = pedidos.length
+  const totalVisible = pedidosFiltrados.length
   const nombrePila = (profile?.full_name ?? '').split(' ')[0]
   const fechaHoyTexto = format(hoy, "EEEE d 'de' MMMM", { locale: es })
   const fechaHoyCapitalizada = fechaHoyTexto.charAt(0).toUpperCase() + fechaHoyTexto.slice(1)
@@ -321,6 +331,20 @@ export default function Dashboard() {
             {hayFiltrosActivos && <span className="badge-active-pill">activos</span>}
           </div>
           <div className="panel-header-right">
+            <div className="switch-finalizados-wrapper" onClick={e => e.stopPropagation()}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={excluirEsperando}
+                onClick={() => setExcluirEsperando(v => !v)}
+                className={`switch-pista ${excluirEsperando ? 'switch-pista-activo' : ''}`}
+              >
+                <span className="switch-circulo" />
+              </button>
+              <span className="switch-finalizados-label-desktop">
+                {excluirEsperando ? 'Nuestros' : 'Totales'}
+              </span>
+            </div>
             <div className="vista-controls" onClick={e => e.stopPropagation()}>
               <button onClick={() => setVista('compact')} title="Vista compacta"
                 className={`btn-toggle ${vista === 'compact' ? 'btn-toggle-active' : ''}`}>

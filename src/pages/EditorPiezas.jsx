@@ -3343,8 +3343,6 @@ function CampoImagen({ campo, onActualizar, onReset }) {
 
   const origW = parseInt(campo.width) || 0
   const origH = parseInt(campo.height) || 0
-  // Solo mostrar inputs de dimensiones si la alerta está activa
-  const mostrarDims = !!dimAlert
 
   function commit(overrides = {}) {
     onActualizar({ src: srcLocal, alt: altLocal, title: titleLocal, width: widthLocal, height: heightLocal, ...overrides })
@@ -3419,22 +3417,33 @@ function CampoImagen({ campo, onActualizar, onReset }) {
           onChange={e => setTitleLocal(e.target.value)} onBlur={commit} placeholder="Título de la imagen" />
       </div>
 
+      {/* Ancho/Alto — siempre editables, no solo cuando hay una alerta
+          de desproporción activa. Bug real reportado: un bloque de
+          botón (categoría Botones) puede tener cualquier medida según
+          el botón real (ej. 205×47, otro puede ser 180×40) — antes el
+          único lugar donde aparecían estos campos era dentro de la
+          alerta de "la imagen nueva no coincide con las medidas
+          esperadas", que solo se dispara al cambiar la URL por una
+          con proporción distinta — si el usuario nunca toca la URL,
+          no había ninguna forma de ajustar manualmente el tamaño real
+          del botón. */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <div style={{ flex: 1 }}>
+          <label className="ep-campo-label">Ancho (px)</label>
+          <input className="ep-campo-input" autoComplete="off" value={widthLocal} onChange={e => setWidthLocal(e.target.value)} onBlur={commit} placeholder="auto" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="ep-campo-label">Alto (px)</label>
+          <input className="ep-campo-input" autoComplete="off" value={heightLocal} onChange={e => setHeightLocal(e.target.value)} onBlur={commit} placeholder="auto" />
+        </div>
+      </div>
+
       {dimAlert && (
         <div className="ep-dim-alert">
           <span>La imagen nueva mide <strong>{dimAlert.realW}×{dimAlert.realH}px</strong>. Las medidas esperadas son <strong>{origW}×{origH}px</strong>. Medidas recomendadas manteniendo el ancho: <strong>{dimAlert.sugeridoW}×{dimAlert.sugeridoH}px</strong></span>
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <button className="ep-btn ep-btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={aceptarSugerencia}>Usar recomendado</button>
             <button className="ep-btn ep-btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => { setDimAlert(null); commit({ src: dimAlert.src }) }}>Mantener original</button>
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <div style={{ flex: 1 }}>
-              <label className="ep-campo-label">Ancho (px)</label>
-              <input className="ep-campo-input" autoComplete="off" value={widthLocal} onChange={e => setWidthLocal(e.target.value)} onBlur={commit} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="ep-campo-label">Alto (px)</label>
-              <input className="ep-campo-input" autoComplete="off" value={heightLocal} onChange={e => setHeightLocal(e.target.value)} onBlur={commit} />
-            </div>
           </div>
         </div>
       )}
