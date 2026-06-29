@@ -3,12 +3,25 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ─── Layout general ───────────────────────────────────────────────────── */
+/* Antes la barra superior vivía adentro de la columna del canvas, así
+   que su "100% de ancho" nunca era el ancho real de la pantalla — solo
+   el de esa columna del medio (descontando biblioteca y panel de
+   edición). Ahora ep-root es una columna: la barra arriba ocupa todo
+   el ancho real, y ep-cuerpo (biblioteca | canvas | panel) es la fila
+   de 3 columnas que antes hacía ep-root directamente. */
 .ep-root {
   display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
   background: var(--bg-base);
   font-family: var(--font-body);
+}
+.ep-cuerpo {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* ─── Panel izquierdo — Biblioteca ─────────────────────────────────────── */
@@ -57,7 +70,6 @@
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
 .ep-categoria-titulo {
@@ -134,41 +146,125 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1.25rem;
+  width: 100%;
+  padding: 1.375rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
   flex-shrink: 0;
 }
 
-/* Segunda fila del header — selector de template (ICBC/Avisos/Mall).
-   Mismo padding horizontal que la fila de arriba, menos padding
-   vertical porque es una fila más chica/secundaria. */
-.ep-canvas-header-tema {
-  padding: 0.625rem 1.25rem;
-}
-.ep-tema-label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 500;
+/* ─── Separador vertical entre el nombre de la pieza y el selector de
+   Tema, en la misma fila — antes el Tema vivía en una segunda fila
+   completa aparte; ahora todo entra en una sola línea. ─── */
+.ep-canvas-header-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
   flex-shrink: 0;
 }
-
-.ep-nombre-pieza {
+/* Spacer flexible: empuja las acciones (Importar, Vista previa,
+   Exportar, Reiniciar) al extremo derecho, dejando nombre + Tema
+   agrupados a la izquierda. */
+.ep-canvas-header-flex {
   flex: 1;
+}
+
+/* ─── Selector de Tema — botón compacto con dropdown ─────────────────
+   Reemplaza la vieja fila de pestañas grandes ICBC/Avisos/Mall: ahora
+   es un botón chico (label + swatch de color + nombre del tema activo
+   + flecha) que abre un menú con las 3 opciones, cada una con su
+   propio swatch y un check en la activa. */
+.ep-tema-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.625rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+}
+.ep-tema-selector:hover { border-color: var(--border-strong); }
+.ep-tema-selector-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ep-tema-selector-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ep-tema-selector-nombre {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ep-tema-check { color: var(--icbc-red); flex-shrink: 0; }
+
+/* ─── Nombre de la pieza — "click to edit" ────────────────────────────
+   Dos estados: en reposo se ve como texto plano con un lápiz al lado
+   (mismo lenguaje que el resto de los íconos de esta fila), y al hacer
+   click se convierte en un input real con foco automático y borde
+   rojo — vuelve a texto plano al perder el foco o presionar Enter.
+
+   El wrapper tiene ancho fijo (240px de .ep-biblioteca menos los 20px
+   de padding lateral del header, que esa columna no tiene) para que
+   el separador y el selector de Tema que siguen arranquen alineados
+   justo donde empieza la columna del canvas — sin este ancho fijo, la
+   barra se desalinea con las columnas de abajo según el largo del
+   nombre de turno. */
+.ep-nombre-pieza-wrap {
+  width: 220px;
+  flex-shrink: 0;
+}
+.ep-nombre-pieza-input {
+  width: 100%;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--icbc-red);
+  outline: none;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 2px rgba(208, 17, 27, 0.15);
+}
+.ep-nombre-pieza-texto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  width: 100%;
   font-family: var(--font-display);
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
   background: none;
   border: none;
-  outline: none;
+  cursor: text;
   min-width: 0;
+  box-sizing: border-box;
   padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
   transition: background 150ms;
 }
-.ep-nombre-pieza:hover { background: var(--bg-hover); }
-.ep-nombre-pieza:focus { background: var(--bg-hover); box-shadow: 0 0 0 2px var(--icbc-red); }
+.ep-nombre-pieza-texto:hover { background: var(--bg-hover); }
+.ep-nombre-pieza-texto span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ep-nombre-pieza-texto svg { color: var(--text-muted); flex-shrink: 0; }
 
 .ep-canvas-actions {
   display: flex;
@@ -210,6 +306,92 @@
   color: var(--text-muted);
   border-color: var(--border);
   cursor: not-allowed;
+}
+
+/* ─── Split button de exportación ────────────────────────────────────
+   Dos botones pegados sin separación visual entre ellos: el principal
+   (ancho, con label) ejecuta la acción más usada — descargar directo
+   — y el angosto de al lado (solo flecha) abre el resto de las
+   opciones de exportación. El radio de borde se recorta en el punto
+   de unión para que se lean como una sola pieza, no como dos botones
+   sueltos uno al lado del otro. ─── */
+.ep-split-btn {
+  display: flex;
+}
+.ep-split-btn-main {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.ep-split-btn-toggle {
+  padding: 0.4375rem 0.625rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Menú desplegable genérico (popover) ────────────────────────────
+   Usado por el split button de exportación y por el menú kebab (⋯).
+   Por default se alinea a la derecha del botón gatillo (lo normal
+   cuando el botón está en el extremo derecho de la barra); el kebab,
+   al ir más a la izquierda de esa fila, usa la variante alineada a
+   la izquierda para no salirse del borde del canvas. ─── */
+.ep-menu-wrap {
+  position: relative;
+}
+.ep-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+}
+.ep-menu-popover-izq {
+  right: auto;
+  left: 0;
+}
+.ep-menu-titulo {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 6px 10px 4px;
+}
+.ep-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  font-size: 0.8125rem;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ep-menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ─── Botón Reiniciar — hover en rojo, igual criterio que cualquier
+   acción destructiva del editor. Vuelve a ser un botón directo en la
+   barra (no un menú kebab): con el espacio que ganó la barra al pasar
+   Tema a un selector compacto, entra cómodo sin necesitar agruparlo;
+   si en el futuro se suman más acciones secundarias, ahí sí conviene
+   agruparlas en un menú. ─── */
+.ep-btn-reiniciar {
+  color: var(--text-muted);
+}
+.ep-btn-reiniciar:hover {
+  color: var(--icbc-red);
+  border-color: var(--icbc-red);
+  background: rgba(208, 17, 27, 0.05);
 }
 
 .ep-canvas-body {
@@ -643,10 +825,63 @@
   color: var(--text-muted);
 }
 
-.ep-editor-bloque-nombre {
-  font-size: 0.875rem;
-  font-weight: 600;
+/* ─── Context card del panel de edición ──────────────────────────────
+   Tarjeta destacada (mismo fondo/borde rosado que el editor usa para
+   "esto es importante", reutilizando --red-bg/--red-border en vez de
+   inventar un color nuevo) con la miniatura real del bloque, su nombre
+   y un badge de categoría — reemplaza al nombre chico que antes vivía
+   al lado del título "Panel de edición" y se perdía de vista. */
+.ep-context-card {
+  margin: 0.875rem 1rem 0;
+  padding: 0.75rem;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.ep-context-card-thumb {
+  width: 46px;
+  height: 38px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ep-context-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ep-context-card-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.ep-context-card-nombre {
+  font-size: 0.8125rem;
+  font-weight: 700;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ep-context-card-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--icbc-red);
+  background: var(--bg-elevated);
+  border: 1px solid var(--red-border);
+  border-radius: 999px;
+  padding: 0.0625rem 0.5rem;
 }
 
 .ep-editor-body {
@@ -698,6 +933,68 @@
   resize: vertical;
 }
 .ep-campo-input:focus { border-color: var(--icbc-red); }
+
+/* ─── Secciones del panel de edición — separador con título ──────────
+   Cuando un bloque tiene varios campos del mismo tipo (Imagen 1,
+   Imagen 2, Texto 1...) antes se veían como inputs sueltos uno debajo
+   del otro, sin nada que comunicara "esto va junto, esto es otra
+   cosa". Cada sección es una caja propia con su título (el label
+   numerado que ya traía cada campo) arriba, separada con margen y un
+   borde superior tenue entre una sección y la siguiente — no hace
+   falta un acordeón colapsable porque la cantidad de secciones de un
+   bloque siempre es chica y el usuario completa todos los campos, no
+   solo algunos. */
+.ep-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+/* El borde divisorio solo aparece entre dos secciones consecutivas
+   (no antes de la primera, sea cual sea lo que venga antes en el
+   panel — un selector de segmento, un mensaje de "sin campos", etc.)
+   — más robusto que basarse en si .ep-seccion es literalmente el
+   primer hijo del contenedor, que no siempre es el caso. */
+.ep-seccion + .ep-seccion {
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--border);
+}
+.ep-seccion-titulo {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Preview en vivo de la imagen que se está editando — responde a
+   "¿cuál de las imágenes del bloque es esta?" sin tener que ir a
+   buscarla en el canvas: se ve acá mismo, arriba de los campos que
+   la editan. */
+.ep-campo-imagen-preview {
+  width: 100%;
+  height: 84px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ep-campo-imagen-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ep-campo-imagen-preview-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  text-align: center;
+}
 
 /* Mini editor de texto rico */
 .ep-rich-wrap {
@@ -876,7 +1173,41 @@
   text-overflow: ellipsis;
 }
 
-/* Switch compacto — mismo .re-tabs de siempre, pero con menos padding
+/* ─── Pestañas (Template / desktop·mobile) ───────────────────────────
+   Antes este editor dependía de .re-tabs, una clase definida en
+   RevisionEmail.css e importada solo porque esa hoja de estilos
+   termina cargada en algún punto de la app — funcionaba, pero era
+   una dependencia implícita frágil (si esa hoja deja de importarse o
+   cambia, el editor se rompe sin avisar). .ep-tabs es un clon fiel
+   del mismo lenguaje visual, pero declarado en este archivo, así el
+   editor queda aislado como dice el encabezado de este CSS. ─── */
+.ep-tabs {
+  display: inline-flex;
+  padding: 5px;
+  background: var(--bg-hover);
+  border-radius: 10px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+.ep-tabs button {
+  padding: 5px 15px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ep-tabs button.active {
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(208, 17, 27, 0.3);
+}
+
+/* Switch compacto — clase propia .ep-tabs, con menos padding
    horizontal en los botones para que entre cómodo junto al título y
    el botón de cerrar en una sola fila. */
 .ep-preview-modo-tabs {
@@ -1005,32 +1336,69 @@
 
 /* ─── Ajustes v5 ─────────────────────────────────────────────────────────── */
 
-/* Categorías colapsables */
+/* Categorías colapsables — un solo nivel: Header, Texto, Bullets, etc.
+   Separadas por una línea fina (lista con separadores), no por un gap
+   ciego — así la separación entre acordeones cerrados no se siente
+   excesiva ni flotando sin ancla visual. */
+.ep-categoria {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+.ep-categoria + .ep-categoria { margin-top: 0.5rem; }
+
 .ep-categoria-header {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
   background: none;
   border: none;
   cursor: pointer;
   padding: 0.25rem 0.25rem 0.375rem;
   font-family: var(--font-body);
 }
-.ep-categoria-header-sub {
-  padding: 0.2rem 0.25rem;
-  margin-left: 0.25rem;
-  opacity: 0.8;
-  font-size: 0.8rem;
-  border-left: 2px solid var(--border-subtle);
-  padding-left: 0.5rem;
+.ep-categoria-header .ep-categoria-titulo {
+  flex: 1;
+  text-align: left;
+  color: var(--text-secondary);
 }
-.ep-categoria-header-sub:hover { opacity: 1; }
+.ep-categoria-count {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: 999px;
+  padding: 0.0625rem 0.4375rem;
+  line-height: 1.4;
+}
+.ep-categoria-chevron { color: var(--text-muted); transition: transform 150ms; flex-shrink: 0; }
 .ep-categoria-body { display: flex; flex-direction: column; gap: 0.5rem; }
-.ep-categoria-body-sub {
-  padding-left: 0.5rem;
-  border-left: 2px solid var(--border-subtle);
-  margin-left: 0.25rem;
+
+/* Selector de pestañas CG / EB / Pay dentro de "Header" — no es un
+   acordeón anidado: una sola pestaña activa a la vez, y debajo se
+   muestra la lista plana de bloques de esa pestaña. */
+.ep-pestanas-header {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0.125rem 0.25rem 0.625rem;
+}
+.ep-pestana-chip {
+  flex: 1;
+  padding: 0.4375rem 0;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 120ms;
+}
+.ep-pestana-chip:hover { border-color: var(--border-strong); }
+.ep-pestana-chip.activa {
+  border-color: var(--icbc-red);
+  background: var(--icbc-red);
+  color: #fff;
 }
 
 /* Margen entre cards de bloques */
@@ -1181,20 +1549,20 @@
 /* ─── Spacer — fila fija en el header de la biblioteca, siempre
    visible junto al buscador (no escondido en una categoría ni en un
    botón flotante aparte): es de lo que más se usa al armar una pieza.
-   Diseño con más profundidad que un círculo de color plano: gradiente
-   sutil + sombra en 2 capas (una de "elevación" general, otra de
-   contacto más cerrada) + un highlight superior tenue simulando luz
-   incidiendo desde arriba, como un botón con relieve real. ─── */
+   Mismo lenguaje visual que las pestañas CG/EB/Pay del Header —
+   rectángulo chico y plano, sin gradiente ni relieve — para que todos
+   los chips del panel se vean consistentes entre sí. A diferencia de
+   las pestañas no tienen estado "activo": son 3 acciones de drag
+   siempre disponibles, por eso quedan siempre en rojo. ─── */
 .ep-spacer-row {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 .ep-spacer-row-label {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: 500;
-  flex-shrink: 0;
 }
 .ep-spacer-row-opciones {
   display: flex;
@@ -1202,81 +1570,61 @@
 }
 
 .ep-spacer-chip-drag {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
+  flex: 1;
+  border: 1px solid var(--icbc-red);
+  border-radius: var(--radius-sm);
+  padding: 0.3125rem 0;
   cursor: grab;
-  font-size: 0.625rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
   font-family: var(--font-body);
   color: #fff;
-  background: linear-gradient(180deg, #e23a3f 0%, var(--icbc-red) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.15),
-    0 2px 4px rgba(208, 17, 27, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 130ms ease, box-shadow 130ms ease;
+  background: var(--icbc-red);
+  transition: border-color 120ms, background 120ms;
 }
 .ep-spacer-chip-drag:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.15),
-    0 4px 8px rgba(208, 17, 27, 0.4);
+  border-color: var(--icbc-red-dim);
+  background: var(--icbc-red-dim);
 }
 .ep-spacer-chip-drag:active {
   cursor: grabbing;
-  transform: translateY(0);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.2),
-    0 1px 2px rgba(208, 17, 27, 0.3);
 }
 
 /* autocomplete off helper */
 input[autocomplete="off"] { }
-
-/* ─── Separador vertical en la barra de acciones ───────────────────── */
-.ep-canvas-actions-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  flex-shrink: 0;
-}
-
-/* ─── Botón Reiniciar — va después del separador, hover en rojo ─────── */
-.ep-btn-reiniciar {
-  color: var(--text-muted);
-}
-.ep-btn-reiniciar:hover {
-  color: var(--icbc-red);
-  border-color: var(--icbc-red);
-  background: rgba(208, 17, 27, 0.05);
-}
 
 /* ─── Modal Importar ──────────────────────────────────────────────────
    Mismo overlay que el modal de Vista previa (.ep-preview-overlay),
    variante propia de tamaño/estructura porque adentro convive el
    formulario de entrada (textarea/URL) y, en el segundo paso, el
    resumen + preview del resultado — más alto que el modal de preview
-   simple. Clases con prefijo ep-importar- propias, sin depender de
-   .re-tabs externo (esa clase no está definida en este archivo —
-   ver nota en EditorPiezas.jsx junto al primer uso de .re-tabs, es
-   una inconsistencia preexistente que no se resuelve acá). */
+   simple. Clases con prefijo ep-importar- propias; ver .ep-tabs más
+   arriba en este archivo para las pestañas reutilizables.
+
+   Altura: antes era 90vh fijo siempre, así que en el paso 1 (solo
+   tabs + textarea + botones) el modal se veía con la mitad de abajo
+   vacía. Ahora la altura sigue al contenido real (height: auto) con
+   un techo de 90vh para los pasos con más contenido (paso 3, con el
+   resumen + preview), que sí necesitan ese espacio. */
 .ep-importar-modal {
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   width: 100%;
   max-width: 680px;
-  height: 90vh;
+  height: auto;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* Solo cuando hay resultado con datos reales (dos columnas: avisos +
+   preview) el modal necesita más ancho que el formulario simple del
+   paso 1 — 680px deja apenas ~400px para el preview después de
+   restar la columna fija de avisos, ajustado para un email pensado a
+   600px de ancho de diseño. */
+.ep-importar-modal-ancho {
+  max-width: 1180px;
 }
 
 .ep-importar-body {
@@ -1287,6 +1635,78 @@ input[autocomplete="off"] { }
   flex-direction: column;
   gap: 0.875rem;
 }
+
+/* El paso de resultado necesita más ancho que el formulario de
+   entrada (paso 1) porque ahora tiene dos columnas lado a lado —
+   680px se sentiría apretado para avisos + preview a la vez. Solo
+   este body lo amplía; los pasos 1 y 2 no lo necesitan y se quedan
+   con el max-width general del modal. */
+.ep-importar-body-resultado {
+  padding: 0;
+  overflow: hidden;
+}
+.ep-importar-resultado-cols {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+.ep-importar-resultado-izq {
+  width: 420px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 1.25rem;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.ep-importar-resultado-der {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+  background: var(--bg-base);
+}
+
+/* ─── Paso de análisis — barra de progreso real ──────────────────────
+   Clon de .rb-processing (RevisionBase.css) con prefijo propio, mismo
+   criterio que .ep-tabs: este editor no importa esa hoja de estilos,
+   así que depender de sus clases sería la misma dependencia implícita
+   frágil que ya se resolvió ahí. */
+.ep-importar-processing {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem 1.375rem;
+}
+.ep-importar-processing-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.ep-importar-processing-label { font-size: 0.9375rem; font-weight: 600; color: var(--text-primary); }
+.ep-importar-processing-pct {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--icbc-red);
+  line-height: 1;
+}
+.ep-importar-progress-track {
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.ep-importar-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--icbc-red);
+  transition: width 120ms linear;
+}
+.ep-importar-processing-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.625rem; }
 
 /* Tabs HTML/URL — mismo lenguaje visual que .re2-tabs de Revisión de
    envíos (fondo suave + botón activo en color de marca), pero
@@ -1338,52 +1758,109 @@ input[autocomplete="off"] { }
   padding: 0.5rem 0.75rem;
 }
 
+.ep-importar-footer-wrap {
+  flex-shrink: 0;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
 .ep-importar-footer {
   display: flex;
   justify-content: flex-end;
   gap: 0.625rem;
-  padding-top: 0.25rem;
   flex-shrink: 0;
 }
 
-/* Resumen del resultado — color del borde/fondo según confianza
-   ('alta' verde, 'media' ámbar, 'baja' nunca llega acá con este
-   bloque porque resultado es null y se muestra el otro caso). */
-.ep-importar-resumen {
+/* ─── Badge de confianza — layout de dos columnas del resultado ──────
+   Reemplaza al viejo resumen de una sola línea: ahora es un círculo
+   con ícono (check para alta confianza / marcadores, alerta para
+   media o baja) + título + subtítulo, mismos colores semafóricos que
+   ya usaba .ep-importar-resumen ('alta' verde, 'media'/'baja' ámbar). */
+.ep-importar-badge-confianza {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-radius: var(--radius-sm);
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: var(--radius-md);
   padding: 0.625rem 0.75rem;
   border: 1px solid;
+  margin-bottom: 0.875rem;
 }
 .ep-importar-confianza-alta {
   background: rgba(16, 185, 129, 0.08);
   border-color: rgba(16, 185, 129, 0.25);
 }
 .ep-importar-confianza-media {
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.25);
 }
 .ep-importar-confianza-baja {
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.25);
 }
-.ep-importar-resumen-titulo {
+.ep-importar-badge-icono {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.ep-importar-confianza-alta .ep-importar-badge-icono { background: #10B981; }
+.ep-importar-confianza-media .ep-importar-badge-icono,
+.ep-importar-confianza-baja .ep-importar-badge-icono { background: #F97316; }
+.ep-importar-badge-titulo {
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
-.ep-importar-resumen-detalle {
+.ep-importar-badge-subtitulo {
   font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.0625rem;
+}
+
+/* Métricas — 3 cards en fila (bloques, avisos, tema) entre el badge y
+   la lista de avisos. */
+.ep-importar-metricas {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+}
+.ep-importar-metrica {
+  flex: 1;
+  text-align: center;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.ep-importar-metrica-valor {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.ep-importar-metrica-valor-tema {
+  font-size: 0.875rem;
+  color: var(--icbc-red);
+}
+.ep-importar-metrica-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-/* Aviso de confianza baja / resultado null — mismo color ámbar que el
-   resumen de confianza media, pero con ícono y SIN el detalle de
-   "bloques detectados" (no hay nada confiable que contar). Nunca se
-   muestra en verde: confianza baja no es un éxito parcial, es un
-   "no se pudo, revisá o armá a mano". */
+/* Aviso de confianza baja / resultado null — mismo naranja de marca
+   que el resumen de confianza media (#F97316, el que ya usa
+   Dashboard), pero con ícono y SIN el detalle de "bloques detectados"
+   (no hay nada confiable que contar). Nunca se muestra en verde:
+   confianza baja no es un éxito parcial, es un "no se pudo, revisá o
+   armá a mano". */
 .ep-importar-aviso {
   display: flex;
   align-items: flex-start;
@@ -1393,17 +1870,18 @@ input[autocomplete="off"] { }
   padding: 0.625rem 0.75rem;
 }
 .ep-importar-aviso-baja {
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.25);
   color: var(--text-primary);
 }
-.ep-importar-aviso-baja svg { color: #F59E0B; flex-shrink: 0; margin-top: 1px; }
+.ep-importar-aviso-baja svg { color: #F97316; flex-shrink: 0; margin-top: 1px; }
 
 .ep-importar-avisos-titulo {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
   margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .ep-importar-avisos-lista {
@@ -1412,58 +1890,73 @@ input[autocomplete="off"] { }
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  gap: 0.75rem;
 }
 
-/* Bullet explícito en vez de depender del list-style nativo del
-   navegador — con el <ul> en display:flex/column, el marcador
-   automático de cada <li> no se posicionaba bien (se veía como texto
-   corrido, sin separación visual entre avisos). Se agrega como
-   pseudo-elemento, con el mismo color que el texto del aviso (incluye
-   los clickeables, vía currentColor). */
-.ep-importar-avisos-lista li {
-  position: relative;
-  padding-left: 0.875rem;
-}
-.ep-importar-avisos-lista li::before {
-  content: "•";
-  position: absolute;
-  left: 0;
-  color: currentColor;
-}
-
-/* Avisos con bloque asociado (no-reconocido / fuera-de-rango) son
-   clickeables — llevan al bloque marcado en el preview, mismo color
-   que el overlay que lo resalta ahí (#F59E0B ámbar / #DC2626 rojo).
-   Los avisos generales (sin bloque puntual: header, imagen principal,
-   redes sociales) se quedan con el estilo neutro de siempre, sin
-   cursor de click ni color — no hay ningún bloque al que llevar. */
-.ep-importar-avisos-lista li[data-tipo="no-reconocido"],
-.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"],
-.ep-importar-avisos-lista li[data-tipo="obsoleto"] {
-  cursor: pointer;
+/* Cada aviso es una card con ícono cuadrado a la izquierda + título y
+   detalle a la derecha — antes era una sola línea de texto con bullet,
+   sin distinguir "lo que pasó" de "qué se hizo al respecto". El
+   título/detalle se derivan del texto real del aviso (ver
+   tituloYDetalleDeAviso en el JSX), no son un campo nuevo en los
+   datos. */
+.ep-importar-aviso-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding-top: 0.125rem;
-  padding-bottom: 0.125rem;
-  padding-right: 0.375rem;
-  margin-left: -0.375rem;
-  transition: background 120ms;
+  padding: 0.75rem;
 }
-.ep-importar-avisos-lista li[data-tipo="no-reconocido"] {
-  color: #92610A;
+.ep-importar-aviso-icono {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.ep-importar-avisos-lista li[data-tipo="no-reconocido"]:hover {
-  background: rgba(245, 158, 11, 0.12);
+.ep-importar-aviso-icono { color: var(--text-muted); }
+.ep-importar-aviso-card[data-tipo] .ep-importar-aviso-icono { color: #fff; }
+.ep-importar-aviso-texto { min-width: 0; }
+.ep-importar-aviso-titulo {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
-.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"],
-.ep-importar-avisos-lista li[data-tipo="obsoleto"] {
-  color: #A32D2D;
+.ep-importar-aviso-detalle {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-top: 0.0625rem;
 }
-.ep-importar-avisos-lista li[data-tipo="fuera-de-rango"]:hover,
-.ep-importar-avisos-lista li[data-tipo="obsoleto"]:hover {
-  background: rgba(220, 38, 38, 0.12);
+
+/* Avisos con bloque asociado (no-reconocido / fuera-de-rango /
+   obsoleto) son clickeables — llevan al bloque marcado en el preview,
+   mismo color que el overlay que lo resalta ahí (#F97316 naranja de
+   marca / #DC2626 rojo). Los avisos generales (sin bloque puntual:
+   header, imagen principal, redes sociales) se quedan con el ícono
+   neutro de siempre, sin cursor de click — no hay ningún bloque al
+   que llevar. */
+.ep-importar-aviso-card[data-tipo] {
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.ep-importar-aviso-card[data-tipo="no-reconocido"]:hover { background: rgba(249, 115, 22, 0.08); }
+.ep-importar-aviso-card[data-tipo="fuera-de-rango"]:hover,
+.ep-importar-aviso-card[data-tipo="obsoleto"]:hover { background: rgba(220, 38, 38, 0.08); }
+
+/* Activo — persiste cuál fue el último aviso clickeado, no solo
+   mientras el mouse está encima (eso ya lo cubre :hover arriba). */
+.ep-importar-aviso-card.activo[data-tipo="no-reconocido"] {
+  background: rgba(249, 115, 22, 0.08);
+  border-color: #F97316;
+}
+.ep-importar-aviso-card.activo[data-tipo="fuera-de-rango"],
+.ep-importar-aviso-card.activo[data-tipo="obsoleto"] {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: #DC2626;
 }
 
 /* Resaltado momentáneo del bloque en el preview al hacer click en su
@@ -1513,7 +2006,6 @@ input[autocomplete="off"] { }
 .ep-importar-preview-wrap.modo-mobile .ep-importar-preview-iframe {
   flex: none;
   width: 375px;
-  height: 100%;
   box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(0,0,0,0.1);
   border-radius: var(--radius-sm);
 }

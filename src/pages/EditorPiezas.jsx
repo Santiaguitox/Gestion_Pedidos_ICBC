@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, forwardRef } from 'react'
-import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle } from 'lucide-react'
+import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import '@/styles/EditorPiezas.css'
 
 // ─── Temas de template — ICBC (fondo blanco), Avisos (fondo beige,
@@ -24,9 +25,9 @@ import '@/styles/EditorPiezas.css'
 // tema — en los 2 ejemplos reales (Avisos y Mall) ambos siguen siendo
 // blancos siempre, solo el contenido del medio cambia.
 const TEMAS = {
-  icbc:   { label: 'ICBC',   bgContenido: '#ffffff', colorTexto: '#333333', conBorde: true },
-  avisos: { label: 'Avisos', bgContenido: '#dcd2c9', colorTexto: '#333333', conBorde: false },
-  mall:   { label: 'Mall',   bgContenido: '#2e2f31', colorTexto: '#ffffff', conBorde: true },
+  icbc:   { label: 'ICBC',   bgContenido: '#ffffff', colorTexto: '#333333', conBorde: true,  colorSwatch: '#D0111B' },
+  avisos: { label: 'Avisos', bgContenido: '#dcd2c9', colorTexto: '#333333', conBorde: false, colorSwatch: '#dcd2c9' },
+  mall:   { label: 'Mall',   bgContenido: '#2e2f31', colorTexto: '#ffffff', conBorde: true,  colorSwatch: '#2e2f31' },
 }
 const TEMA_DEFAULT = 'icbc'
 
@@ -349,10 +350,10 @@ function detectarCampos(html) {
   // <a> ya está DENTRO del rango de un <td> que quedó como campo de
   // texto editable, no se lo lista como campo de "Link" aparte — el
   // usuario lo edita directamente desde el texto (RichEditor ya tiene
-  // su propio botón 🔗 para seleccionar texto y asignarle/cambiarle el
-  // link). Solo queda como campo de "Link" independiente un <a> que
-  // vive FUERA de cualquier <td> de texto editable (ej. un botón con
-  // imagen y link, sin texto al lado).
+  // su propio botón de link (ícono SVG) para seleccionar texto y
+  // asignarle/cambiarle el link). Solo queda como campo de "Link"
+  // independiente un <a> que vive FUERA de cualquier <td> de texto
+  // editable (ej. un botón con imagen y link, sin texto al lado).
   let linkIdx = 0
   const linkRegex = /<a([^>]*)>/gi
   let linkMatch
@@ -456,6 +457,44 @@ function wrapPreview(html, esHeader = false) {
 // ─── Miniatura visual para la biblioteca ───────────────────────────────────
 // En lugar de renderizar el HTML complejo (que se ve raro a tamaño miniatura),
 // generamos una miniatura SVG descriptiva basada en el nombre y categoría del bloque.
+// ─── Título/detalle visual de un aviso de importación ──────────────────────
+// Cada aviso real solo trae un campo `texto` (una oración completa,
+// redactada a mano en ~30 lugares distintos del archivo) — el rediseño
+// del modal de importación pide mostrar título corto + detalle separados,
+// como hace cualquier lista de notificaciones. En vez de reescribir cada
+// uno de esos ~30 mensajes (cambio enorme y arriesgado para algo que ya
+// funciona bien como oración única), se separa visualmente el texto
+// existente: la mayoría sigue el patrón "lo que pasó — qué se hizo al
+// respecto", separado por guion largo, que da un punto de corte natural.
+// Si un mensaje no tiene guion largo (caso real: "Header detectado: X"),
+// se usa el texto completo como título, sin detalle.
+//
+// Mayúscula inicial del detalle: en el texto original, la parte después
+// del guion sigue en minúscula porque gramaticalmente es la continuación
+// de la misma oración ("X — y se hizo Y"). Mostrada como línea propia
+// (no como continuación visual del título) necesita su propia mayúscula
+// inicial — se aplica acá, sin tocar ninguno de los textos originales.
+function mayusculaInicial(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+function tituloYDetalleDeAviso(aviso) {
+  const partes = aviso.texto.split(/\s+—\s+/)
+  if (partes.length >= 2) return { titulo: partes[0], detalle: mayusculaInicial(partes.slice(1).join(' — ')) }
+  return { titulo: aviso.texto, detalle: null }
+}
+
+// Ícono + color por tipo de aviso real ('no-reconocido', 'fuera-de-
+// rango', 'obsoleto', 'general') — mismos colores que ya usa el resto
+// del modal de importación (naranja de marca para no-reconocido, rojo
+// para los dos casos más graves, neutro para avisos informativos sin
+// bloque puntual al que ir).
+const AVISO_ICONO_POR_TIPO = {
+  'no-reconocido': { Icono: Code, color: '#F97316' },
+  'fuera-de-rango': { Icono: AlertCircle, color: '#DC2626' },
+  'obsoleto': { Icono: AlertCircle, color: '#DC2626' },
+  'general': { Icono: Info, color: null }, // null = neutro, ver CSS
+}
+
 // El color "de marca" de una banda de Header depende del PREFIJO del
 // nombre de archivo, no de un valor fijo — confirmado por la
 // convención real: CG_* (Comercial Generalista) es rojo de marca,
@@ -1066,8 +1105,8 @@ function marcarBloquesNoReconocidosParaPreview(html) {
     /<!--BLOQUE slug="codigo" idx="(\d+)"(?:\s+origen="([^"]*)")?-->([\s\S]*?)<!--\/BLOQUE-->/g,
     (_match, idx, origen, contenidoBloque) => {
       const esFueraDeRango = origen === 'fuera-de-rango'
-      const color = esFueraDeRango ? '#DC2626' : '#F59E0B'
-      const colorFondo = esFueraDeRango ? 'rgba(220, 38, 38, 0.08)' : 'rgba(245, 158, 11, 0.08)'
+      const color = esFueraDeRango ? '#DC2626' : '#F97316'
+      const colorFondo = esFueraDeRango ? 'rgba(220, 38, 38, 0.08)' : 'rgba(249, 115, 22, 0.08)'
       const etiqueta = esFueraDeRango ? 'Fuera de lugar' : 'No reconocido'
       return `
       <tr><td id="preview-bloque-${idx}" style="padding: 0; position: relative;">
@@ -2765,7 +2804,7 @@ function importarHeuristico(html) {
     })
     if (basicosPorColor.length === 1) {
       bandaHeader = basicosPorColor[0]
-      avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}" (por color de fondo, sin logo de marca propio para confirmar — revisalo si no es el esperado).`, tipo: 'general', canvasIdx: null })
+      avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}" (por color de fondo, sin logo de marca propio para confirmar) — revisalo si no es el esperado.`, tipo: 'general', canvasIdx: null })
     } else {
       bandaHeader = BLOQUES_HEADER[0] ?? null
       avisos.push({ texto: 'El header de la pieza original no se pudo identificar automáticamente — se dejó uno por defecto, revisalo y volvé a seleccionarlo si corresponde (puede no coincidir con el segmento real de la pieza).', tipo: 'general', canvasIdx: null })
@@ -2801,7 +2840,7 @@ function importarHeuristico(html) {
   const filasConObsoletos = encontrarTdsConDivInlineBlock(html).length
   if (filasConObsoletos > 0) {
     avisos.push({
-      texto: `⚠ Esta pieza usa ${filasConObsoletos === 1 ? 'una estructura de layout obsoleta' : `${filasConObsoletos} estructuras de layout obsoletas`} (<div inline-block>) — hacé click para verla${filasConObsoletos > 1 ? 's' : ''} en el preview. Reemplazalas por la estructura actual (class="top"/"bottom") antes de usar esta pieza.`,
+      texto: `Esta pieza usa ${filasConObsoletos === 1 ? 'una estructura de layout obsoleta' : `${filasConObsoletos} estructuras de layout obsoletas`} — hacé click para verla${filasConObsoletos > 1 ? 's' : ''} en el preview (estructura <div inline-block>). Reemplazalas por la estructura actual (class="top"/"bottom") antes de usar esta pieza.`,
       tipo: 'obsoleto',
       canvasIdx: null,
     })
@@ -3216,7 +3255,7 @@ function RichEditor({ value, onChange }) {
         </button>
         <div className="ep-rich-separator" />
         <button type="button" className="ep-rich-btn" title="Link"
-          onMouseDown={e => { e.preventDefault(); guardarRango(); setShowLink(v => !v) }}>🔗</button>
+          onMouseDown={e => { e.preventDefault(); guardarRango(); setShowLink(v => !v) }}><Link2 size={12} /></button>
         <div className="ep-rich-separator" />
         <button type="button" className="ep-rich-btn" title="Limpiar todo el texto"
           onMouseDown={e => { e.preventDefault(); limpiarTodo() }}>
@@ -3259,6 +3298,11 @@ function CampoImagen({ campo, onActualizar, onReset }) {
   const [widthLocal, setWidthLocal] = useState(campo.width)
   const [heightLocal, setHeightLocal] = useState(campo.height)
   const [dimAlert, setDimAlert] = useState(null)
+  // Si la URL actual no carga (rota, vacía, o todavía no tipeada del
+  // todo) el preview muestra un placeholder en vez de un ícono roto de
+  // imagen del navegador — se resetea a cada cambio de srcLocal para
+  // no quedar pegado en "rota" después de corregir la URL.
+  const [previewRoto, setPreviewRoto] = useState(false)
 
   const origW = parseInt(campo.width) || 0
   const origH = parseInt(campo.height) || 0
@@ -3302,17 +3346,41 @@ function CampoImagen({ campo, onActualizar, onReset }) {
   }
 
   return (
-    <div className="ep-campo">
-      <label className="ep-campo-label">{campo.label} — URL</label>
-      <input className="ep-campo-input" autoComplete="off" value={srcLocal}
-        onChange={e => setSrcLocal(e.target.value)} onBlur={e => onSrcBlur(e.target.value)}
-        placeholder="https://cdn.ejemplo.com/imagen.png" />
-      <label className="ep-campo-label" style={{ marginTop: 6 }}>Alt — {campo.label}</label>
-      <input className="ep-campo-input" autoComplete="off" value={altLocal}
-        onChange={e => setAltLocal(e.target.value)} onBlur={commit} placeholder="Texto alternativo" />
-      <label className="ep-campo-label" style={{ marginTop: 6 }}>Title — {campo.label}</label>
-      <input className="ep-campo-input" autoComplete="off" value={titleLocal}
-        onChange={e => setTitleLocal(e.target.value)} onBlur={commit} placeholder="Título de la imagen" />
+    <div className="ep-seccion">
+      <div className="ep-seccion-titulo">{campo.label}</div>
+
+      {/* Preview en vivo — responde a la pregunta "¿cuál imagen del
+          bloque es esta?" sin tener que ir a buscarla en el canvas:
+          se ve acá mismo, junto al campo que la edita. Usa srcLocal
+          (el valor en pantalla, no el ya confirmado) para reflejar
+          también lo que se está tipeando antes de salir del campo. */}
+      <div className="ep-campo-imagen-preview">
+        {srcLocal && !previewRoto ? (
+          <img src={srcLocal} alt="" onError={() => setPreviewRoto(true)} onLoad={() => setPreviewRoto(false)} />
+        ) : (
+          <div className="ep-campo-imagen-preview-vacio">
+            <Image size={20} />
+            <span>{srcLocal ? 'No se pudo cargar la imagen' : 'Sin imagen'}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="ep-campo">
+        <label className="ep-campo-label">URL</label>
+        <input className="ep-campo-input" autoComplete="off" value={srcLocal}
+          onChange={e => setSrcLocal(e.target.value)} onBlur={e => onSrcBlur(e.target.value)}
+          placeholder="https://cdn.ejemplo.com/imagen.png" />
+      </div>
+      <div className="ep-campo" style={{ marginTop: 6 }}>
+        <label className="ep-campo-label">Alt</label>
+        <input className="ep-campo-input" autoComplete="off" value={altLocal}
+          onChange={e => setAltLocal(e.target.value)} onBlur={commit} placeholder="Texto alternativo" />
+      </div>
+      <div className="ep-campo" style={{ marginTop: 6 }}>
+        <label className="ep-campo-label">Title</label>
+        <input className="ep-campo-input" autoComplete="off" value={titleLocal}
+          onChange={e => setTitleLocal(e.target.value)} onBlur={commit} placeholder="Título de la imagen" />
+      </div>
 
       {dimAlert && (
         <div className="ep-dim-alert">
@@ -3808,6 +3876,16 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
             setHtmlLocal(prev => prev.replace(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/gi, `bgcolor="${nuevoColor}"`))
           }
           const esCustom = colorActual && !SEGMENTOS.some(s => s.color === colorActual)
+          // El chip activo se pinta con el color real de ese segmento
+          // (borde sólido + fondo muy tenue del mismo color) en vez del
+          // violeta genérico que usan los chips de espaciador — mismo
+          // criterio que ya aplican las pestañas CG/EB/Pay de la
+          // biblioteca: el color de marca identifica la opción activa,
+          // no un acento neutro compartido con otros controles.
+          function estiloChipSegmento(color, activo) {
+            if (!activo) return undefined
+            return { borderColor: color, background: `${color}1a`, color: 'var(--text-primary)' }
+          }
           return (
             <div className="ep-campo">
               <label className="ep-campo-label">Color de segmento</label>
@@ -3816,14 +3894,14 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
                   <button key={s.label} title={s.color}
                     onClick={() => aplicarSegmento(s.color)}
                     className={`ep-espaciador-chip${colorActual === s.color ? ' activo' : ''}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', ...estiloChipSegmento(s.color, colorActual === s.color) }}>
                     <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: s.color, border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }} />
                     {s.label}
                   </button>
                 ))}
                 <label title="Color personalizado"
                   className={`ep-espaciador-chip${esCustom ? ' activo' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', ...estiloChipSegmento(colorActual, esCustom) }}>
                   <input type="color" value={esCustom ? colorActual : '#888888'}
                     onChange={e => aplicarSegmento(e.target.value)}
                     style={{ width: 12, height: 12, padding: 0, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }} />
@@ -3835,8 +3913,8 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
         })()}
         {campos.map((campo, i) => {
           if (campo.tipo === 'texto') return (
-            <div key={i} className="ep-campo">
-              <label className="ep-campo-label">{campo.label}</label>
+            <div key={i} className="ep-seccion">
+              <div className="ep-seccion-titulo">{campo.label}</div>
               <RichEditor value={valorActualDeTexto(campo)}
                 onChange={v => actualizarCampo('texto', campo.posicionOrden, { contenido: v })} />
             </div>
@@ -3850,8 +3928,8 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
             )
           }
           if (campo.tipo === 'link') return (
-            <div key={i} className="ep-campo">
-              <label className="ep-campo-label">{campo.label}</label>
+            <div key={i} className="ep-seccion">
+              <div className="ep-seccion-titulo">{campo.label}</div>
               <input className="ep-campo-input" defaultValue={campo.valor} placeholder="https://..." autoComplete="off"
                 onBlur={e => actualizarCampo('link', campo.idx, { valor: e.target.value })} />
             </div>
@@ -3889,7 +3967,7 @@ function PanelEditor({ bloque, onActualizar, onSwap }) {
 }
 
 // ─── Iframe auto-alto ───────────────────────────────────────────────────────
-const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, height }, refExterna) {
+const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, height, width }, refExterna) {
   const refInterna = useRef(null)
   // Permite que el padre (modal de importar, para hacer scroll a un
   // bloque marcado) acceda al mismo nodo <iframe> que este componente
@@ -3907,32 +3985,124 @@ const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, he
     } catch { if (refInterna.current) refInterna.current.style.height = '80px' }
   }
 
-  // Reajustar alto cada vez que cambia el srcDoc
+  // Reajustar alto cada vez que cambia el srcDoc, o el width (un email
+  // más angosto —modo mobile— casi siempre necesita más alto que el
+  // mismo contenido a ancho completo, así que el height medido en un
+  // ancho no sirve para el otro; sin re-medir, el iframe queda con el
+  // alto del modo anterior y corta contenido al cambiar de modo).
   useEffect(() => {
     const iframe = refInterna.current
     if (!iframe) return
     // onLoad puede no dispararse si el iframe ya está montado — forzar via evento
     const handler = () => ajustarAlto()
     iframe.addEventListener('load', handler)
-    // Si ya tiene documento cargado, ajustar ahora mismo
-    if (iframe.contentDocument?.readyState === 'complete') ajustarAlto()
+    // Si ya tiene documento cargado, ajustar ahora mismo — un frame
+    // después del cambio de width, para que el navegador ya haya
+    // recalculado el layout interno del iframe con el ancho nuevo
+    // antes de medir scrollHeight (si se mide en el mismo tick
+    // síncrono del cambio de estilo, puede leer todavía el alto
+    // calculado con el ancho anterior).
+    if (iframe.contentDocument?.readyState === 'complete') {
+      requestAnimationFrame(ajustarAlto)
+    }
     return () => iframe.removeEventListener('load', handler)
-  }, [srcDoc])
+  }, [srcDoc, width])
 
   return <iframe ref={ref} className={className} srcDoc={srcDoc} title={title}
-    scrolling="no" style={{ height: height || 40, border: 'none', display: 'block', width: '100%', background: '#fff' }} />
+    scrolling="no" style={{ height: height || 40, border: 'none', display: 'block', width: width || '100%', background: '#fff' }} />
 })
 
 // ─── Categoría colapsable ───────────────────────────────────────────────────
-function CategoriaColapsable({ titulo, children, sub = false }) {
-  const [abierto, setAbierto] = useState(!sub) // sub-acordeones empiezan cerrados
+function CategoriaColapsable({ titulo, children, count = null }) {
+  const [abierto, setAbierto] = useState(true)
   return (
-    <div>
-      <button className={sub ? 'ep-categoria-header ep-categoria-header-sub' : 'ep-categoria-header'} onClick={() => setAbierto(v => !v)}>
+    <div className="ep-categoria">
+      <button className="ep-categoria-header" onClick={() => setAbierto(v => !v)}>
         <span className="ep-categoria-titulo">{titulo}</span>
-        <ChevronDown size={13} style={{ transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
+        {count != null && <span className="ep-categoria-count">{count}</span>}
+        <ChevronDown size={13} className="ep-categoria-chevron" style={{ transform: abierto ? 'rotate(180deg)' : 'none' }} />
       </button>
-      {abierto && <div className={sub ? 'ep-categoria-body ep-categoria-body-sub' : 'ep-categoria-body'}>{children}</div>}
+      {abierto && <div className="ep-categoria-body">{children}</div>}
+    </div>
+  )
+}
+
+// ─── Selector de pestañas (CG / EB / Pay dentro de "Header") ───────────────
+// No es un acordeón anidado: es un selector de una sola pestaña activa a la
+// vez — debajo se muestra la lista plana de bloques de esa pestaña. Cada
+// opción puede traer su propio color de marca (mismos valores que el
+// selector de segmento de Modulo_Doble_Con_Imagen_Punteada: CG rojo, EB
+// negro, Pay marrón) para que la pestaña activa se pinte con ese color en
+// vez de quedar siempre roja.
+function SelectorPestanas({ opciones, activa, onCambiar }) {
+  return (
+    <div className="ep-pestanas-header">
+      {opciones.map(op => (
+        <button key={op.key}
+          className={`ep-pestana-chip ${activa === op.key ? 'activa' : ''}`}
+          style={activa === op.key && op.color ? { borderColor: op.color, background: op.color, color: '#fff' } : undefined}
+          onClick={() => onCambiar(op.key)}>
+          {op.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Menú desplegable genérico (botón gatillo + popover) ──────────────────
+// Usado para el selector de Tema y el split button de Exportación de la
+// barra superior. Se cierra solo al hacer click afuera — comportamiento
+// estándar de cualquier menú de este tipo, así que vive en un componente
+// propio en vez de repetir la lógica de "click afuera" en cada lugar que
+// lo necesite.
+function MenuDesplegable({ trigger, children, alinear = 'derecha' }) {
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!abierto) return
+    function onClickAfuera(e) {
+      if (ref.current && !ref.current.contains(e.target)) setAbierto(false)
+    }
+    document.addEventListener('mousedown', onClickAfuera)
+    return () => document.removeEventListener('mousedown', onClickAfuera)
+  }, [abierto])
+  return (
+    <div className="ep-menu-wrap" ref={ref}>
+      {trigger(() => setAbierto(v => !v), abierto)}
+      {abierto && (
+        <div className={`ep-menu-popover ${alinear === 'izquierda' ? 'ep-menu-popover-izq' : ''}`}>
+          {children(() => setAbierto(false))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Context card del panel de edición ──────────────────────────────────
+// Tarjeta destacada arriba del formulario de edición — comunica de un
+// vistazo qué bloque está seleccionado (miniatura real + nombre + badge
+// de categoría) antes de que el usuario llegue a los campos editables.
+// Reutiliza generarThumbSVG, la misma miniatura que ya se ve en la
+// biblioteca, así el usuario reconoce el bloque por la misma imagen en
+// los dos lugares en vez de tener dos representaciones visuales distintas
+// del mismo bloque.
+const CATEGORIA_LABEL = {
+  Header: 'Header',
+  Contenido: 'Contenido',
+  Botones: 'Botón / Link',
+  Personalizado: 'Código HTML',
+}
+function ContextCardEditor({ bloque }) {
+  const label = CATEGORIA_LABEL[bloque.categoria] ?? bloque.categoria
+  return (
+    <div className="ep-context-card">
+      <div className="ep-context-card-thumb">
+        <img src={generarThumbSVG(bloque)} alt="" />
+      </div>
+      <div className="ep-context-card-info">
+        <span className="ep-context-card-nombre">{bloque.nombre}</span>
+        <span className="ep-context-card-badge">{label}</span>
+      </div>
     </div>
   )
 }
@@ -3947,7 +4117,12 @@ function headerDesdeSlag(slug) {
 }
 
 export default function EditorPiezas() {
+  const { showSuccess } = useNotificaciones()
   const [busqueda, setBusqueda] = useState('')
+  // Pestaña activa del selector CG/EB/Pay dentro de "Header" en la
+  // biblioteca — no es parte del borrador persistido, es solo un
+  // estado de navegación de la UI (se resetea al recargar la página).
+  const [pestanaHeaderActiva, setPestanaHeaderActiva] = useState('CG')
 
   // ── Borrador persistido en localStorage ────────────────────────────
   // useLocalStorage encapsula lectura lazy + try/catch de escritura.
@@ -3956,6 +4131,15 @@ export default function EditorPiezas() {
   // y se escribe en el useEffect de guardado automático vía setBorrador.
   const [borrador, setBorrador] = useLocalStorage('ep_borrador', null)
   const [nombre, setNombre] = useState(() => borrador?.nombre ?? 'Nueva pieza')
+  // Nombre de la pieza — "click to edit": en reposo se ve como texto
+  // plano + lápiz (no como un input siempre activo, que invita menos
+  // a tocarlo); al hacer click se convierte en input real con foco
+  // automático, y al perder el foco vuelve a texto plano.
+  const [editandoNombre, setEditandoNombre] = useState(false)
+  const inputNombreRef = useRef(null)
+  useEffect(() => {
+    if (editandoNombre) inputNombreRef.current?.focus()
+  }, [editandoNombre])
   // ICBC / Avisos / Mall — cambiable en cualquier momento (no solo al
   // crear la pieza), ya que afecta solo colores en el momento de
   // exportar/previsualizar, nunca el contenido editado por el usuario.
@@ -4337,6 +4521,7 @@ export default function EditorPiezas() {
     const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })
     await navigator.clipboard.writeText(html)
     setCopiado(true)
+    showSuccess('HTML copiado al portapapeles')
     setTimeout(() => setCopiado(false), 2000)
   }
 
@@ -4356,6 +4541,18 @@ export default function EditorPiezas() {
   const [importarHtmlInput, setImportarHtmlInput] = useState('')
   const [importarUrlInput, setImportarUrlInput] = useState('')
   const [importarCargando, setImportarCargando] = useState(false)
+  // Progreso simulado del análisis — el proceso real (parseo de
+  // strings + regex) es síncrono y no tiene etapas reales que
+  // reportar con un porcentaje fiel, así que esto es una animación de
+  // avance progresivo, no una medición real. Sí refleja con precisión
+  // en qué ETAPA real está (vía marcadores primero, vía heurística
+  // después si la primera no encuentra nada) — eso no es inventado.
+  // Llega a 100% recién cuando analizarImportacion termina de verdad,
+  // nunca antes, para no mostrar "completado" mientras todavía sigue
+  // procesando.
+  const [importarProgreso, setImportarProgreso] = useState(0)
+  const [importarEtapa, setImportarEtapa] = useState('marcadores') // 'marcadores' | 'heuristica'
+  const importarProgresoRef = useRef(null)
   const [importarError, setImportarError] = useState('')
   // null mientras no se analizó nada todavía — una vez que hay un
   // resultado (aunque sea de baja confianza), pasamos a la pantalla de
@@ -4408,6 +4605,12 @@ export default function EditorPiezas() {
   // independiente (este modal puede abrirse sin que el otro esté
   // abierto, y viceversa).
   const [importarModoPreview, setImportarModoPreview] = useState('desktop') // 'desktop' | 'mobile'
+  // Índice del aviso activo (último clickeado) — antes el único
+  // feedback de "este es el aviso que estoy viendo" era el hover, que
+  // desaparece en cuanto el mouse se aleja. Ahora queda marcado de
+  // forma persistente hasta que se clickea otro aviso o se cierra el
+  // modal.
+  const [avisoActivo, setAvisoActivo] = useState(null)
 
   function cerrarModalImportar() {
     setShowImportar(false)
@@ -4417,6 +4620,10 @@ export default function EditorPiezas() {
     setImportarError('')
     setImportarResultado(null)
     setImportarModoPreview('desktop')
+    clearInterval(importarProgresoRef.current)
+    setImportarProgreso(0)
+    setImportarEtapa('marcadores')
+    setAvisoActivo(null)
   }
 
   async function analizarImportacion() {
@@ -4425,6 +4632,16 @@ export default function EditorPiezas() {
     if (!entrada) { setImportarError(importarModo === 'html' ? 'Pegá el HTML de la pieza.' : 'Ingresá el link de la pieza.'); return }
 
     setImportarCargando(true)
+    setImportarProgreso(8)
+    setImportarEtapa('marcadores')
+    // Avance simulado mientras dura el análisis real — sube rápido al
+    // principio y se frena cerca del techo (90%) para no llegar nunca
+    // a 100% por sí solo; el 100% real lo pone el finally, recién
+    // cuando analizarImportacion termina de verdad.
+    clearInterval(importarProgresoRef.current)
+    importarProgresoRef.current = setInterval(() => {
+      setImportarProgreso(p => (p >= 90 ? p : p + (90 - p) * 0.18))
+    }, 120)
     try {
       // Modo URL pasa por el mismo proxy que ya usan Revisión de
       // emails y Revisión de envíos — valida SSRF en capas (allowlist
@@ -4499,15 +4716,33 @@ export default function EditorPiezas() {
       // null (ningún <!--BLOQUE--> encontrado) se cae a la heurística
       // sin marcadores, mucho más trabajosa y de menor certeza.
       const porMarcadores = importarDesdeHtml(htmlNormalizado)
+      let resultadoFinal
       if (porMarcadores.resultado) {
-        setImportarResultado({ ...porMarcadores, confianza: 'alta', viaMarcadores: true })
+        resultadoFinal = { ...porMarcadores, confianza: 'alta', viaMarcadores: true }
       } else {
+        setImportarEtapa('heuristica')
         const porHeuristica = importarHeuristico(htmlNormalizado)
-        setImportarResultado({ ...porHeuristica, viaMarcadores: false })
+        resultadoFinal = { ...porHeuristica, viaMarcadores: false }
       }
+      // El análisis en sí (parseo + regex) es síncrono y suele tardar
+      // milisegundos — sin este mínimo, el step de "analizando" podría
+      // aparecer y desaparecer antes de que el ojo lo registre. No es
+      // una espera artificial para simular trabajo que no existe: es
+      // el piso de tiempo para que el feedback visual sea perceptible.
+      // Va ANTES de setImportarResultado a propósito — si el resultado
+      // se setea primero, el step 3 ya queda listo para mostrarse
+      // mientras el delay sigue corriendo, y como importarCargando
+      // todavía es true en ese momento, los dos steps llegan a
+      // coexistir en pantalla (bug real: barra de progreso y resultado
+      // superpuestos). Acá el resultado nunca se setea hasta que el
+      // step 2 ya cumplió su tiempo mínimo.
+      await new Promise(r => setTimeout(r, 450))
+      setImportarResultado(resultadoFinal)
     } catch (err) {
       setImportarError(err.message || 'No se pudo procesar la pieza.')
     } finally {
+      clearInterval(importarProgresoRef.current)
+      setImportarProgreso(100)
       setImportarCargando(false)
     }
   }
@@ -4564,6 +4799,86 @@ export default function EditorPiezas() {
   return (
     <div className="ep-root">
 
+      {/* ── Barra superior — ancho completo, fuera de las 3 columnas ── */}
+      <div className="ep-canvas-header">
+        {/* Wrapper de ancho fijo — mismo ancho que ocupa ep-biblioteca
+            (menos el padding lateral del header, que ep-biblioteca no
+            tiene) para que el separador y el selector de Tema que
+            siguen arranquen alineados justo donde empieza la columna
+            del canvas, en vez de moverse según el largo del nombre. */}
+        <div className="ep-nombre-pieza-wrap">
+          {editandoNombre ? (
+            <input ref={inputNombreRef} className="ep-nombre-pieza-input" autoComplete="off" value={nombre}
+              onChange={e => setNombre(e.target.value)} onBlur={() => setEditandoNombre(false)}
+              onKeyDown={e => { if (e.key === 'Enter') setEditandoNombre(false) }} />
+          ) : (
+            <button className="ep-nombre-pieza-texto" onClick={() => setEditandoNombre(true)} title="Editar nombre">
+              <span>{nombre}</span>
+              <Pencil size={13} />
+            </button>
+          )}
+        </div>
+
+        <div className="ep-canvas-header-sep" />
+
+        {/* Selector de Tema — antes era una segunda fila completa
+            aparte ("Template" + pestañas grandes ICBC/Avisos/Mall);
+            ahora es un botón compacto con dropdown, integrado en la
+            misma fila que el nombre de la pieza, así toda la barra
+            superior entra en una sola línea. */}
+        <MenuDesplegable alinear="izquierda" trigger={(toggle) => (
+          <button className="ep-tema-selector" onClick={toggle}>
+            <span className="ep-tema-selector-label">Tema</span>
+            <span className="ep-tema-selector-swatch" style={{ background: TEMAS[tema].colorSwatch }} />
+            <span className="ep-tema-selector-nombre">{TEMAS[tema].label}</span>
+            <ChevronDown size={11} />
+          </button>
+        )}>
+          {(cerrar) => (
+            <>
+              <div className="ep-menu-titulo">Tema visual</div>
+              {Object.entries(TEMAS).map(([key, t]) => (
+                <button key={key} className="ep-menu-item" onClick={() => { setTema(key); cerrar() }}>
+                  <span className="ep-tema-selector-swatch" style={{ background: t.colorSwatch }} />
+                  <span style={{ flex: 1 }}>{t.label}</span>
+                  {tema === key && <Check size={14} className="ep-tema-check" />}
+                </button>
+              ))}
+            </>
+          )}
+        </MenuDesplegable>
+
+        <div className="ep-canvas-header-flex" />
+
+        <div className="ep-canvas-actions">
+          <button className="ep-btn ep-btn-ghost" onClick={() => setShowImportar(true)} title="Importar pieza desde HTML o link"><Link2 size={14} /> Importar</button>
+          <button className="ep-btn ep-btn-ghost" onClick={() => setShowPreview(true)}><Eye size={14} /> Vista previa</button>
+
+          {/* Exportar — split button: el botón principal descarga
+              directo (acción más usada), la flecha abre el resto de
+              las formas de exportación (copiar al portapapeles). */}
+          <MenuDesplegable
+            trigger={(toggle) => (
+              <div className="ep-split-btn">
+                <button className="ep-btn ep-btn-primary ep-split-btn-main" onClick={exportar}><Download size={14} /> Exportar HTML</button>
+                <button className="ep-btn ep-btn-primary ep-split-btn-toggle" onClick={toggle} title="Más opciones de exportación"><ChevronDown size={13} /></button>
+              </div>
+            )}>
+            {(cerrar) => (
+              <>
+                <div className="ep-menu-titulo">Exportación</div>
+                <button className="ep-menu-item" onClick={() => { exportar(); cerrar() }}><Download size={14} /> Descargar .html</button>
+                <button className="ep-menu-item" onClick={() => { copiar(); cerrar() }}>{copiado ? <ClipboardCheck size={14} /> : <Copy size={14} />} {copiado ? 'Copiado' : 'Copiar HTML al portapapeles'}</button>
+              </>
+            )}
+          </MenuDesplegable>
+
+          <button className="ep-btn ep-btn-ghost ep-btn-reiniciar" onClick={() => setShowConfirmReinicio(true)}><RotateCcw size={14} /> Reiniciar</button>
+        </div>
+      </div>
+
+      <div className="ep-cuerpo">
+
       {/* ── Biblioteca ── */}
       <aside className="ep-biblioteca">
         <div className="ep-biblioteca-header">
@@ -4594,12 +4909,15 @@ export default function EditorPiezas() {
         <div className="ep-biblioteca-lista">
 
           {bloquesFiltradosHeader.length > 0 && (
-            <CategoriaColapsable titulo="Header">
+            <CategoriaColapsable titulo="Header" count={bloquesFiltradosHeader.length}>
               {(() => {
+                // Mismos colores que el selector de segmento de
+                // Modulo_Doble_Con_Imagen_Punteada — así la pestaña activa
+                // se identifica con el color real de cada marca.
                 const GRUPOS_HEADER = [
-                  { prefijo: 'CG', label: 'CG' },
-                  { prefijo: 'EB', label: 'EB' },
-                  { prefijo: 'Pay', label: 'Pay' },
+                  { prefijo: 'CG', label: 'CG', color: '#c4161c' },
+                  { prefijo: 'EB', label: 'EB', color: '#000000' },
+                  { prefijo: 'Pay', label: 'Pay', color: '#635843' },
                 ]
                 const agrupados = GRUPOS_HEADER.map(g => ({
                   ...g,
@@ -4608,24 +4926,31 @@ export default function EditorPiezas() {
                 // Bloques que no matchean ningún prefijo conocido (por si se agregan nuevos)
                 const prefijosConocidos = GRUPOS_HEADER.map(g => g.prefijo + '_')
                 const sinGrupo = bloquesFiltradosHeader.filter(b => !prefijosConocidos.some(p => b.slug.startsWith(p)))
+                // Si el grupo de la pestaña activa quedó vacío (por
+                // búsqueda, por ejemplo), caemos al primer grupo que
+                // sí tenga bloques para no mostrar una pestaña vacía.
+                const grupoActivo = agrupados.find(g => g.prefijo === pestanaHeaderActiva) ?? agrupados[0] ?? null
                 return (
                   <>
-                    {agrupados.map(g => (
-                      <CategoriaColapsable key={g.prefijo} titulo={g.label} sub>
-                        {g.bloques.map(bloque => (
-                          <div key={bloque.id}
-                            className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
-                            draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
-                            <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
-                            <div className="ep-bloque-footer">
-                              <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                              <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
-                                {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </CategoriaColapsable>
+                    {agrupados.length > 1 && (
+                      <SelectorPestanas
+                        opciones={agrupados.map(g => ({ key: g.prefijo, label: g.label, color: g.color }))}
+                        activa={grupoActivo?.prefijo}
+                        onCambiar={setPestanaHeaderActiva}
+                      />
+                    )}
+                    {grupoActivo?.bloques.map(bloque => (
+                      <div key={bloque.id}
+                        className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
+                        draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
+                        <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
+                        <div className="ep-bloque-footer">
+                          <span className="ep-bloque-nombre">{bloque.nombre}</span>
+                          <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
+                            {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
+                          </button>
+                        </div>
+                      </div>
                     ))}
                     {sinGrupo.map(bloque => (
                       <div key={bloque.id}
@@ -4660,7 +4985,7 @@ export default function EditorPiezas() {
                 .filter(Boolean)
               if (bloques.length === 0) return null
               return (
-                <CategoriaColapsable key={g.label} titulo={g.label}>
+                <CategoriaColapsable key={g.label} titulo={g.label} count={bloques.length}>
                   {bloques.map(bloque => (
                     <div key={bloque.id}
                       className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''}`}
@@ -4698,27 +5023,6 @@ export default function EditorPiezas() {
 
       {/* ── Canvas ── */}
       <main className="ep-canvas-wrap">
-        <div className="ep-canvas-header">
-          <input className="ep-nombre-pieza" autoComplete="off" value={nombre} onChange={e => setNombre(e.target.value)} title="Nombre de la pieza" />
-          <div className="ep-canvas-actions">
-            <button className="ep-btn ep-btn-ghost" onClick={() => setShowImportar(true)} title="Importar pieza desde HTML o link">🔗 Importar</button>
-            <button className="ep-btn ep-btn-ghost" onClick={() => setShowPreview(true)}><Eye size={14} /> Vista previa</button>
-            <button className="ep-btn ep-btn-ghost" onClick={copiar}>{copiado ? <ClipboardCheck size={14} /> : <Copy size={14} />}{copiado ? 'Copiado' : 'Copiar HTML'}</button>
-            <button className="ep-btn ep-btn-primary" onClick={exportar}><Download size={14} /> Exportar HTML</button>
-            <div className="ep-canvas-actions-sep" />
-            <button className="ep-btn ep-btn-ghost ep-btn-reiniciar" onClick={() => setShowConfirmReinicio(true)}><RotateCcw size={14} /> Reiniciar</button>
-          </div>
-        </div>
-        <div className="ep-canvas-header ep-canvas-header-tema">
-          <span className="ep-tema-label">Template</span>
-          <div className="re-tabs">
-            {Object.entries(TEMAS).map(([key, t]) => (
-              <button key={key} className={tema === key ? 'active' : ''} onClick={() => setTema(key)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="ep-canvas-body">
 
           {/* Banda Header — seleccionable igual que cualquier bloque del
@@ -5021,15 +5325,24 @@ export default function EditorPiezas() {
       <aside className="ep-editor">
         <div className="ep-editor-header">
           <span className="ep-editor-titulo">Panel de edición</span>
-          {selectedId === 'HEADER' && <span className="ep-editor-bloque-nombre">Banda Header</span>}
-          {selectedBloque && <span className="ep-editor-bloque-nombre">{selectedBloque.nombre}</span>}
         </div>
+        {/* Context card — antes lo único que indicaba qué bloque estabas
+            editando era un nombre chico al lado del título "Panel de
+            edición", fácil de pasar por alto. Ahora hay una tarjeta
+            destacada con la miniatura real del bloque, su nombre, y un
+            badge con la categoría — así queda claro de un vistazo qué
+            estás editando antes de mirar el formulario de abajo. */}
+        {(selectedId === 'HEADER' ? bandaHeader : selectedBloque) && (
+          <ContextCardEditor bloque={selectedId === 'HEADER' ? bandaHeader : selectedBloque} />
+        )}
         {selectedId === 'HEADER'
           ? <PanelEditorHeader bandaHeader={bandaHeader} redesOrden={redesOrden} onToggle={toggleRedActiva} onReordenar={reordenarPillRed} />
           : !selectedBloque
             ? <div className="ep-editor-empty"><FileText size={28} style={{ color: 'var(--border)' }} /><span>Seleccioná un bloque del canvas para editar su contenido</span></div>
             : <PanelEditor key={`${selectedBloque.instanceId}-${selectedBloque.slug}`} bloque={selectedBloque} onActualizar={actualizarBloque} onSwap={swapBloque} />}
       </aside>
+
+      </div>
 
       {/* ── Modal preview ── */}
       {showPreview && (
@@ -5040,7 +5353,7 @@ export default function EditorPiezas() {
                 <span className="ep-preview-titulo">Vista previa</span>
                 <span className="ep-preview-subtitulo">{nombre}</span>
               </div>
-              <div className="re-tabs ep-preview-modo-tabs">
+              <div className="ep-tabs ep-preview-modo-tabs">
                 <button className={previewModo === 'desktop' ? 'active' : ''} onClick={() => setPreviewModo('desktop')}>Desktop</button>
                 <button className={previewModo === 'mobile' ? 'active' : ''} onClick={() => setPreviewModo('mobile')}>Mobile</button>
               </div>
@@ -5058,12 +5371,14 @@ export default function EditorPiezas() {
       {/* ── Modal importar ── */}
       {showImportar && (
         <div className="ep-preview-overlay" onClick={cerrarModalImportar}>
-          <div className="ep-importar-modal" onClick={e => e.stopPropagation()}>
+          <div className={`ep-importar-modal ${importarResultado?.resultado ? 'ep-importar-modal-ancho' : ''}`} onClick={e => e.stopPropagation()}>
             <div className="ep-preview-header">
               <div className="ep-preview-titulo-wrap">
                 <span className="ep-preview-titulo">Importar pieza</span>
                 <span className="ep-preview-subtitulo">
-                  {!importarResultado ? 'Pegá el HTML o ingresá el link de la pieza' : 'Revisá el resultado antes de cargarlo'}
+                  {importarCargando
+                    ? 'Procesando la estructura de la pieza…'
+                    : !importarResultado ? 'Pegá el HTML o ingresá el link de la pieza' : 'Revisá el resultado antes de cargarlo'}
                 </span>
               </div>
               {/* Switch Desktop/Mobile — mismo patrón que el modal de
@@ -5084,7 +5399,7 @@ export default function EditorPiezas() {
             {/* Paso 1: entrada — tabs HTML/URL, mismo patrón que
                 Revisión de envíos. Se reemplaza por el resumen en
                 cuanto hay un resultado analizado. */}
-            {!importarResultado && (
+            {!importarResultado && !importarCargando && (
               <div className="ep-importar-body">
                 <div className="ep-importar-tabs">
                   <button className={importarModo === 'html' ? 'active' : ''} onClick={() => { setImportarModo('html'); setImportarError('') }}>HTML</button>
@@ -5114,10 +5429,36 @@ export default function EditorPiezas() {
 
                 <div className="ep-importar-footer">
                   <button className="ep-btn ep-btn-ghost" onClick={cerrarModalImportar}>Cancelar</button>
-                  <button className="ep-btn ep-btn-primary" onClick={analizarImportacion} disabled={importarCargando}>
-                    {importarCargando ? <Loader2 size={14} className="ep-spin" /> : null}
-                    {importarCargando ? 'Analizando…' : 'Analizar'}
-                  </button>
+                  <button className="ep-btn ep-btn-primary" onClick={analizarImportacion}>Analizar</button>
+                </div>
+              </div>
+            )}
+
+            {/* Paso 2: analizando — mismo patrón de barra de progreso
+                que ya usa Revisión de BBDD (.rb-processing en
+                RevisionBase.css), clonado con clase propia
+                (.ep-importar-processing) para que este editor siga
+                sin depender implícitamente del CSS de otra
+                herramienta — mismo criterio que .ep-tabs más arriba
+                en este archivo. El porcentaje es una animación de
+                avance (el análisis real es síncrono y no tiene etapas
+                medibles con precisión), pero la etapa que muestra
+                abajo SÍ es real: primero intenta vía marcadores, y
+                solo pasa a vía heurística si la primera no encuentra
+                nada. */}
+            {importarCargando && !importarResultado && (
+              <div className="ep-importar-body">
+                <div className="ep-importar-processing">
+                  <div className="ep-importar-processing-top">
+                    <div className="ep-importar-processing-label">Analizando la pieza…</div>
+                    <div className="ep-importar-processing-pct">{Math.round(importarProgreso)}%</div>
+                  </div>
+                  <div className="ep-importar-progress-track"><div className="ep-importar-progress-fill" style={{ width: `${importarProgreso}%` }} /></div>
+                  <div className="ep-importar-processing-note">
+                    {importarEtapa === 'marcadores'
+                      ? 'Buscando marcadores de bloque del editor…'
+                      : 'No se encontraron marcadores — analizando la estructura por heurística…'}
+                  </div>
                 </div>
               </div>
             )}
@@ -5129,90 +5470,142 @@ export default function EditorPiezas() {
                 de texto para dejar explícito que cargar igual no es
                 lo recomendado. */}
             {importarResultado && (
-              <div className="ep-importar-body">
-                {!importarResultado.resultado ? (
-                  <div className="ep-importar-aviso ep-importar-aviso-baja">
-                    <AlertCircle size={16} />
-                    <span>{importarResultado.avisos?.[0]?.texto || 'No se pudo reconocer la estructura de esta pieza.'}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className={`ep-importar-resumen ep-importar-confianza-${importarResultado.confianza}`}>
-                      <span className="ep-importar-resumen-titulo">
-                        {importarResultado.viaMarcadores
-                          ? '✓ Pieza reconocida — exportada por este mismo editor'
-                          : importarResultado.confianza === 'alta'
-                            ? '✓ Pieza reconocida con buena confianza'
-                            : importarResultado.confianza === 'media'
-                              ? '⚠ Pieza reconocida parcialmente — revisá el resultado'
-                              : '⚠ No se pudo reconocer con seguridad — preferible armar la pieza a mano'}
-                      </span>
-                      <span className="ep-importar-resumen-detalle">{importarResultado.resultado.canvas.length} bloques detectados</span>
+              <>
+                <div className="ep-importar-body ep-importar-body-resultado">
+                  {!importarResultado.resultado ? (
+                    <div className="ep-importar-aviso ep-importar-aviso-baja" style={{ margin: '1.25rem' }}>
+                      <AlertCircle size={16} />
+                      <span>{importarResultado.avisos?.[0]?.texto || 'No se pudo reconocer la estructura de esta pieza.'}</span>
                     </div>
-
-                    {importarResultado.avisos?.length > 0 && (
-                      <>
-                        <span className="ep-importar-avisos-titulo">Resultado del escaneo de la pieza</span>
-                        <ul className="ep-importar-avisos-lista">
-                          {importarResultado.avisos.map((a, i) => (
-                            <li
-                              key={i}
-                              data-tipo={a.canvasIdx != null ? a.tipo : a.tipo === 'obsoleto' ? 'obsoleto' : undefined}
-                              onClick={a.canvasIdx != null ? () => irABloqueEnPreview(a.canvasIdx) : a.tipo === 'obsoleto' ? irAObsoletoEnPreview : undefined}
-                              title={a.canvasIdx != null || a.tipo === 'obsoleto' ? 'Ver en el preview' : undefined}
-                              style={a.tipo === 'obsoleto' ? { cursor: 'pointer' } : undefined}
-                            >
-                              {a.texto}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-
-                    {(() => {
-                      // El overlay (outline punteado + etiqueta "No
-                      // reconocido") solo se inyecta en ESTE preview de
-                      // importación, nunca en el HTML real que termina
-                      // en el canvas — generarExport en sí queda
-                      // intacto, marcarBloquesNoReconocidosParaPreview
-                      // es un post-proceso aparte sobre el resultado.
-                      //
-                      // redesOrden: bug real reportado — este preview
-                      // usaba `redesOrden: null` a propósito (forzado),
-                      // lo cual hacía que reordenarRedesSociales usara
-                      // el header TAL CUAL viene (con todas sus redes
-                      // del template) — pero el canvas real, al
-                      // confirmar la importación, sí usa el
-                      // redesOrden REAL detectado de la pieza
-                      // (puede ser []). Resultado: el preview mostraba
-                      // redes que después desaparecían al confirmar,
-                      // muy confuso. Ahora el preview usa el mismo
-                      // redesOrden real que se va a aplicar de verdad.
-                      const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`
-                      return (
-                        <div className={`ep-importar-preview-wrap ${importarModoPreview === 'mobile' ? 'modo-mobile' : ''}`}>
-                          {importarModoPreview === 'desktop'
-                            ? <AutoIframe ref={previewIframeRef} className="ep-importar-preview-iframe" title="Preview de la pieza importada" srcDoc={srcDoc} />
-                            : <iframe ref={previewIframeRef} className="ep-importar-preview-iframe" title="Preview de la pieza importada" srcDoc={srcDoc} style={{ width: '375px' }} />}
+                  ) : (
+                    <div className="ep-importar-resultado-cols">
+                      {/* Columna izquierda — confianza, métricas y avisos */}
+                      <div className="ep-importar-resultado-izq">
+                        <div className={`ep-importar-badge-confianza ep-importar-confianza-${importarResultado.confianza}`}>
+                          <span className="ep-importar-badge-icono">
+                            {importarResultado.viaMarcadores || importarResultado.confianza === 'alta' ? <Check size={16} /> : <AlertCircle size={16} />}
+                          </span>
+                          <div>
+                            <div className="ep-importar-badge-titulo">
+                              {importarResultado.viaMarcadores
+                                ? 'Pieza reconocida por marcadores'
+                                : importarResultado.confianza === 'alta'
+                                  ? 'Confianza alta'
+                                  : importarResultado.confianza === 'media'
+                                    ? 'Confianza media'
+                                    : 'Confianza baja'}
+                            </div>
+                            <div className="ep-importar-badge-subtitulo">
+                              {importarResultado.viaMarcadores
+                                ? 'Exportada por este mismo editor'
+                                : importarResultado.confianza === 'alta'
+                                  ? 'Reconstruida por heurística, alta certeza'
+                                  : importarResultado.confianza === 'media'
+                                    ? 'Reconstruida por heurística — revisá el resultado'
+                                    : 'No se pudo reconocer con seguridad'}
+                            </div>
+                          </div>
                         </div>
-                      )
-                    })()}
-                  </>
-                )}
 
-                {importarError && <div className="ep-importar-error">{importarError}</div>}
+                        <div className="ep-importar-metricas">
+                          <div className="ep-importar-metrica">
+                            <span className="ep-importar-metrica-valor">{importarResultado.resultado.canvas.length}</span>
+                            <span className="ep-importar-metrica-label">Bloques</span>
+                          </div>
+                          <div className="ep-importar-metrica">
+                            <span className="ep-importar-metrica-valor">{importarResultado.avisos?.length ?? 0}</span>
+                            <span className="ep-importar-metrica-label">Avisos</span>
+                          </div>
+                          <div className="ep-importar-metrica">
+                            <span className="ep-importar-metrica-valor ep-importar-metrica-valor-tema">{TEMAS[importarResultado.resultado.tema]?.label ?? 'ICBC'}</span>
+                            <span className="ep-importar-metrica-label">Tema</span>
+                          </div>
+                        </div>
 
-                <div className="ep-importar-footer">
-                  <button className="ep-btn ep-btn-ghost" onClick={() => setImportarResultado(null)}>Volver</button>
-                  <button
-                    className={`ep-btn ${importarResultado.confianza === 'baja' || !importarResultado.resultado ? 'ep-btn-ghost' : 'ep-btn-primary'}`}
-                    onClick={confirmarImportacion}
-                    disabled={!importarResultado.resultado}
-                  >
-                    {importarResultado.confianza === 'baja' ? 'Cargar igual (no recomendado)' : 'Cargar en el editor'}
-                  </button>
+                        {importarResultado.avisos?.length > 0 && (
+                          <>
+                            <span className="ep-importar-avisos-titulo">Avisos del análisis</span>
+                            <ul className="ep-importar-avisos-lista">
+                              {importarResultado.avisos.map((a, i) => {
+                                const { titulo, detalle } = tituloYDetalleDeAviso(a)
+                                const { Icono, color } = AVISO_ICONO_POR_TIPO[a.tipo] ?? AVISO_ICONO_POR_TIPO.general
+                                const esClickeable = a.canvasIdx != null || a.tipo === 'obsoleto'
+                                function onClickAviso() {
+                                  setAvisoActivo(i)
+                                  if (a.canvasIdx != null) irABloqueEnPreview(a.canvasIdx)
+                                  else if (a.tipo === 'obsoleto') irAObsoletoEnPreview()
+                                }
+                                return (
+                                  <li
+                                    key={i}
+                                    className={`ep-importar-aviso-card ${avisoActivo === i ? 'activo' : ''}`}
+                                    data-tipo={a.canvasIdx != null ? a.tipo : a.tipo === 'obsoleto' ? 'obsoleto' : undefined}
+                                    onClick={esClickeable ? onClickAviso : undefined}
+                                    title={esClickeable ? 'Ver en el preview' : undefined}
+                                    style={a.tipo === 'obsoleto' ? { cursor: 'pointer' } : undefined}
+                                  >
+                                    <span className="ep-importar-aviso-icono" style={color ? { background: color } : undefined}>
+                                      <Icono size={15} />
+                                    </span>
+                                    <div className="ep-importar-aviso-texto">
+                                      <div className="ep-importar-aviso-titulo">{titulo}</div>
+                                      {detalle && <div className="ep-importar-aviso-detalle">{detalle}</div>}
+                                    </div>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Columna derecha — preview en vivo del resultado */}
+                      <div className="ep-importar-resultado-der">
+                        {(() => {
+                          // El overlay (outline punteado + etiqueta "No
+                          // reconocido") solo se inyecta en ESTE preview de
+                          // importación, nunca en el HTML real que termina
+                          // en el canvas — generarExport en sí queda
+                          // intacto, marcarBloquesNoReconocidosParaPreview
+                          // es un post-proceso aparte sobre el resultado.
+                          //
+                          // redesOrden: bug real reportado — este preview
+                          // usaba `redesOrden: null` a propósito (forzado),
+                          // lo cual hacía que reordenarRedesSociales usara
+                          // el header TAL CUAL viene (con todas sus redes
+                          // del template) — pero el canvas real, al
+                          // confirmar la importación, sí usa el
+                          // redesOrden REAL detectado de la pieza
+                          // (puede ser []). Resultado: el preview mostraba
+                          // redes que después desaparecían al confirmar,
+                          // muy confuso. Ahora el preview usa el mismo
+                          // redesOrden real que se va a aplicar de verdad.
+                          const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`
+                          return (
+                            <div className={`ep-importar-preview-wrap ${importarModoPreview === 'mobile' ? 'modo-mobile' : ''}`}>
+                              <AutoIframe ref={previewIframeRef} className="ep-importar-preview-iframe" title="Preview de la pieza importada" srcDoc={srcDoc} width={importarModoPreview === 'mobile' ? 375 : undefined} />
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                <div className="ep-importar-footer-wrap">
+                  {importarError && <div className="ep-importar-error">{importarError}</div>}
+                  <div className="ep-importar-footer">
+                    <button className="ep-btn ep-btn-ghost" onClick={() => { setImportarResultado(null); setAvisoActivo(null) }}>Volver</button>
+                    <button
+                      className={`ep-btn ${importarResultado.confianza === 'baja' || !importarResultado.resultado ? 'ep-btn-ghost' : 'ep-btn-primary'}`}
+                      onClick={confirmarImportacion}
+                      disabled={!importarResultado.resultado}
+                    >
+                      {importarResultado.confianza === 'baja' ? 'Cargar igual (no recomendado)' : 'Cargar en el editor'}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
