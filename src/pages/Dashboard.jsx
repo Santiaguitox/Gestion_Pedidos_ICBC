@@ -192,11 +192,12 @@ export default function Dashboard() {
   const [filtroTipo, setFiltroTipo] = useLocalStorage('dashboard:filtroTipo', '')
   const [filtroUsuario, setFiltroUsuario] = useLocalStorage('dashboard:filtroUsuario', '')
   const [filtroTag, setFiltroTag] = useLocalStorage('dashboard:filtroTag', '')
+  const [filtroMisSubtareas, setFiltroMisSubtareas] = useLocalStorage('dashboard:filtroMisSubtareas', '')
   const [vista, setVista] = useLocalStorage('dashboard:vista', 'compact')
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('dashboard:filtrosOpen', true)
   const [excluirEsperando, setExcluirEsperando] = useLocalStorage('dashboard:excluirEsperando', false)
 
-  const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag
+  const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag || filtroMisSubtareas
 
   // Trae TODOS los pedidos activos (modo 'dashboard' de listar_pedidos —
   // sin paginar del lado SQL, ver comentario en la función). La
@@ -245,7 +246,7 @@ export default function Dashboard() {
 
   function limpiarFiltros() {
     setFiltroEstado(''); setFiltroPrioridad(''); setFiltroTipo('')
-    setFiltroUsuario(''); setFiltroTag('')
+    setFiltroUsuario(''); setFiltroTag(''); setFiltroMisSubtareas('')
   }
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
@@ -255,9 +256,20 @@ export default function Dashboard() {
   // stat cards y las listas reflejan solo lo que está pendiente de
   // nuestro lado. Se aplica sobre el array crudo de la DB, antes de
   // cualquier clasificación semántica.
-  const pedidosFiltrados = excluirEsperando
+  const pedidosBaseSwitch = excluirEsperando
     ? pedidos.filter(p => !p.estados?.includes('esperando_respuesta'))
     : pedidos
+
+  // Filtra por subtareas asignadas al usuario logueado.
+  // "pendientes"  → tiene al menos una subtarea mía sin completar
+  // "terminadas"  → tiene al menos una subtarea mía y todas están completadas
+  const pedidosFiltrados = !filtroMisSubtareas ? pedidosBaseSwitch : pedidosBaseSwitch.filter(p => {
+    const mias = (p.subtareas ?? []).filter(s => s.asignado_a === user?.id)
+    if (!mias.length) return false
+    if (filtroMisSubtareas === 'pendientes') return mias.some(s => !s.completada)
+    if (filtroMisSubtareas === 'terminadas') return mias.every(s => s.completada)
+    return true
+  })
 
   // "Vencidos" se separa del resto — tiene su propio componente de
   // alerta (VencidosAcordeon), no es uno de los 6 grupos "normales".
@@ -382,6 +394,11 @@ export default function Dashboard() {
                 <option value="">Todos los usuarios</option>
                 <option value="mios">Mis pedidos</option>
                 {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
+              <select value={filtroMisSubtareas} onChange={e => setFiltroMisSubtareas(e.target.value)} className="select-auto">
+                <option value="">Mis subtareas</option>
+                <option value="pendientes">Pendientes</option>
+                <option value="terminadas">Terminadas</option>
               </select>
               {tagsDisponibles.length > 0 && (
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
