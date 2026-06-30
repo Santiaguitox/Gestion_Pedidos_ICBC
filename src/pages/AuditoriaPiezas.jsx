@@ -325,12 +325,12 @@ function CamposSecundarios({ campos }) {
 }
 
 function CardPiezaConMatch({ item }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const totalOcurrencias = item.hallazgos.reduce((acc, h) => acc + h.ocurrencias.length, 0)
   const { pieza } = item
 
   return (
-    <div className="ap-card-pieza ap-card-con-match">
+    <div className="ap-card-pieza">
       <button type="button" className="ap-card-header" onClick={() => setOpen(v => !v)}>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         <div className="ap-card-titulo-wrap">
@@ -448,13 +448,13 @@ export default function AuditoriaPiezas() {
     if (!puedeAuditar) return
     setCargando(true)
     setResultado(null)
-    setProgresoActual({ pieza: null, indice: 0, total: piezasValidas.length })
+    setProgresoActual({ pieza: null, indice: 0, total: piezasValidas.length, acumulado: { conMatch: 0, sinMatch: 0 } })
 
     try {
       const res = await ejecutarAuditoria({
         piezas: piezasParseadas,
         reglas: reglasValidas,
-        onProgreso: (pieza, indice, total) => setProgresoActual({ pieza, indice, total }),
+        onProgreso: (pieza, indice, total, acumulado) => setProgresoActual({ pieza, indice, total, acumulado }),
       })
       setResultado(res)
     } finally {
@@ -586,22 +586,35 @@ export default function AuditoriaPiezas() {
 
       {cargando && progresoActual && (
         <div className="ap-processing">
-          <div className="ap-processing-top">
-            <span className="ap-processing-label">
-              {progresoActual.pieza
-                ? <>Analizando: <b>{progresoActual.pieza.nombre}</b></>
-                : 'Preparando…'}
-            </span>
-            <span className="ap-processing-count">{progresoActual.indice + 1} / {progresoActual.total}</span>
+          <div className="ap-processing-icono">
+            <ScanSearch size={18} />
           </div>
-          <div className="ap-progress-track">
-            <div
-              className="ap-progress-fill"
-              style={{ width: `${Math.round(((progresoActual.indice) / Math.max(progresoActual.total, 1)) * 100)}%` }}
-            />
+          <div className="ap-processing-cuerpo">
+            <div className="ap-processing-top">
+              <span className="ap-processing-label">
+                {progresoActual.pieza
+                  ? <>Analizando<br /><b>{progresoActual.pieza.nombre}</b></>
+                  : 'Preparando…'}
+              </span>
+              <span className="ap-processing-contador">
+                <span className="ap-processing-count">{progresoActual.indice + 1} / {progresoActual.total}</span>
+                <span className="ap-processing-pct">{Math.round((progresoActual.indice / Math.max(progresoActual.total, 1)) * 100)}% completado</span>
+              </span>
+            </div>
+            <div className="ap-progress-track">
+              <div
+                className="ap-progress-fill"
+                style={{ width: `${Math.round(((progresoActual.indice) / Math.max(progresoActual.total, 1)) * 100)}%` }}
+              />
+            </div>
+            <div className="ap-processing-acumulado">
+              <span className="ap-processing-acumulado-rojo">{progresoActual.acumulado.conMatch} con coincidencias</span>
+              <span className="ap-processing-acumulado-verde">{progresoActual.acumulado.sinMatch} sin coincidencias</span>
+            </div>
           </div>
         </div>
       )}
+
 
       {resultado && (
         <div className="ap-resultado">
@@ -681,6 +694,11 @@ export default function AuditoriaPiezas() {
 
           {(filtroActivo === 'todas' || filtroActivo === 'conMatch') && (
             <div className="ap-resultado-lista">
+              {resultado.conCoincidencias.length > 0 && (
+                <span className="ap-resultado-sublabel ap-resultado-sublabel-alerta">
+                  <AlertTriangle size={14} /> Con coincidencias {resultado.conCoincidencias.length}
+                </span>
+              )}
               {resultado.conCoincidencias.length === 0 && (
                 <div className="ap-sin-resultados">
                   <CheckCircle2 size={18} />

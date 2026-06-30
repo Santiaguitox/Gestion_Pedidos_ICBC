@@ -304,31 +304,69 @@
 /* ---------- Progreso ---------- */
 
 .ap-processing {
+  display: flex;
+  gap: 1rem;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.ap-processing-icono {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--red-bg);
+  color: var(--icbc-red);
+}
+
+.ap-processing-cuerpo {
+  flex: 1;
+  min-width: 0;
 }
 
 .ap-processing-top {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
   margin-bottom: 0.6rem;
   font-size: 0.85rem;
 }
 
 .ap-processing-label {
   color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .ap-processing-label b {
   color: var(--text-primary);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.ap-processing-contador {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
 }
 
 .ap-processing-count {
-  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--icbc-red);
   font-variant-numeric: tabular-nums;
+}
+
+.ap-processing-pct {
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
 .ap-progress-track {
@@ -344,6 +382,23 @@
   background: var(--icbc-red);
   border-radius: 999px;
   transition: width 200ms ease;
+}
+
+.ap-processing-acumulado {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.ap-processing-acumulado-rojo {
+  color: var(--icbc-red);
+  font-weight: 600;
+}
+
+.ap-processing-acumulado-verde {
+  color: var(--green-text);
+  font-weight: 600;
 }
 
 /* ---------- Resultado: resumen (cards clickeables, reusa stat-card-clickeable de global.css) ---------- */
@@ -422,6 +477,14 @@
   margin: 0.25rem 0 0.1rem;
 }
 
+.ap-resultado-sublabel-alerta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--icbc-red);
+  font-size: 0.85rem;
+}
+
 .ap-sin-resultados {
   display: flex;
   align-items: center;
@@ -441,10 +504,6 @@
   overflow: hidden;
 }
 
-.ap-card-con-match {
-  border-left: 3px solid var(--icbc-red);
-}
-
 .ap-card-header {
   width: 100%;
   display: flex;
@@ -452,7 +511,7 @@
   gap: 0.6rem;
   background: transparent;
   border: none;
-  padding: 0.85rem 1rem;
+  padding: 0.7rem 0.9rem;
   cursor: pointer;
   text-align: left;
   color: var(--text-muted);

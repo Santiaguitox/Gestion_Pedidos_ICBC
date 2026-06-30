@@ -275,9 +275,10 @@ function aplicarReglasAHtml(html, reglas) {
 
 // Corre la auditoría completa: recorre las piezas SECUENCIALMENTE (para
 // no saturar el proxy con N fetches en paralelo ni trabar la UI), y por
-// cada una aplica todas las reglas. onProgreso(pieza, indice, total) se
-// llama antes de procesar cada pieza, para que la UI pueda mostrar el
-// avance en vivo.
+// cada una aplica todas las reglas. onProgreso(pieza, indice, total, acumulado)
+// se llama antes de procesar cada pieza — 'acumulado' trae los conteos
+// resueltos HASTA ese momento ({ conMatch, sinMatch }), para que la UI
+// pueda mostrar un conteo en vivo mientras corre, no solo el avance.
 //
 // Devuelve: { conCoincidencias: [...], sinCoincidencias: [...], conError: [...] }
 // Cada item de conCoincidencias: { pieza, hallazgos }
@@ -292,7 +293,7 @@ export async function ejecutarAuditoria({ piezas, reglas, onProgreso }) {
 
   for (let i = 0; i < piezasValidas.length; i++) {
     const pieza = piezasValidas[i]
-    onProgreso?.(pieza, i, piezasValidas.length)
+    onProgreso?.(pieza, i, piezasValidas.length, { conMatch: conCoincidencias.length, sinMatch: sinCoincidencias.length })
 
     try {
       const html = await traerHtmlDeUrl(pieza.url)
