@@ -54,7 +54,7 @@ export default function App() {
                   </ProtectedRoute>
                 } />
                 <Route path="auditoria-piezas" element={
-                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN]}>
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <AuditoriaPiezas />
                   </ProtectedRoute>
                 } />

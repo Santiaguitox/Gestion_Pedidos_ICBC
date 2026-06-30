@@ -244,7 +244,7 @@ function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
           </div>
 
           <div className="ap-selector-bloque">
-            <span className="ap-selector-titulo">
+            <span className="ap-selector-titulo ap-selector-titulo-inline">
               Columna con el link a escanear <span className="ap-selector-obligatorio">*</span>
             </span>
             <select
@@ -381,13 +381,13 @@ function CardPiezaConMatch({ item }) {
 function FilaPiezaSimple({ pieza, error }) {
   return (
     <div className="ap-fila-simple">
-      <div className="ap-fila-nombre-wrap">
+      <div className="ap-fila-contenido">
         <span className="ap-fila-nombre">{pieza.nombre}</span>
         <CamposSecundarios campos={pieza.campos} />
+        <a href={pieza.url} target="_blank" rel="noreferrer" className="ap-fila-link">
+          {pieza.url} <ExternalLink size={11} />
+        </a>
       </div>
-      <a href={pieza.url} target="_blank" rel="noreferrer" className="ap-fila-link">
-        {pieza.url} <ExternalLink size={11} />
-      </a>
       {error && <span className="ap-fila-error">{error}</span>}
     </div>
   )

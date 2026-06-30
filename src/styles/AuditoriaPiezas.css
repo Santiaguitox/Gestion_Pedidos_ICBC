@@ -644,6 +644,7 @@
 .ap-fila-simple {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.6rem;
   padding: 0.65rem 1rem;
   font-size: 0.8rem;
@@ -652,10 +653,18 @@
   border-radius: var(--radius-md);
 }
 
+.ap-fila-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
 .ap-fila-nombre {
   color: var(--text-primary);
-  font-weight: 500;
-  flex-shrink: 0;
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
 }
 
 .ap-fila-link {
@@ -664,11 +673,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  font-size: 0.74rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+  max-width: 100%;
 }
 
 .ap-fila-link:hover {
@@ -869,6 +878,15 @@
   color: var(--text-primary);
 }
 
+/* Variante para títulos sin subtítulo debajo (ej: "Columna con el link
+   a escanear *") — el flex-direction: column del título base apila
+   cualquier hijo extra (como el asterisco) en su propia línea; acá se
+   necesita que quede pegado al texto, en la misma línea. */
+.ap-selector-titulo-inline {
+  flex-direction: row;
+  align-items: baseline;
+}
+
 .ap-selector-subtitulo {
   font-weight: 400;
   font-size: 0.74rem;
@@ -1005,12 +1023,4 @@
 .ap-campo-secundario-etiqueta {
   color: var(--text-muted);
   opacity: 0.8;
-}
-
-.ap-fila-nombre-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  flex-shrink: 0;
-  min-width: 0;
 }

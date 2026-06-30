@@ -164,7 +164,7 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
             <PenLine size={18} />{!collapsed && <span>Editor de piezas</span>}
           </NavLink>
         )}
-        {isSuperAdmin && (
+        {!isViewer && (
           <NavLink to="/app/auditoria-piezas" onClick={onNavClick}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? 'Auditoría de piezas' : undefined}>
