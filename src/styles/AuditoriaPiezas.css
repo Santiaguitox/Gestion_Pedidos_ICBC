@@ -1,7 +1,4 @@
 .ap-root {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 1.5rem 1.5rem 3rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -10,16 +7,7 @@
 /* ---------- Header ---------- */
 
 .ap-header-titulo {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
   color: var(--text-primary);
-}
-
-.ap-header-titulo svg {
-  margin-top: 0.2rem;
-  color: var(--icbc-red);
-  flex-shrink: 0;
 }
 
 .ap-header-titulo h1 {
@@ -196,22 +184,44 @@
 
 .ap-toggle-aa {
   flex-shrink: 0;
-  width: 32px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   height: 32px;
+  padding: 0 0.65rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-base);
   color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
   cursor: pointer;
   transition: all var(--transition);
+}
+
+.ap-toggle-aa:hover {
+  border-color: var(--border-strong);
+}
+
+.ap-toggle-aa-texto {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.ap-toggle-aa-estado {
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border-left: 1px solid var(--border);
+  padding-left: 0.4rem;
 }
 
 .ap-toggle-aa.active {
   background: var(--red-bg);
   border-color: var(--red-border);
   color: var(--icbc-red);
+}
+
+.ap-toggle-aa.active .ap-toggle-aa-estado {
+  border-left-color: var(--red-border);
 }
 
 .ap-regla-eliminar {
@@ -336,7 +346,7 @@
   transition: width 200ms ease;
 }
 
-/* ---------- Resultado: resumen ---------- */
+/* ---------- Resultado: resumen (cards clickeables, reusa stat-card-clickeable de global.css) ---------- */
 
 .ap-resultado {
   display: flex;
@@ -344,37 +354,11 @@
   gap: 1.25rem;
 }
 
-.ap-resumen {
+.ap-resumen-clickeable {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.75rem;
 }
-
-.ap-resumen-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 0.9rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.ap-resumen-num {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.ap-resumen-label {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-.ap-resumen-rojo .ap-resumen-num { color: var(--icbc-red); }
-.ap-resumen-verde .ap-resumen-num { color: var(--green-text); }
-.ap-resumen-gris .ap-resumen-num { color: var(--text-secondary); }
 
 /* ---------- Toolbar de resultado ---------- */
 
@@ -386,13 +370,10 @@
   gap: 0.75rem;
 }
 
-.ap-checkbox-filtro {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  cursor: pointer;
+.ap-resultado-toolbar-titulo {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .ap-toolbar-derecha {
@@ -425,6 +406,20 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.ap-resultado-lista-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ap-resultado-sublabel {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0.1rem;
 }
 
 .ap-sin-resultados {
@@ -585,56 +580,17 @@
   padding: 0.2rem 0.6rem;
 }
 
-/* ---------- Secciones colapsables (sin match / error) ---------- */
-
-.ap-seccion-colapsable {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.ap-seccion-colapsable-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: transparent;
-  border: none;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  text-align: left;
-}
-
-.ap-seccion-colapsable-header svg:last-child {
-  margin-left: auto;
-  color: var(--text-muted);
-}
-
-.ap-tono-verde .ap-seccion-colapsable-header svg:first-child { color: var(--green-text); }
-.ap-tono-gris .ap-seccion-colapsable-header svg:first-child { color: var(--text-muted); }
-
-.ap-seccion-colapsable-body {
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
+/* ---------- Filas simples (sin match / error) ---------- */
 
 .ap-fila-simple {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.55rem 1rem;
+  padding: 0.65rem 1rem;
   font-size: 0.8rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.ap-fila-simple:last-child {
-  border-bottom: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .ap-fila-nombre {
@@ -669,7 +625,7 @@
 /* ---------- Responsive ---------- */
 
 @media (max-width: 720px) {
-  .ap-resumen {
+  .ap-resumen-clickeable {
     grid-template-columns: repeat(2, 1fr);
   }
   .ap-regla-fila {
@@ -712,6 +668,100 @@
 .ap-tab-modo.active {
   color: var(--icbc-red);
   border-bottom-color: var(--icbc-red);
+}
+
+/* ---------- Tabla pegada (vista legible en vez del texto crudo) ---------- */
+
+.ap-tabla-pegada-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ap-tabla-pegada-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ap-tabla-pegada-info {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ap-btn-editar-pegado {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.65rem;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.ap-btn-editar-pegado:hover {
+  border-color: var(--icbc-red);
+  color: var(--icbc-red);
+}
+
+.ap-tabla-pegada-scroll {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  max-height: 320px;
+}
+
+.ap-tabla-pegada {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.76rem;
+}
+
+.ap-tabla-pegada thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.ap-tabla-pegada tbody td {
+  padding: 0.45rem 0.7rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ap-tabla-pegada tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ap-tabla-pegada tbody tr:hover td {
+  background: var(--bg-hover);
+}
+
+.ap-btn-ver-mas-tabla {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--icbc-red);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.ap-btn-ver-mas-tabla:hover {
+  text-decoration: underline;
 }
 
 /* ---------- Modo tabla: textarea y aviso ---------- */
@@ -767,15 +817,18 @@
 }
 
 .ap-selector-obligatorio {
-  font-weight: 600;
-  font-size: 0.68rem;
+  font-weight: 700;
   color: var(--icbc-red);
-  background: var(--red-bg);
-  border-radius: 4px;
-  padding: 0.05rem 0.4rem;
-  margin-left: 0.4rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  margin-left: 0.2rem;
+}
+
+.ap-selector-obligatorio-aviso {
+  font-size: 0.74rem;
+  color: var(--icbc-red);
+}
+
+.ap-select-link-pendiente {
+  border-color: var(--red-border);
 }
 
 .ap-chips-columnas {

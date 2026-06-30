@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   ScanSearch, Plus, X, RotateCcw, AlertTriangle, CheckCircle2,
-  XCircle, ChevronDown, ChevronUp, ExternalLink, Download, Type, Link2, Image as ImageIcon,
+  ChevronDown, ChevronUp, ExternalLink, Download, Type, Link2, Image as ImageIcon,
   Star, Table2, ClipboardList,
 } from 'lucide-react'
 import {
@@ -68,10 +68,14 @@ function FilaRegla({ regla, onChange, onEliminar, puedeEliminar }) {
         <button
           type="button"
           className={`ap-toggle-aa${regla.ignorarMayus ? ' active' : ''}`}
-          title="Ignorar mayúsculas/minúsculas"
+          title={regla.ignorarMayus
+            ? 'Ignora mayúsculas/minúsculas — tocá para hacer la búsqueda exacta (sensible a mayúsculas)'
+            : 'Búsqueda exacta (sensible a mayúsculas) — tocá para ignorar mayúsculas/minúsculas'}
+          aria-pressed={regla.ignorarMayus}
           onClick={() => onChange({ ...regla, ignorarMayus: !regla.ignorarMayus })}
         >
-          Aa
+          <span className="ap-toggle-aa-texto">Aa</span>
+          <span className="ap-toggle-aa-estado">{regla.ignorarMayus ? 'Ignora mayúsculas' : 'Exacto'}</span>
         </button>
       )}
       <button
@@ -114,6 +118,45 @@ function ChipColumna({ header, idx, seleccionada, esPrincipal, onToggle, onMarca
   )
 }
 
+// Renderiza la tabla pegada como una tabla HTML real (en vez del texto
+// crudo tab-separated, ilegible cuando las celdas traen contenido largo
+// como JSON de filtros). Muestra hasta 6 filas por default con opción
+// de expandir, y scroll horizontal si hay muchas columnas.
+function TablaPegada({ headers, filas, onEditar }) {
+  const [verTodas, setVerTodas] = useState(false)
+  const filasVisibles = verTodas ? filas : filas.slice(0, 6)
+
+  return (
+    <div className="ap-tabla-pegada-wrap">
+      <div className="ap-tabla-pegada-toolbar">
+        <span className="ap-tabla-pegada-info">{filas.length} fila{filas.length !== 1 ? 's' : ''} · {headers.length} columna{headers.length !== 1 ? 's' : ''}</span>
+        <button type="button" className="ap-btn-editar-pegado" onClick={onEditar}>Editar pegado</button>
+      </div>
+      <div className="ap-tabla-pegada-scroll">
+        <table className="ap-tabla-pegada">
+          <thead>
+            <tr>
+              {headers.map((h, i) => <th key={i}>{h || `Columna ${i + 1}`}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {filasVisibles.map((fila, i) => (
+              <tr key={i}>
+                {headers.map((_, j) => <td key={j} title={fila[j]}>{fila[j] || '—'}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {filas.length > 6 && (
+        <button type="button" className="ap-btn-ver-mas-tabla" onClick={() => setVerTodas(v => !v)}>
+          {verTodas ? 'Ver menos' : `Ver las ${filas.length} filas`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
   const tablaRef = useAutoResize(textoTabla, 150)
   const { headers, filas, tieneHeaders } = useMemo(() => parsearTabla(textoTabla), [textoTabla])
@@ -142,18 +185,34 @@ function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
     return construirPiezasDesdeTabla({ headers, filas }, seleccion)
   }, [headers, filas, tieneHeaders, seleccion])
 
+  const [editandoPegado, setEditandoPegado] = useState(true)
+
+  // En cuanto se detectan headers válidos, se pasa automáticamente a
+  // vista de tabla — el textarea crudo (una sola línea gigante por
+  // fila, ilegible con datos reales tipo JSON de filtros) queda oculto
+  // detrás de un botón "Editar pegado" por si hace falta repegar.
+  useEffect(() => {
+    if (tieneHeaders) setEditandoPegado(false)
+  }, [tieneHeaders])
+
   return (
     <>
-      <textarea
-        ref={tablaRef}
-        className="ap-textarea ap-textarea-tabla"
-        placeholder={PLACEHOLDER_TABLA}
-        value={textoTabla}
-        onChange={e => setTextoTabla(e.target.value)}
-      />
-      <p className="ap-hint">
-        Copiá el rango directo de Excel o Google Sheets (Ctrl+C) e pegalo acá — se detectan las columnas automáticamente por la primera fila.
-      </p>
+      {editandoPegado || !tieneHeaders ? (
+        <>
+          <textarea
+            ref={tablaRef}
+            className="ap-textarea ap-textarea-tabla"
+            placeholder={PLACEHOLDER_TABLA}
+            value={textoTabla}
+            onChange={e => setTextoTabla(e.target.value)}
+          />
+          <p className="ap-hint">
+            Copiá el rango directo de Excel o Google Sheets (Ctrl+C) e pegalo acá — se detectan las columnas automáticamente por la primera fila.
+          </p>
+        </>
+      ) : (
+        <TablaPegada headers={headers} filas={filas} onEditar={() => setEditandoPegado(true)} />
+      )}
 
       {textoTabla.trim() !== '' && !tieneHeaders && (
         <div className="ap-aviso-tabla">
@@ -186,10 +245,10 @@ function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
 
           <div className="ap-selector-bloque">
             <span className="ap-selector-titulo">
-              Columna con el link a escanear <span className="ap-selector-obligatorio">obligatorio</span>
+              Columna con el link a escanear <span className="ap-selector-obligatorio">*</span>
             </span>
             <select
-              className="ap-select-link"
+              className={`ap-select-link${seleccion.columnaLink == null ? ' ap-select-link-pendiente' : ''}`}
               value={seleccion.columnaLink ?? ''}
               onChange={e => setColumnaLink(e.target.value)}
             >
@@ -198,6 +257,9 @@ function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
                 <option key={idx} value={idx}>{h || `Columna ${idx + 1}`}</option>
               ))}
             </select>
+            {seleccion.columnaLink == null && (
+              <span className="ap-selector-obligatorio-aviso">* Obligatorio para poder auditar</span>
+            )}
           </div>
 
           <div className="ap-preview-tabla">
@@ -331,21 +393,6 @@ function FilaPiezaSimple({ pieza, error }) {
   )
 }
 
-function SeccionColapsable({ titulo, icono, count, tono, defaultOpen, children }) {
-  const [open, setOpen] = useState(defaultOpen)
-  if (count === 0) return null
-  return (
-    <div className={`ap-seccion-colapsable ap-tono-${tono}`}>
-      <button type="button" className="ap-seccion-colapsable-header" onClick={() => setOpen(v => !v)}>
-        {icono}
-        <span>{titulo} ({count})</span>
-        {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-      </button>
-      {open && <div className="ap-seccion-colapsable-body">{children}</div>}
-    </div>
-  )
-}
-
 // ============================================================================
 // Página
 // ============================================================================
@@ -367,7 +414,7 @@ export default function AuditoriaPiezas() {
   const [cargando, setCargando] = useState(false)
   const [progresoActual, setProgresoActual] = useState(null) // { pieza, indice, total }
   const [resultado, setResultado] = useState(null)
-  const [soloConCoincidencias, setSoloConCoincidencias] = useState(true)
+  const [filtroActivo, setFiltroActivo] = useState('conMatch') // 'todas' | 'conMatch' | 'sinMatch' | 'conError'
 
   const tablaParseada = useMemo(() => parsearTabla(textoTabla), [textoTabla])
 
@@ -422,7 +469,7 @@ export default function AuditoriaPiezas() {
     setSeleccionTabla(SELECCION_TABLA_INICIAL)
     setReglas([nuevaRegla()])
     setResultado(null)
-    setSoloConCoincidencias(true)
+    setFiltroActivo('conMatch')
   }
 
   function handleExportar(formato) {
@@ -443,11 +490,8 @@ export default function AuditoriaPiezas() {
     <div className="ap-root">
       <div className="ap-header">
         <div className="ap-header-titulo">
-          <ScanSearch size={22} />
-          <div>
-            <h1>Auditoría de Piezas</h1>
-            <p>Escaneá muchas piezas a la vez en busca de textos, links o imágenes puntuales.</p>
-          </div>
+          <h1>Auditoría de Piezas</h1>
+          <p>Escaneá muchas piezas a la vez en busca de textos, links o imágenes puntuales.</p>
         </div>
       </div>
 
@@ -561,34 +605,67 @@ export default function AuditoriaPiezas() {
 
       {resultado && (
         <div className="ap-resultado">
-          <div className="ap-resumen">
-            <div className="ap-resumen-card">
-              <span className="ap-resumen-num">{totalAuditadas}</span>
-              <span className="ap-resumen-label">Piezas auditadas</span>
-            </div>
-            <div className="ap-resumen-card ap-resumen-rojo">
-              <span className="ap-resumen-num">{resultado.conCoincidencias.length}</span>
-              <span className="ap-resumen-label">Con coincidencias</span>
-            </div>
-            <div className="ap-resumen-card ap-resumen-verde">
-              <span className="ap-resumen-num">{resultado.sinCoincidencias.length}</span>
-              <span className="ap-resumen-label">Sin coincidencias</span>
-            </div>
-            <div className="ap-resumen-card ap-resumen-gris">
-              <span className="ap-resumen-num">{resultado.conError.length}</span>
-              <span className="ap-resumen-label">No analizadas</span>
-            </div>
+          <div className="ap-resumen ap-resumen-clickeable">
+            <button
+              type="button"
+              className={`stat-card-clickeable${filtroActivo === 'todas' ? ' stat-card-clickeable-activo' : ''}`}
+              style={{ '--stat-card-color': 'var(--text-secondary)', ...(filtroActivo === 'todas' ? { background: 'var(--text-secondary)', borderColor: 'var(--text-secondary)' } : {}) }}
+              onClick={() => setFiltroActivo('todas')}
+            >
+              <span className="stat-card-clickeable-fila-superior">
+                <span className="stat-card-clickeable-dot" style={{ background: filtroActivo === 'todas' ? '#fff' : 'var(--text-secondary)' }} />
+                <span className="stat-card-clickeable-label" style={filtroActivo === 'todas' ? { color: '#fff' } : undefined}>Piezas auditadas</span>
+              </span>
+              <span className="stat-card-clickeable-valor" style={{ color: filtroActivo === 'todas' ? '#fff' : 'var(--text-secondary)' }}>{totalAuditadas}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`stat-card-clickeable${filtroActivo === 'conMatch' ? ' stat-card-clickeable-activo' : ''}`}
+              style={{ '--stat-card-color': 'var(--icbc-red)', ...(filtroActivo === 'conMatch' ? { background: 'var(--icbc-red)', borderColor: 'var(--icbc-red)' } : {}) }}
+              onClick={() => setFiltroActivo('conMatch')}
+            >
+              <span className="stat-card-clickeable-fila-superior">
+                <span className="stat-card-clickeable-dot" style={{ background: filtroActivo === 'conMatch' ? '#fff' : 'var(--icbc-red)' }} />
+                <span className="stat-card-clickeable-label" style={filtroActivo === 'conMatch' ? { color: '#fff' } : undefined}>Con coincidencias</span>
+              </span>
+              <span className="stat-card-clickeable-valor" style={{ color: filtroActivo === 'conMatch' ? '#fff' : 'var(--icbc-red)' }}>{resultado.conCoincidencias.length}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`stat-card-clickeable${filtroActivo === 'sinMatch' ? ' stat-card-clickeable-activo' : ''}`}
+              style={{ '--stat-card-color': 'var(--green-text)', ...(filtroActivo === 'sinMatch' ? { background: 'var(--green-text)', borderColor: 'var(--green-text)' } : {}) }}
+              onClick={() => setFiltroActivo('sinMatch')}
+            >
+              <span className="stat-card-clickeable-fila-superior">
+                <span className="stat-card-clickeable-dot" style={{ background: filtroActivo === 'sinMatch' ? '#fff' : 'var(--green-text)' }} />
+                <span className="stat-card-clickeable-label" style={filtroActivo === 'sinMatch' ? { color: '#fff' } : undefined}>Sin coincidencias</span>
+              </span>
+              <span className="stat-card-clickeable-valor" style={{ color: filtroActivo === 'sinMatch' ? '#fff' : 'var(--green-text)' }}>{resultado.sinCoincidencias.length}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`stat-card-clickeable${filtroActivo === 'conError' ? ' stat-card-clickeable-activo' : ''}`}
+              style={{ '--stat-card-color': 'var(--text-muted)', ...(filtroActivo === 'conError' ? { background: 'var(--text-muted)', borderColor: 'var(--text-muted)' } : {}) }}
+              onClick={() => setFiltroActivo('conError')}
+            >
+              <span className="stat-card-clickeable-fila-superior">
+                <span className="stat-card-clickeable-dot" style={{ background: filtroActivo === 'conError' ? '#fff' : 'var(--text-muted)' }} />
+                <span className="stat-card-clickeable-label" style={filtroActivo === 'conError' ? { color: '#fff' } : undefined}>No analizadas</span>
+              </span>
+              <span className="stat-card-clickeable-valor" style={{ color: filtroActivo === 'conError' ? '#fff' : 'var(--text-muted)' }}>{resultado.conError.length}</span>
+            </button>
           </div>
 
           <div className="ap-resultado-toolbar">
-            <label className="ap-checkbox-filtro">
-              <input
-                type="checkbox"
-                checked={soloConCoincidencias}
-                onChange={e => setSoloConCoincidencias(e.target.checked)}
-              />
-              Mostrar solo piezas con coincidencias
-            </label>
+            <span className="ap-resultado-toolbar-titulo">
+              {filtroActivo === 'todas' && 'Mostrando todas las piezas'}
+              {filtroActivo === 'conMatch' && 'Mostrando piezas con coincidencias'}
+              {filtroActivo === 'sinMatch' && 'Mostrando piezas sin coincidencias'}
+              {filtroActivo === 'conError' && 'Mostrando piezas no analizadas'}
+            </span>
             <div className="ap-toolbar-derecha">
               <button type="button" className="ap-btn-secundario" onClick={() => handleExportar('csv')}>
                 <Download size={14} /> CSV
@@ -602,44 +679,36 @@ export default function AuditoriaPiezas() {
             </div>
           </div>
 
-          <div className="ap-resultado-lista">
-            {resultado.conCoincidencias.length === 0 && (
-              <div className="ap-sin-resultados">
-                <CheckCircle2 size={18} />
-                No se encontraron coincidencias en ninguna pieza analizada.
-              </div>
-            )}
-            {resultado.conCoincidencias.map(item => (
-              <CardPiezaConMatch key={item.pieza.id} item={item} />
-            ))}
-          </div>
+          {(filtroActivo === 'todas' || filtroActivo === 'conMatch') && (
+            <div className="ap-resultado-lista">
+              {resultado.conCoincidencias.length === 0 && (
+                <div className="ap-sin-resultados">
+                  <CheckCircle2 size={18} />
+                  No se encontraron coincidencias en ninguna pieza analizada.
+                </div>
+              )}
+              {resultado.conCoincidencias.map(item => (
+                <CardPiezaConMatch key={item.pieza.id} item={item} />
+              ))}
+            </div>
+          )}
 
-          {!soloConCoincidencias && (
-            <>
-              <SeccionColapsable
-                titulo="Sin coincidencias"
-                icono={<CheckCircle2 size={15} />}
-                count={resultado.sinCoincidencias.length}
-                tono="verde"
-                defaultOpen={false}
-              >
-                {resultado.sinCoincidencias.map(item => (
-                  <FilaPiezaSimple key={item.pieza.id} pieza={item.pieza} />
-                ))}
-              </SeccionColapsable>
+          {(filtroActivo === 'todas' || filtroActivo === 'sinMatch') && resultado.sinCoincidencias.length > 0 && (
+            <div className="ap-resultado-lista-simple">
+              {filtroActivo === 'todas' && <span className="ap-resultado-sublabel">Sin coincidencias</span>}
+              {resultado.sinCoincidencias.map(item => (
+                <FilaPiezaSimple key={item.pieza.id} pieza={item.pieza} />
+              ))}
+            </div>
+          )}
 
-              <SeccionColapsable
-                titulo="No se pudieron analizar"
-                icono={<XCircle size={15} />}
-                count={resultado.conError.length}
-                tono="gris"
-                defaultOpen={false}
-              >
-                {resultado.conError.map(item => (
-                  <FilaPiezaSimple key={item.pieza.id} pieza={item.pieza} error={item.error} />
-                ))}
-              </SeccionColapsable>
-            </>
+          {(filtroActivo === 'todas' || filtroActivo === 'conError') && resultado.conError.length > 0 && (
+            <div className="ap-resultado-lista-simple">
+              {filtroActivo === 'todas' && <span className="ap-resultado-sublabel">No se pudieron analizar</span>}
+              {resultado.conError.map(item => (
+                <FilaPiezaSimple key={item.pieza.id} pieza={item.pieza} error={item.error} />
+              ))}
+            </div>
           )}
         </div>
       )}
