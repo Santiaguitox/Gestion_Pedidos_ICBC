@@ -7,7 +7,7 @@ import {
 import {
   parsearPiezasSimple, parsearTabla, construirPiezasDesdeTabla,
   nuevaRegla, reglaEsValida, ejecutarAuditoria,
-  generarListadoPiezasTexto, descargarArchivo, TIPOS_REGLA,
+  generarListadoConCoincidenciasTexto, generarListadoSinCoincidenciasTexto, descargarArchivo, TIPOS_REGLA,
 } from '@/lib/auditoria/ejecutarAuditoria'
 import '@/styles/AuditoriaPiezas.css'
 
@@ -480,10 +480,16 @@ export default function AuditoriaPiezas() {
     setFiltroActivo('conMatch')
   }
 
-  function handleExportarPiezas() {
+  function handleExportarConCoincidencias() {
     if (!resultado) return
     const fecha = new Date().toISOString().slice(0, 10)
-    descargarArchivo(generarListadoPiezasTexto(resultado), `piezas-auditadas-${fecha}.txt`, 'text/plain;charset=utf-8')
+    descargarArchivo(generarListadoConCoincidenciasTexto(resultado), `piezas-con-coincidencias-${fecha}.txt`, 'text/plain;charset=utf-8')
+  }
+
+  function handleExportarSinCoincidencias() {
+    if (!resultado) return
+    const fecha = new Date().toISOString().slice(0, 10)
+    descargarArchivo(generarListadoSinCoincidenciasTexto(resultado), `piezas-sin-coincidencias-${fecha}.txt`, 'text/plain;charset=utf-8')
   }
 
   const totalAuditadas = resultado
@@ -684,9 +690,16 @@ export default function AuditoriaPiezas() {
               {filtroActivo === 'conError' && 'Mostrando piezas no analizadas'}
             </span>
             <div className="ap-toolbar-derecha">
-              <button type="button" className="ap-btn-secundario" onClick={handleExportarPiezas}>
-                <Download size={14} /> Descargar TXT (piezas auditadas)
-              </button>
+              {resultado.conCoincidencias.length > 0 && (
+                <button type="button" className="ap-btn-secundario" onClick={handleExportarConCoincidencias}>
+                  <Download size={14} /> TXT con coincidencias
+                </button>
+              )}
+              {resultado.sinCoincidencias.length > 0 && (
+                <button type="button" className="ap-btn-secundario" onClick={handleExportarSinCoincidencias}>
+                  <Download size={14} /> TXT sin coincidencias
+                </button>
+              )}
               <button type="button" className="ap-btn-secundario" onClick={handleVolverAEditar}>
                 <Pencil size={14} /> Editar piezas o reglas
               </button>

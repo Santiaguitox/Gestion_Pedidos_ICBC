@@ -322,55 +322,53 @@ export async function ejecutarAuditoria({ piezas, reglas, onProgreso }) {
 // EXPORTAR REPORTE
 // ============================================================================
 
-// Arma un TXT en formato tabla legible (columnas alineadas con padding,
-// "uno abajo del otro") con TODAS las piezas que se auditaron — no el
-// detalle de hallazgos, sino el listado de piezas en sí, para que el
-// usuario tenga a mano "sobre qué piezas trabajó". Usa exactamente las
-// columnas (campos) que el usuario eligió al pegar la tabla — distintos
-// usuarios pueden elegir distintas columnas (con o sin ID, por
-// ejemplo), así que las columnas NO son fijas — más el LINK siempre al
-// final, y el estado de cada pieza (con coincidencias / sin
-// coincidencias / error).
-export function generarListadoPiezasTexto({ conCoincidencias, sinCoincidencias, conError }) {
-  const todas = [
-    ...conCoincidencias.map(x => ({ pieza: x.pieza, estado: 'Con coincidencias' })),
-    ...sinCoincidencias.map(x => ({ pieza: x.pieza, estado: 'Sin coincidencias' })),
-    ...conError.map(x => ({ pieza: x.pieza, estado: 'Error' })),
-  ]
-
-  // Columnas dinámicas: unión de las etiquetas de 'campos' de todas las
-  // piezas, preservando el orden en que el usuario las eligió. En modo
-  // simple (sin tabla pegada), 'campos' trae un único { etiqueta:
-  // 'Nombre' }, así que esto degrada naturalmente a una sola columna.
+// Arma un TXT con una pieza por línea, columnas separadas por TAB real
+// (no espacios de padding) — un tab real se pega/abre como columnas
+// reales en Excel, Google Sheets, Notion, etc., y no depende de que el
+// editor use fuente monoespaciada para verse alineado. El padding con
+// espacios se ve "tabulado raro" en editores con fuente proporcional
+// (Word, Notion) y además alarga las líneas, lo que las hace wrappear
+// en pantallas angostas — con TAB cada línea queda mucho más corta.
+// Usa exactamente las columnas (campos) que el usuario eligió al pegar
+// la tabla — distintos usuarios pueden elegir distintas columnas (con o
+// sin ID, por ejemplo) — más el LINK siempre al final.
+function listadoTabulado(piezas, titulo) {
   const etiquetas = []
-  for (const { pieza } of todas) {
+  for (const pieza of piezas) {
     for (const campo of pieza.campos) {
       if (!etiquetas.includes(campo.etiqueta)) etiquetas.push(campo.etiqueta)
     }
   }
   if (etiquetas.length === 0) etiquetas.push('Nombre')
 
-  const encabezados = [...etiquetas, 'Link', 'Estado']
-  const filas = todas.map(({ pieza, estado }) => {
+  const encabezados = [...etiquetas, 'Link']
+  const filas = piezas.map(pieza => {
     const valoresCampos = etiquetas.map(etq => pieza.campos.find(c => c.etiqueta === etq)?.valor ?? (etq === 'Nombre' ? pieza.nombre : ''))
-    return [...valoresCampos, pieza.url, estado]
+    return [...valoresCampos, pieza.url]
   })
 
-  // Ancho de cada columna = el más largo entre su encabezado y todos
-  // sus valores, para que el separador " | " quede alineado en
-  // columnas reales al abrir el archivo en cualquier editor de texto
-  // monoespaciado (Notepad, VSCode, etc.).
-  const anchos = encabezados.map((h, i) => Math.max(h.length, ...filas.map(f => String(f[i] ?? '').length)))
-  const formatearFila = fila => fila.map((v, i) => String(v ?? '').padEnd(anchos[i])).join(' | ')
-
   const lineas = []
-  lineas.push(`Piezas auditadas — ${new Date().toLocaleString('es-AR')}`)
+  lineas.push(`${titulo} — ${new Date().toLocaleString('es-AR')}`)
+  lineas.push(`${piezas.length} pieza${piezas.length !== 1 ? 's' : ''}`)
   lineas.push('')
-  lineas.push(formatearFila(encabezados))
-  lineas.push(anchos.map(a => '-'.repeat(a)).join('-|-'))
-  filas.forEach(f => lineas.push(formatearFila(f)))
+  lineas.push(encabezados.join('\t'))
+  filas.forEach(f => lineas.push(f.join('\t')))
 
   return lineas.join('\n')
+}
+
+// Listado de las piezas que TUVIERON coincidencia — es el subconjunto
+// que realmente aporta valor: las piezas auditadas en su totalidad ya
+// las tiene el usuario (las cargó él en el paso 1), lo que necesita es
+// justamente filtrar cuáles requieren trabajo.
+export function generarListadoConCoincidenciasTexto({ conCoincidencias }) {
+  return listadoTabulado(conCoincidencias.map(x => x.pieza), 'Piezas con coincidencias')
+}
+
+// Listado de las piezas SIN coincidencia — útil como complemento para
+// confirmar qué piezas NO requieren cambios (descarte explícito).
+export function generarListadoSinCoincidenciasTexto({ sinCoincidencias }) {
+  return listadoTabulado(sinCoincidencias.map(x => x.pieza), 'Piezas sin coincidencias')
 }
 
 export function descargarArchivo(contenido, nombreArchivo, tipoMime) {
