@@ -7,7 +7,7 @@ import {
 import {
   parsearPiezasSimple, parsearTabla, construirPiezasDesdeTabla,
   nuevaRegla, reglaEsValida, ejecutarAuditoria,
-  generarReporteTexto, generarReporteCsv, descargarArchivo, TIPOS_REGLA,
+  generarListadoPiezasTexto, descargarArchivo, TIPOS_REGLA,
 } from '@/lib/auditoria/ejecutarAuditoria'
 import '@/styles/AuditoriaPiezas.css'
 
@@ -480,14 +480,10 @@ export default function AuditoriaPiezas() {
     setFiltroActivo('conMatch')
   }
 
-  function handleExportar(formato) {
+  function handleExportarPiezas() {
     if (!resultado) return
     const fecha = new Date().toISOString().slice(0, 10)
-    if (formato === 'txt') {
-      descargarArchivo(generarReporteTexto(resultado), `auditoria-piezas-${fecha}.txt`, 'text/plain;charset=utf-8')
-    } else {
-      descargarArchivo(generarReporteCsv(resultado), `auditoria-piezas-${fecha}.csv`, 'text/csv;charset=utf-8')
-    }
+    descargarArchivo(generarListadoPiezasTexto(resultado), `piezas-auditadas-${fecha}.txt`, 'text/plain;charset=utf-8')
   }
 
   const totalAuditadas = resultado
@@ -688,11 +684,8 @@ export default function AuditoriaPiezas() {
               {filtroActivo === 'conError' && 'Mostrando piezas no analizadas'}
             </span>
             <div className="ap-toolbar-derecha">
-              <button type="button" className="ap-btn-secundario" onClick={() => handleExportar('csv')}>
-                <Download size={14} /> CSV
-              </button>
-              <button type="button" className="ap-btn-secundario" onClick={() => handleExportar('txt')}>
-                <Download size={14} /> TXT
+              <button type="button" className="ap-btn-secundario" onClick={handleExportarPiezas}>
+                <Download size={14} /> Descargar TXT (piezas auditadas)
               </button>
               <button type="button" className="ap-btn-secundario" onClick={handleVolverAEditar}>
                 <Pencil size={14} /> Editar piezas o reglas

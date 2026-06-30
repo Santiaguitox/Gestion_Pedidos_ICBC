@@ -322,109 +322,55 @@ export async function ejecutarAuditoria({ piezas, reglas, onProgreso }) {
 // EXPORTAR REPORTE
 // ============================================================================
 
-// Arma la línea "• Etiqueta: valor · Etiqueta2: valor2" a partir de los
-// campos elegidos por el usuario (modo tabla) — en modo simple, 'campos'
-// trae un único { etiqueta: 'Nombre', valor }, así que el formato queda
-// igual de simple que antes para ese caso.
-function lineaCampos(pieza) {
-  if (pieza.campos.length === 0) return pieza.nombre
-  return pieza.campos.map(c => `${c.etiqueta}: ${c.valor}`).join(' · ')
-}
+// Arma un TXT en formato tabla legible (columnas alineadas con padding,
+// "uno abajo del otro") con TODAS las piezas que se auditaron — no el
+// detalle de hallazgos, sino el listado de piezas en sí, para que el
+// usuario tenga a mano "sobre qué piezas trabajó". Usa exactamente las
+// columnas (campos) que el usuario eligió al pegar la tabla — distintos
+// usuarios pueden elegir distintas columnas (con o sin ID, por
+// ejemplo), así que las columnas NO son fijas — más el LINK siempre al
+// final, y el estado de cada pieza (con coincidencias / sin
+// coincidencias / error).
+export function generarListadoPiezasTexto({ conCoincidencias, sinCoincidencias, conError }) {
+  const todas = [
+    ...conCoincidencias.map(x => ({ pieza: x.pieza, estado: 'Con coincidencias' })),
+    ...sinCoincidencias.map(x => ({ pieza: x.pieza, estado: 'Sin coincidencias' })),
+    ...conError.map(x => ({ pieza: x.pieza, estado: 'Error' })),
+  ]
 
-export function generarReporteTexto({ conCoincidencias, sinCoincidencias, conError }) {
+  // Columnas dinámicas: unión de las etiquetas de 'campos' de todas las
+  // piezas, preservando el orden en que el usuario las eligió. En modo
+  // simple (sin tabla pegada), 'campos' trae un único { etiqueta:
+  // 'Nombre' }, así que esto degrada naturalmente a una sola columna.
+  const etiquetas = []
+  for (const { pieza } of todas) {
+    for (const campo of pieza.campos) {
+      if (!etiquetas.includes(campo.etiqueta)) etiquetas.push(campo.etiqueta)
+    }
+  }
+  if (etiquetas.length === 0) etiquetas.push('Nombre')
+
+  const encabezados = [...etiquetas, 'Link', 'Estado']
+  const filas = todas.map(({ pieza, estado }) => {
+    const valoresCampos = etiquetas.map(etq => pieza.campos.find(c => c.etiqueta === etq)?.valor ?? (etq === 'Nombre' ? pieza.nombre : ''))
+    return [...valoresCampos, pieza.url, estado]
+  })
+
+  // Ancho de cada columna = el más largo entre su encabezado y todos
+  // sus valores, para que el separador " | " quede alineado en
+  // columnas reales al abrir el archivo en cualquier editor de texto
+  // monoespaciado (Notepad, VSCode, etc.).
+  const anchos = encabezados.map((h, i) => Math.max(h.length, ...filas.map(f => String(f[i] ?? '').length)))
+  const formatearFila = fila => fila.map((v, i) => String(v ?? '').padEnd(anchos[i])).join(' | ')
+
   const lineas = []
-  lineas.push('AUDITORÍA DE PIEZAS')
-  lineas.push(`Fecha: ${new Date().toLocaleString('es-AR')}`)
+  lineas.push(`Piezas auditadas — ${new Date().toLocaleString('es-AR')}`)
   lineas.push('')
-  lineas.push(`Piezas con coincidencias: ${conCoincidencias.length}`)
-  lineas.push(`Piezas sin coincidencias: ${sinCoincidencias.length}`)
-  lineas.push(`Piezas con error: ${conError.length}`)
-  lineas.push('')
-  lineas.push('='.repeat(60))
-  lineas.push('PIEZAS CON COINCIDENCIAS')
-  lineas.push('='.repeat(60))
-
-  for (const { pieza, hallazgos } of conCoincidencias) {
-    lineas.push('')
-    lineas.push(`• ${lineaCampos(pieza)}`)
-    lineas.push(`  ${pieza.url}`)
-    for (const { regla, ocurrencias } of hallazgos) {
-      lineas.push(`  - [${TIPOS_REGLA[regla.tipo]}] "${regla.valor}" — ${ocurrencias.length} ocurrencia(s)`)
-      ocurrencias.slice(0, 5).forEach(o => {
-        const contexto = regla.tipo === 'texto' ? `${o.antes}${o.match}${o.despues}` : o.match
-        lineas.push(`      · ${contexto}`)
-      })
-      if (ocurrencias.length > 5) lineas.push(`      · …y ${ocurrencias.length - 5} más`)
-    }
-  }
-
-  if (sinCoincidencias.length > 0) {
-    lineas.push('')
-    lineas.push('='.repeat(60))
-    lineas.push('PIEZAS SIN COINCIDENCIAS')
-    lineas.push('='.repeat(60))
-    for (const { pieza } of sinCoincidencias) {
-      lineas.push(`• ${lineaCampos(pieza)} — ${pieza.url}`)
-    }
-  }
-
-  if (conError.length > 0) {
-    lineas.push('')
-    lineas.push('='.repeat(60))
-    lineas.push('PIEZAS NO ANALIZADAS (ERROR)')
-    lineas.push('='.repeat(60))
-    for (const { pieza, error } of conError) {
-      lineas.push(`• ${lineaCampos(pieza)} — ${pieza.url}`)
-      lineas.push(`  Motivo: ${error}`)
-    }
-  }
+  lineas.push(formatearFila(encabezados))
+  lineas.push(anchos.map(a => '-'.repeat(a)).join('-|-'))
+  filas.forEach(f => lineas.push(formatearFila(f)))
 
   return lineas.join('\n')
-}
-
-export function generarReporteCsv({ conCoincidencias, sinCoincidencias, conError }) {
-  // Las columnas de identificación son dinámicas: se toman las
-  // etiquetas de 'campos' de todas las piezas (unión, preservando
-  // orden de aparición) — así el CSV tiene una columna propia por cada
-  // columna que el usuario eligió en el modo tabla (ID ENVIO, PIEZA
-  // ENVIADA, VENCIMIENTO, etc.), en vez de un único campo "Pieza"
-  // aplastado. En modo simple, esto da una sola columna "Nombre".
-  const todasLasPiezas = [
-    ...conCoincidencias.map(x => x.pieza),
-    ...sinCoincidencias.map(x => x.pieza),
-    ...conError.map(x => x.pieza),
-  ]
-  const etiquetasCampos = []
-  for (const pieza of todasLasPiezas) {
-    for (const campo of pieza.campos) {
-      if (!etiquetasCampos.includes(campo.etiqueta)) etiquetasCampos.push(campo.etiqueta)
-    }
-  }
-  if (etiquetasCampos.length === 0) etiquetasCampos.push('Nombre')
-
-  function valoresCampos(pieza) {
-    return etiquetasCampos.map(etq => pieza.campos.find(c => c.etiqueta === etq)?.valor ?? (etq === 'Nombre' ? pieza.nombre : ''))
-  }
-
-  const filas = [[...etiquetasCampos, 'URL', 'Estado', 'Regla', 'Tipo', 'Ocurrencias', 'Contexto']]
-
-  for (const { pieza, hallazgos } of conCoincidencias) {
-    for (const { regla, ocurrencias } of hallazgos) {
-      const contexto = ocurrencias.slice(0, 3).map(o =>
-        regla.tipo === 'texto' ? `${o.antes}${o.match}${o.despues}` : o.match
-      ).join(' | ')
-      filas.push([...valoresCampos(pieza), pieza.url, 'Coincidencia', regla.valor, TIPOS_REGLA[regla.tipo], String(ocurrencias.length), contexto])
-    }
-  }
-  for (const { pieza } of sinCoincidencias) {
-    filas.push([...valoresCampos(pieza), pieza.url, 'Sin coincidencias', '', '', '', ''])
-  }
-  for (const { pieza, error } of conError) {
-    filas.push([...valoresCampos(pieza), pieza.url, 'Error', '', '', '', error])
-  }
-
-  const escapar = v => `"${String(v).replace(/"/g, '""')}"`
-  return filas.map(fila => fila.map(escapar).join(',')).join('\n')
 }
 
 export function descargarArchivo(contenido, nombreArchivo, tipoMime) {
