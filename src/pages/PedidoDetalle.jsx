@@ -114,22 +114,32 @@ export default function PedidoDetalle() {
     fetchPedido()
   }
 
-  async function handleRegistrarSheet(data) {
+  async function handleRegistrarSheet(filas) {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/escribir-sheet`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          hoja: 'pedidos',
-          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.instancia, data.fecha_aprobacion, data.hora_aprobacion, data.cantidad_envios, data.aclaraciones, data.dia_programacion, data.hora_programacion],
-          fueraDeHora: !!data.fueraDeHora,
+      // 'filas' es un array — 1 elemento en el caso normal (mismo día
+      // para todo el pedido), o varios si se cargaron grupos con
+      // días/horarios distintos por pieza. Se escribe una fila al
+      // Sheet por cada una, secuencialmente (no en paralelo, para no
+      // pisarse al determinar en qué número de fila quedó escrita cada
+      // una dentro de la edge function).
+      for (const data of filas) {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/escribir-sheet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            hoja: 'pedidos',
+            data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.instancia, data.fecha_aprobacion, data.hora_aprobacion, data.cantidad_envios, data.aclaraciones, data.dia_programacion, data.hora_programacion],
+            fueraDeHora: !!data.fueraDeHora,
+          })
         })
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error ?? 'Error al registrar en Sheet')
+        const result = await res.json()
+        if (!res.ok) throw new Error(result.error ?? 'Error al registrar en Sheet')
+      }
       setShowSheet(false)
-      setSuccessMsg('El pedido fue registrado en Google Sheets correctamente.')
+      setSuccessMsg(filas.length > 1
+        ? `El pedido fue registrado en Google Sheets correctamente (${filas.length} filas).`
+        : 'El pedido fue registrado en Google Sheets correctamente.')
     } catch (err) {
       showError(err.message || 'Error al registrar en Sheet')
     }

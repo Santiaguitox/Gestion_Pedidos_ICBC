@@ -69,6 +69,15 @@ async function getGoogleAccessToken(serviceAccountJson: string): Promise<string>
 // mismo #ff9900 que ya se usa en otras partes de la app para esta
 // categoría. La API de Sheets espera RGB en escala 0-1, no 0-255.
 const COLOR_FUERA_DE_HORA = { red: 1, green: 0.6, blue: 0 }
+// Blanco explícito — IMPORTANTE: no alcanza con "no pintar" la fila
+// cuando fueraDeHora es false. Al insertar una fila nueva con
+// INSERT_ROWS, Google Sheets hereda automáticamente el formato de la
+// fila de arriba — si esa fila anterior había quedado pintada de
+// naranja, la fila nueva nace pintada también aunque su checkbox no
+// esté tildado. Por eso SIEMPRE se aplica un color de fondo explícito
+// después del append (blanco en el caso normal, naranja si corresponde),
+// nunca se deja "sin tocar".
+const COLOR_BLANCO = { red: 1, green: 1, blue: 1 }
 
 async function appendRow(accessToken: string, hoja: string, values: string[]) {
   const range = `'${hoja}'!A:K`
@@ -105,12 +114,14 @@ async function getSheetIdPorNombre(accessToken: string, nombreHoja: string): Pro
   return sheet.properties.sheetId
 }
 
-// Pinta de fondo COLOR_FUERA_DE_HORA toda la fila recién agregada.
-// 'updatedRange' viene de la respuesta de appendRow, con forma tipo
-// "'Pedidos 2026'!A15:K15" — de ahí se extrae el número de fila (15)
-// para saber exactamente qué fila pintar (la API de append no permite
-// pintar en la misma llamada, hace falta un batchUpdate aparte).
-async function pintarFilaFueraDeHora(accessToken: string, sheetId: number, updatedRange: string, cantidadColumnas: number) {
+// Pinta de fondo 'color' toda la fila recién agregada. 'updatedRange'
+// viene de la respuesta de appendRow, con forma tipo "'Pedidos
+// 2026'!A15:K15" — de ahí se extrae el número de fila (15) para saber
+// exactamente qué fila pintar (la API de append no permite pintar en
+// la misma llamada, hace falta un batchUpdate aparte). Se llama SIEMPRE
+// (con blanco o naranja según corresponda) — ver comentario en
+// COLOR_BLANCO sobre por qué no alcanza con omitir esta llamada.
+async function pintarFila(accessToken: string, sheetId: number, updatedRange: string, cantidadColumnas: number, color: { red: number, green: number, blue: number }) {
   const match = updatedRange.match(/![A-Z]+(\d+):/)
   if (!match) throw new Error(`No se pudo determinar el número de fila desde '${updatedRange}'`)
   const fila = parseInt(match[1], 10)
@@ -126,7 +137,7 @@ async function pintarFilaFueraDeHora(accessToken: string, sheetId: number, updat
           startColumnIndex: 0,
           endColumnIndex: cantidadColumnas,
         },
-        cell: { userEnteredFormat: { backgroundColor: COLOR_FUERA_DE_HORA } },
+        cell: { userEnteredFormat: { backgroundColor: color } },
         fields: 'userEnteredFormat.backgroundColor',
       },
     }],
@@ -186,16 +197,18 @@ serve(async (req) => {
     const accessToken = await getGoogleAccessToken(serviceAccountJson)
     const appendResult = await appendRow(accessToken, hojaTarget, data)
 
-    // Si el pedido se marcó como "fuera de hora" en el formulario, se
-    // pinta la fila recién escrita con el color #ff9900 — requiere un
-    // segundo llamado (batchUpdate) porque la API de append no permite
-    // setear formato en la misma operación.
-    if (fueraDeHora) {
-      const updatedRange = appendResult?.updates?.updatedRange
-      if (updatedRange) {
-        const sheetId = await getSheetIdPorNombre(accessToken, hojaTarget)
-        await pintarFilaFueraDeHora(accessToken, sheetId, updatedRange, esperadas)
-      }
+    // SIEMPRE se fija un color de fondo explícito en la fila recién
+    // escrita (blanco en el caso normal, #ff9900 si fueraDeHora) —
+    // requiere un segundo llamado (batchUpdate) porque la API de append
+    // no permite setear formato en la misma operación. No se puede
+    // omitir esta llamada cuando fueraDeHora es false: al insertar una
+    // fila nueva, Sheets hereda el formato de la fila de arriba, así
+    // que si la fila anterior había quedado naranja, la nueva nacería
+    // naranja también si no se la pinta de blanco explícitamente.
+    const updatedRange = appendResult?.updates?.updatedRange
+    if (updatedRange) {
+      const sheetId = await getSheetIdPorNombre(accessToken, hojaTarget)
+      await pintarFila(accessToken, sheetId, updatedRange, esperadas, fueraDeHora ? COLOR_FUERA_DE_HORA : COLOR_BLANCO)
     }
 
     return new Response(JSON.stringify({ ok: true }), {

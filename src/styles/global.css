@@ -4742,6 +4742,134 @@ select:focus {
   cursor: pointer;
 }
 
+/* Toggle "¿Mismo día y horario para todas las piezas?" — dos botones
+   exclusivos, mismo lenguaje visual que otros toggles de la app. */
+.sheet-toggle-mismo-dia {
+  display: flex;
+  gap: 0.5rem;
+}
+.sheet-toggle-opcion {
+  flex: 1;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sheet-toggle-opcion:hover {
+  border-color: var(--border-strong);
+}
+.sheet-toggle-opcion.activo {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--icbc-red);
+  font-weight: 600;
+}
+
+/* Editor de grupos (días/horarios distintos por pieza) */
+.sheet-grupos-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.sheet-grupo-card {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.sheet-grupo-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.sheet-grupo-eliminar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sheet-grupo-eliminar:hover:not(:disabled) {
+  background: var(--red-bg);
+  color: var(--icbc-red);
+}
+.sheet-grupo-eliminar:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.sheet-grupo-piezas-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+  display: block;
+}
+.sheet-grupo-piezas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.sheet-grupo-piezas-vacio {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.sheet-grupo-pieza-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sheet-grupo-pieza-chip:has(input:checked) {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--icbc-red);
+  font-weight: 600;
+}
+.sheet-grupo-pieza-chip input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+.sheet-btn-agregar-grupo {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sheet-btn-agregar-grupo:hover {
+  border-color: var(--icbc-red);
+  color: var(--icbc-red);
+}
+
 /* ─── Calendario — label sección finalizados ──────────────────────────────── */
 .cal-section-label {
   font-size: 0.6875rem;
