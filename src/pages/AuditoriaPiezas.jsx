@@ -488,18 +488,6 @@ export default function AuditoriaPiezas() {
     setFiltroRegla('todas')
   }
 
-  function handleExportarConCoincidencias() {
-    if (!resultado) return
-    const fecha = new Date().toISOString().slice(0, 10)
-    descargarArchivo(generarListadoConCoincidenciasTexto(resultado), `piezas-con-coincidencias-${fecha}.txt`, 'text/plain;charset=utf-8')
-  }
-
-  function handleExportarSinCoincidencias() {
-    if (!resultado) return
-    const fecha = new Date().toISOString().slice(0, 10)
-    descargarArchivo(generarListadoSinCoincidenciasTexto(resultado), `piezas-sin-coincidencias-${fecha}.txt`, 'text/plain;charset=utf-8')
-  }
-
   const totalAuditadas = resultado
     ? resultado.conCoincidencias.length + resultado.sinCoincidencias.length + resultado.conError.length
     : 0
@@ -518,6 +506,26 @@ export default function AuditoriaPiezas() {
       .map(item => ({ ...item, hallazgos: item.hallazgos.filter(h => h.regla.id === filtroRegla) }))
       .filter(item => item.hallazgos.length > 0)
   }, [resultado, filtroRegla])
+
+  function handleExportarConCoincidencias() {
+    if (!resultado) return
+    const fecha = new Date().toISOString().slice(0, 10)
+    // Respeta el filtro de regla activo: si hay una regla seleccionada,
+    // exporta solo ESAS piezas (conCoincidenciasFiltradas), no todas las
+    // que matchearon cualquier regla.
+    const sufijoNombre = filtroRegla === 'todas' ? '' : '-filtrado-por-regla'
+    descargarArchivo(
+      generarListadoConCoincidenciasTexto({ conCoincidencias: conCoincidenciasFiltradas }),
+      `piezas-con-coincidencias${sufijoNombre}-${fecha}.txt`,
+      'text/plain;charset=utf-8'
+    )
+  }
+
+  function handleExportarSinCoincidencias() {
+    if (!resultado) return
+    const fecha = new Date().toISOString().slice(0, 10)
+    descargarArchivo(generarListadoSinCoincidenciasTexto(resultado), `piezas-sin-coincidencias-${fecha}.txt`, 'text/plain;charset=utf-8')
+  }
 
 
   return (
@@ -716,7 +724,7 @@ export default function AuditoriaPiezas() {
             <div className="ap-toolbar-derecha">
               {resultado.conCoincidencias.length > 0 && (
                 <button type="button" className="ap-btn-secundario" onClick={handleExportarConCoincidencias}>
-                  <Download size={14} /> TXT con coincidencias
+                  <Download size={14} /> {filtroRegla === 'todas' ? 'TXT con coincidencias' : `TXT (${conCoincidenciasFiltradas.length} de esta regla)`}
                 </button>
               )}
               {resultado.sinCoincidencias.length > 0 && (

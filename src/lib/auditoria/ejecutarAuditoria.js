@@ -322,16 +322,11 @@ export async function ejecutarAuditoria({ piezas, reglas, onProgreso }) {
 // EXPORTAR REPORTE
 // ============================================================================
 
-// Arma un TXT con una pieza por línea, columnas separadas por TAB real
-// (no espacios de padding) — un tab real se pega/abre como columnas
-// reales en Excel, Google Sheets, Notion, etc., y no depende de que el
-// editor use fuente monoespaciada para verse alineado. El padding con
-// espacios se ve "tabulado raro" en editores con fuente proporcional
-// (Word, Notion) y además alarga las líneas, lo que las hace wrappear
-// en pantallas angostas — con TAB cada línea queda mucho más corta.
-// Usa exactamente las columnas (campos) que el usuario eligió al pegar
-// la tabla — distintos usuarios pueden elegir distintas columnas (con o
-// sin ID, por ejemplo) — más el LINK siempre al final.
+// Arma un TXT con una pieza por línea, columnas separadas por " | " —
+// formato pedido explícitamente: "Valor | Link". Usa exactamente las
+// columnas (campos) que el usuario eligió al pegar la tabla — distintos
+// usuarios pueden elegir distintas columnas (con o sin ID, por
+// ejemplo) — más el LINK siempre al final.
 function listadoTabulado(piezas, titulo) {
   const etiquetas = []
   for (const pieza of piezas) {
@@ -351,8 +346,8 @@ function listadoTabulado(piezas, titulo) {
   lineas.push(`${titulo} — ${new Date().toLocaleString('es-AR')}`)
   lineas.push(`${piezas.length} pieza${piezas.length !== 1 ? 's' : ''}`)
   lineas.push('')
-  lineas.push(encabezados.join('\t'))
-  filas.forEach(f => lineas.push(f.join('\t')))
+  lineas.push(encabezados.join(' | '))
+  filas.forEach(f => lineas.push(f.join(' | ')))
 
   return lineas.join('\n')
 }
