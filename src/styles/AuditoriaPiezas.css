@@ -455,6 +455,48 @@
   color: var(--text-primary);
 }
 
+/* ---------- Chips de filtro por regla ---------- */
+
+.ap-chips-filtro-regla {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ap-chips-filtro-regla-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-right: 0.2rem;
+}
+
+.ap-chip-filtro-regla {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-chip-filtro-regla:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.ap-chip-filtro-regla.activo {
+  background: var(--icbc-red);
+  border-color: var(--icbc-red);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ---------- Cards de pieza con coincidencias ---------- */
 
 .ap-resultado-lista {

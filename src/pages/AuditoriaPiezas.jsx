@@ -324,8 +324,8 @@ function CamposSecundarios({ campos }) {
   )
 }
 
-function CardPiezaConMatch({ item }) {
-  const [open, setOpen] = useState(false)
+function CardPiezaConMatch({ item, abiertaPorDefault }) {
+  const [open, setOpen] = useState(abiertaPorDefault)
   const totalOcurrencias = item.hallazgos.reduce((acc, h) => acc + h.ocurrencias.length, 0)
   const { pieza } = item
 
@@ -415,6 +415,7 @@ export default function AuditoriaPiezas() {
   const [progresoActual, setProgresoActual] = useState(null) // { pieza, indice, total }
   const [resultado, setResultado] = useState(null)
   const [filtroActivo, setFiltroActivo] = useState('conMatch') // 'todas' | 'conMatch' | 'sinMatch' | 'conError'
+  const [filtroRegla, setFiltroRegla] = useState('todas') // 'todas' | regla.id
 
   const tablaParseada = useMemo(() => parsearTabla(textoTabla), [textoTabla])
 
@@ -448,6 +449,7 @@ export default function AuditoriaPiezas() {
     if (!puedeAuditar) return
     setCargando(true)
     setResultado(null)
+    setFiltroRegla('todas')
     setProgresoActual({ pieza: null, indice: 0, total: piezasValidas.length, acumulado: { conMatch: 0, sinMatch: 0 } })
 
     try {
@@ -456,7 +458,11 @@ export default function AuditoriaPiezas() {
         reglas: reglasValidas,
         onProgreso: (pieza, indice, total, acumulado) => setProgresoActual({ pieza, indice, total, acumulado }),
       })
-      setResultado(res)
+      // Se guardan las reglas usadas en ESTA corrida junto al resultado
+      // (no se lee 'reglas' del estado en vivo al renderizar) — así el
+      // filtro por regla queda estable aunque el usuario edite o borre
+      // reglas en el formulario después, sin haber vuelto a auditar.
+      setResultado({ ...res, reglasUsadas: reglasValidas })
     } finally {
       setCargando(false)
       setProgresoActual(null)
@@ -469,6 +475,7 @@ export default function AuditoriaPiezas() {
   function handleVolverAEditar() {
     setResultado(null)
     setFiltroActivo('conMatch')
+    setFiltroRegla('todas')
   }
 
   function handleReiniciar() {
@@ -478,6 +485,7 @@ export default function AuditoriaPiezas() {
     setReglas([nuevaRegla()])
     setResultado(null)
     setFiltroActivo('conMatch')
+    setFiltroRegla('todas')
   }
 
   function handleExportarConCoincidencias() {
@@ -495,6 +503,22 @@ export default function AuditoriaPiezas() {
   const totalAuditadas = resultado
     ? resultado.conCoincidencias.length + resultado.sinCoincidencias.length + resultado.conError.length
     : 0
+
+  // Filtro por regla: solo aplica al listado "con coincidencias" (las
+  // otras dos categorías nunca tuvieron match de ninguna regla, así que
+  // filtrar por regla ahí no tiene sentido). Cuando hay una regla
+  // seleccionada, además de filtrar QUÉ piezas se muestran, se recorta
+  // 'hallazgos' de cada item a solo el hallazgo de esa regla — así la
+  // card no muestra de nuevo los matches de las otras reglas que el
+  // usuario ya no está mirando.
+  const conCoincidenciasFiltradas = useMemo(() => {
+    if (!resultado) return []
+    if (filtroRegla === 'todas') return resultado.conCoincidencias
+    return resultado.conCoincidencias
+      .map(item => ({ ...item, hallazgos: item.hallazgos.filter(h => h.regla.id === filtroRegla) }))
+      .filter(item => item.hallazgos.length > 0)
+  }, [resultado, filtroRegla])
+
 
   return (
     <div className="ap-root">
@@ -709,21 +733,46 @@ export default function AuditoriaPiezas() {
             </div>
           </div>
 
+          {(filtroActivo === 'todas' || filtroActivo === 'conMatch') && resultado.reglasUsadas?.length > 1 && (
+            <div className="ap-chips-filtro-regla">
+              <span className="ap-chips-filtro-regla-label">Filtrar por regla:</span>
+              <button
+                type="button"
+                className={`ap-chip-filtro-regla${filtroRegla === 'todas' ? ' activo' : ''}`}
+                onClick={() => setFiltroRegla('todas')}
+              >
+                Todas
+              </button>
+              {resultado.reglasUsadas.map(regla => (
+                <button
+                  key={regla.id}
+                  type="button"
+                  className={`ap-chip-filtro-regla${filtroRegla === regla.id ? ' activo' : ''}`}
+                  onClick={() => setFiltroRegla(regla.id)}
+                >
+                  {TIPOS_REGLA[regla.tipo]}: "{regla.valor}"
+                </button>
+              ))}
+            </div>
+          )}
+
           {(filtroActivo === 'todas' || filtroActivo === 'conMatch') && (
             <div className="ap-resultado-lista">
-              {resultado.conCoincidencias.length > 0 && (
+              {conCoincidenciasFiltradas.length > 0 && (
                 <span className="ap-resultado-sublabel ap-resultado-sublabel-alerta">
-                  <AlertTriangle size={14} /> Con coincidencias {resultado.conCoincidencias.length}
+                  <AlertTriangle size={14} /> Con coincidencias {conCoincidenciasFiltradas.length}
                 </span>
               )}
-              {resultado.conCoincidencias.length === 0 && (
+              {conCoincidenciasFiltradas.length === 0 && (
                 <div className="ap-sin-resultados">
                   <CheckCircle2 size={18} />
-                  No se encontraron coincidencias en ninguna pieza analizada.
+                  {filtroRegla === 'todas'
+                    ? 'No se encontraron coincidencias en ninguna pieza analizada.'
+                    : 'Ninguna pieza tuvo coincidencias con esta regla.'}
                 </div>
               )}
-              {resultado.conCoincidencias.map(item => (
-                <CardPiezaConMatch key={item.pieza.id} item={item} />
+              {conCoincidenciasFiltradas.map(item => (
+                <CardPiezaConMatch key={item.pieza.id} item={item} abiertaPorDefault={filtroRegla !== 'todas'} />
               ))}
             </div>
           )}
