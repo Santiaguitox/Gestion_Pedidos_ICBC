@@ -14,6 +14,7 @@ import RevisionEmail from '@/pages/RevisionEmail'
 import RevisionBase from '@/pages/RevisionBase'
 import RevisionEnvios from '@/pages/RevisionEnvios'
 import EditorPiezas from '@/pages/EditorPiezas'
+import AuditoriaPiezas from '@/pages/AuditoriaPiezas'
 import Usuarios from '@/pages/Usuarios'
 import Papelera from '@/pages/Papelera'
 import Configuracion from '@/pages/Configuracion'
@@ -50,6 +51,11 @@ export default function App() {
                 <Route path="editor-piezas" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <EditorPiezas />
+                  </ProtectedRoute>
+                } />
+                <Route path="auditoria-piezas" element={
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN]}>
+                    <AuditoriaPiezas />
                   </ProtectedRoute>
                 } />
                 <Route path="usuarios" element={
