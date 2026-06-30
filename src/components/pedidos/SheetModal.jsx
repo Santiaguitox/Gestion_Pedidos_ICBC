@@ -22,6 +22,7 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
     aclaraciones:      pedido.tipo_envio === 'otro' ? (pedido.tipo_envio_otro ?? '') : (TIPOS_ENVIO_LABELS[pedido.tipo_envio] ?? ''),
     dia_programacion:  pedido.fecha_programacion ?? '',
     hora_programacion: pedido.hora_programacion ?? '',
+    fueraDeHora:       false,
   })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
@@ -96,6 +97,10 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
                 <input value={data.hora_programacion} onChange={e => set('hora_programacion', e.target.value)} placeholder="HH:MM" maxLength={5} />
               </div>
             </div>
+            <label className="sheet-checkbox-fuera-hora">
+              <input type="checkbox" checked={data.fueraDeHora} onChange={e => set('fueraDeHora', e.target.checked)} />
+              Pedido fuera de hora
+            </label>
           </div>
           <div className="modal-footer" style={{ marginTop: '1.25rem' }}>
             <button onClick={onClose} className="btn-secondary">Cancelar</button>

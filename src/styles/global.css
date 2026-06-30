@@ -4724,6 +4724,24 @@ select:focus {
   font-size: 0.75rem;
 }
 
+/* Checkbox "Pedido fuera de hora" — al tildarse, la fila escrita en el
+   Sheet se pinta con #ff9900 (ver edge function escribir-sheet). */
+.sheet-checkbox-fuera-hora {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+.sheet-checkbox-fuera-hora input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #ff9900;
+  cursor: pointer;
+}
+
 /* ─── Calendario — label sección finalizados ──────────────────────────────── */
 .cal-section-label {
   font-size: 0.6875rem;

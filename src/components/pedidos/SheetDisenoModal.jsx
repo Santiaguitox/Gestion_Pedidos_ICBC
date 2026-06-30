@@ -14,6 +14,7 @@ export function SheetDisenoModal({ pedido, subtarea, onClose, onConfirm }) {
     fecha_entrega:  subtarea.completada_at ? format(new Date(subtarea.completada_at), "yyyy-MM-dd") : '',
     hora_entrega:   subtarea.completada_at ? format(new Date(subtarea.completada_at), "HH:mm") : '',
     aclaraciones:   '',
+    fueraDeHora:    false,
   })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
@@ -67,6 +68,10 @@ export function SheetDisenoModal({ pedido, subtarea, onClose, onConfirm }) {
               <label className="field-label">Aclaraciones</label>
               <input value={data.aclaraciones} onChange={e => set('aclaraciones', e.target.value)} placeholder="Aclaraciones…" />
             </div>
+            <label className="sheet-checkbox-fuera-hora">
+              <input type="checkbox" checked={data.fueraDeHora} onChange={e => set('fueraDeHora', e.target.checked)} />
+              Pedido fuera de hora
+            </label>
           </div>
           <div className="modal-footer" style={{ marginTop: '1.25rem' }}>
             <button onClick={onClose} className="btn-secondary">Cancelar</button>

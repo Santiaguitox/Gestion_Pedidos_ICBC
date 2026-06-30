@@ -47,7 +47,8 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
           hoja: 'diseno',
-          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.fecha_entrega, data.hora_entrega, data.aclaraciones]
+          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.fecha_entrega, data.hora_entrega, data.aclaraciones],
+          fueraDeHora: !!data.fueraDeHora,
         })
       })
       const result = await res.json()

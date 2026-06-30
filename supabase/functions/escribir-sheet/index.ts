@@ -65,6 +65,11 @@ async function getGoogleAccessToken(serviceAccountJson: string): Promise<string>
   return tokenData.access_token
 }
 
+// Color de fondo para filas marcadas como "Pedido fuera de hora" — el
+// mismo #ff9900 que ya se usa en otras partes de la app para esta
+// categoría. La API de Sheets espera RGB en escala 0-1, no 0-255.
+const COLOR_FUERA_DE_HORA = { red: 1, green: 0.6, blue: 0 }
+
 async function appendRow(accessToken: string, hoja: string, values: string[]) {
   const range = `'${hoja}'!A:K`
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`
@@ -86,6 +91,62 @@ async function appendRow(accessToken: string, hoja: string, values: string[]) {
   return await res.json()
 }
 
+// Obtiene el sheetId NUMÉRICO (distinto del SHEET_ID del spreadsheet
+// completo) de una pestaña por su nombre — necesario para el
+// batchUpdate de formato, que referencia rangos por sheetId numérico,
+// no por nombre de pestaña.
+async function getSheetIdPorNombre(accessToken: string, nombreHoja: string): Promise<number> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } })
+  if (!res.ok) throw new Error(`No se pudo obtener metadata del spreadsheet: ${await res.text()}`)
+  const meta = await res.json()
+  const sheet = meta.sheets?.find((s: any) => s.properties?.title === nombreHoja)
+  if (!sheet) throw new Error(`No se encontró la hoja '${nombreHoja}' en el spreadsheet`)
+  return sheet.properties.sheetId
+}
+
+// Pinta de fondo COLOR_FUERA_DE_HORA toda la fila recién agregada.
+// 'updatedRange' viene de la respuesta de appendRow, con forma tipo
+// "'Pedidos 2026'!A15:K15" — de ahí se extrae el número de fila (15)
+// para saber exactamente qué fila pintar (la API de append no permite
+// pintar en la misma llamada, hace falta un batchUpdate aparte).
+async function pintarFilaFueraDeHora(accessToken: string, sheetId: number, updatedRange: string, cantidadColumnas: number) {
+  const match = updatedRange.match(/![A-Z]+(\d+):/)
+  if (!match) throw new Error(`No se pudo determinar el número de fila desde '${updatedRange}'`)
+  const fila = parseInt(match[1], 10)
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`
+  const body = {
+    requests: [{
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: fila - 1, // la API usa índices base 0
+          endRowIndex: fila,
+          startColumnIndex: 0,
+          endColumnIndex: cantidadColumnas,
+        },
+        cell: { userEnteredFormat: { backgroundColor: COLOR_FUERA_DE_HORA } },
+        fields: 'userEnteredFormat.backgroundColor',
+      },
+    }],
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Sheets API error (formato de fila): ${err}`)
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -99,7 +160,7 @@ serve(async (req) => {
     if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT secret no configurado')
 
     const body = await req.json()
-    const { hoja, data } = body
+    const { hoja, data, fueraDeHora } = body
 
     // data para Hoja 1 (Pedidos):
     // [nombre_campana, fecha_pedido, hora_pedido, descripcion, instancia,
@@ -123,7 +184,19 @@ serve(async (req) => {
     }
 
     const accessToken = await getGoogleAccessToken(serviceAccountJson)
-    await appendRow(accessToken, hojaTarget, data)
+    const appendResult = await appendRow(accessToken, hojaTarget, data)
+
+    // Si el pedido se marcó como "fuera de hora" en el formulario, se
+    // pinta la fila recién escrita con el color #ff9900 — requiere un
+    // segundo llamado (batchUpdate) porque la API de append no permite
+    // setear formato en la misma operación.
+    if (fueraDeHora) {
+      const updatedRange = appendResult?.updates?.updatedRange
+      if (updatedRange) {
+        const sheetId = await getSheetIdPorNombre(accessToken, hojaTarget)
+        await pintarFilaFueraDeHora(accessToken, sheetId, updatedRange, esperadas)
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

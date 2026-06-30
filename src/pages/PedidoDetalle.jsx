@@ -122,7 +122,8 @@ export default function PedidoDetalle() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
           hoja: 'pedidos',
-          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.instancia, data.fecha_aprobacion, data.hora_aprobacion, data.cantidad_envios, data.aclaraciones, data.dia_programacion, data.hora_programacion]
+          data: [data.nombre_campana, data.fecha_pedido, data.hora_pedido, data.descripcion, data.instancia, data.fecha_aprobacion, data.hora_aprobacion, data.cantidad_envios, data.aclaraciones, data.dia_programacion, data.hora_programacion],
+          fueraDeHora: !!data.fueraDeHora,
         })
       })
       const result = await res.json()
@@ -156,7 +157,17 @@ export default function PedidoDetalle() {
   // header (junto a "Actualizar estado"), no suelto al final de la
   // página como antes — el rediseño le da más protagonismo, ya que es
   // una acción importante del flujo de cierre de un pedido.
-  const mostrarRegistrarSheet = canEdit && pedido.estados?.includes('finalizado')
+  //
+  // Visible en 3 estados, no solo "Finalizado": el pedido puede llegar
+  // a necesitar registrarse en el sheet un poco antes del cierre total
+  // (mientras se está validando o ya fue aprobado el entregable), no
+  // solo cuando ya está 100% cerrado. Slugs confirmados contra la tabla
+  // 'estados' real de Supabase (no inferidos): 'validando_entregable' y
+  // 'entregable_aprobado', junto al ya existente 'finalizado'.
+  // 🔧 Si se crea un nuevo estado intermedio que también deba habilitar
+  // el registro en Sheet, agregarlo a este array.
+  const ESTADOS_CON_SHEET_HABILITADO = ['validando_entregable', 'entregable_aprobado', 'finalizado']
+  const mostrarRegistrarSheet = canEdit && pedido.estados?.some(v => ESTADOS_CON_SHEET_HABILITADO.includes(v))
 
   return (
     <div className="det-root">
