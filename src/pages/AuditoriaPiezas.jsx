@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   ScanSearch, Plus, X, RotateCcw, AlertTriangle, CheckCircle2,
   ChevronDown, ChevronUp, ExternalLink, Download, Type, Link2, Image as ImageIcon,
-  Star, Table2, ClipboardList,
+  Star, Table2, ClipboardList, Pencil,
 } from 'lucide-react'
 import {
   parsearPiezasSimple, parsearTabla, construirPiezasDesdeTabla,
@@ -463,6 +463,14 @@ export default function AuditoriaPiezas() {
     }
   }
 
+  // Vuelve al formulario para ajustar piezas o reglas, SIN perder lo ya
+  // cargado — a diferencia de handleReiniciar, que borra todo. Solo
+  // limpia el resultado en pantalla (se vuelve a generar al re-auditar).
+  function handleVolverAEditar() {
+    setResultado(null)
+    setFiltroActivo('conMatch')
+  }
+
   function handleReiniciar() {
     setTextoPiezas('')
     setTextoTabla('')
@@ -685,6 +693,9 @@ export default function AuditoriaPiezas() {
               </button>
               <button type="button" className="ap-btn-secundario" onClick={() => handleExportar('txt')}>
                 <Download size={14} /> TXT
+              </button>
+              <button type="button" className="ap-btn-secundario" onClick={handleVolverAEditar}>
+                <Pencil size={14} /> Editar piezas o reglas
               </button>
               <button type="button" className="ap-btn-secundario" onClick={handleReiniciar}>
                 <RotateCcw size={14} /> Nueva auditoría
