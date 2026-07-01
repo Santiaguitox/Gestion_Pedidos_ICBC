@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import '@/styles/RevisionBase.css'
 import CompareTabBase from '@/components/revision-base/CompareTabBase'
+import SegmentarTabBase from '@/components/revision-base/SegmentarTabBase'
 import {
   Mail, Copy, Trash2, SpellCheck, UserX, ShieldAlert,
   Upload, Download, CheckCircle2, AlertCircle, ChevronDown,
@@ -229,9 +230,10 @@ export default function RevisionBase() {
   const baseAnalyzed = phase === 'done'
 
   const STEPS = [
-    { id: 'analizar', label: 'Analizar', num: '1' },
-    { id: 'verificar', label: 'Verificar', num: '2', disabled: !baseAnalyzed },
-    { id: 'comparar', label: 'Comparar', num: '3' },
+    { id: 'analizar',   label: 'Analizar',  num: '1' },
+    { id: 'verificar',  label: 'Verificar', num: '2', disabled: !baseAnalyzed },
+    { id: 'comparar',   label: 'Comparar',  num: '3' },
+    { id: 'segmentar',  label: 'Segmentar', num: '4' },
   ]
 
   return (
@@ -545,6 +547,8 @@ export default function RevisionBase() {
       )}
 
       {tab === 'comparar' && <CompareTabBase />}
+
+      {tab === 'segmentar' && <SegmentarTabBase />}
 
     </div>
   )
