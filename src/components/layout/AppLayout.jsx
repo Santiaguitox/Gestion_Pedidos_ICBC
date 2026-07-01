@@ -143,42 +143,36 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
           </NavLink>
         )}
 
-        <div className="sidebar-separator" />
-        {!collapsed && <span className="sidebar-section-label">Herramientas</span>}
         {!isViewer && (
-          <NavLink to="/app/revision" onClick={onNavClick}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? 'Revisión de emails' : undefined}>
-            <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
-          </NavLink>
-        )}
-        {!isViewer && (
-          <NavLink to="/app/revision-bbdd" onClick={onNavClick}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? 'Revisión de BBDD' : undefined}>
-            <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
-          </NavLink>
-        )}
-        {!isViewer && (
-          <NavLink to="/app/revision-envios" onClick={onNavClick}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? 'Revisión de envíos' : undefined}>
-            <MailCheck size={18} />{!collapsed && <span>Revisión de envíos</span>}
-          </NavLink>
-        )}
-        {!isViewer && (
-          <NavLink to="/app/editor-piezas" onClick={onNavClick}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? 'Editor de piezas' : undefined}>
-            <PenLine size={18} />{!collapsed && <span>Editor de piezas</span>}
-          </NavLink>
-        )}
-        {!isViewer && (
-          <NavLink to="/app/auditoria-piezas" onClick={onNavClick}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? 'Auditoría de piezas' : undefined}>
-            <ScanSearch size={18} />{!collapsed && <span>Auditoría de piezas</span>}
-          </NavLink>
+          <>
+            <div className="sidebar-separator" />
+            {!collapsed && <span className="sidebar-section-label">Herramientas</span>}
+            <NavLink to="/app/revision" onClick={onNavClick}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title={collapsed ? 'Revisión de emails' : undefined}>
+              <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
+            </NavLink>
+            <NavLink to="/app/revision-bbdd" onClick={onNavClick}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title={collapsed ? 'Revisión de BBDD' : undefined}>
+              <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
+            </NavLink>
+            <NavLink to="/app/revision-envios" onClick={onNavClick}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title={collapsed ? 'Revisión de envíos' : undefined}>
+              <MailCheck size={18} />{!collapsed && <span>Revisión de envíos</span>}
+            </NavLink>
+            <NavLink to="/app/editor-piezas" onClick={onNavClick}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title={collapsed ? 'Editor de piezas' : undefined}>
+              <PenLine size={18} />{!collapsed && <span>Editor de piezas</span>}
+            </NavLink>
+            <NavLink to="/app/auditoria-piezas" onClick={onNavClick}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title={collapsed ? 'Auditoría de piezas' : undefined}>
+              <ScanSearch size={18} />{!collapsed && <span>Auditoría de piezas</span>}
+            </NavLink>
+          </>
         )}
       </nav>
 
