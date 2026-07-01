@@ -36,7 +36,11 @@ export default function App() {
                 <Route path="pedidos" element={<Pedidos />} />
                 <Route path="pedidos/:id" element={<PedidoDetalle />} />
                 <Route path="calendario" element={<Calendario />} />
-                <Route path="notificaciones" element={<Notificaciones />} />
+                <Route path="notificaciones" element={
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
+                    <Notificaciones />
+                  </ProtectedRoute>
+                } />
                 <Route path="revision" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <RevisionEmail />

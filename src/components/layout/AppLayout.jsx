@@ -100,17 +100,24 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
           </NavLink>
         ))}
 
-        <NavLink to="/app/notificaciones" onClick={onNavClick}
-          className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-          title={collapsed ? 'Notificaciones' : undefined}>
-          <div className="relative flex items-center shrink-0">
-            <Bell size={18} />
-            {unreadCount > 0 && (
-              <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-            )}
-          </div>
-          {!collapsed && <span>Notificaciones</span>}
-        </NavLink>
+        {/* Viewer no puede tener pedidos ni subtareas asignadas (no
+            aparece como opción en esos selects — ver PedidoForm /
+            SubtareasTimeline), así que no tiene sentido de negocio que
+            reciba notificaciones — se oculta la sección entera junto
+            con el resto de las herramientas. */}
+        {!isViewer && (
+          <NavLink to="/app/notificaciones" onClick={onNavClick}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            title={collapsed ? 'Notificaciones' : undefined}>
+            <div className="relative flex items-center shrink-0">
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+              )}
+            </div>
+            {!collapsed && <span>Notificaciones</span>}
+          </NavLink>
+        )}
 
         {isAdminOrAbove && (
           <>

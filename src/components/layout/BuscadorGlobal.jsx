@@ -30,7 +30,7 @@ const SECCIONES = [
   { label: 'Dashboard', to: '/app', icon: LayoutGrid },
   { label: 'Pedidos', to: '/app/pedidos', icon: ListTodo },
   { label: 'Calendario', to: '/app/calendario', icon: CalendarDays },
-  { label: 'Notificaciones', to: '/app/notificaciones', icon: Bell },
+  { label: 'Notificaciones', to: '/app/notificaciones', icon: Bell, sinViewer: true },
   { label: 'Usuarios', to: '/app/usuarios', icon: Users, rol: 'admin' },
   { label: 'Configuración', to: '/app/configuracion', icon: Settings, rol: 'admin' },
   { label: 'Papelera', to: '/app/papelera', icon: Trash2, rol: 'super_admin' },
