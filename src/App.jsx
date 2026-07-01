@@ -42,7 +42,11 @@ export default function App() {
                     <RevisionEmail />
                   </ProtectedRoute>
                 } />
-                <Route path="revision-bbdd" element={<RevisionBase />} />
+                <Route path="revision-bbdd" element={
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
+                    <RevisionBase />
+                  </ProtectedRoute>
+                } />
                 <Route path="revision-envios" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <RevisionEnvios />

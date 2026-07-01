@@ -171,7 +171,7 @@ function RevisionesBloque({ pedido, bases, entregables }) {
 // cambia el wrapper visual alrededor de estos bloques. El 5to bloque
 // (Revisión de envíos) es opcional, solo aparece si el pedido tiene
 // alguna base de datos cargada.
-export function DetalleInfoBloques({ pedido, instancias, bases = [], entregables = [] }) {
+export function DetalleInfoBloques({ pedido, instancias, bases = [], entregables = [], isViewer = false }) {
   const inst = pedido.instancia ? instancias.find(i => i.value === pedido.instancia) : null
   return (
     <>
@@ -240,7 +240,7 @@ export function DetalleInfoBloques({ pedido, instancias, bases = [], entregables
         </div>
       )}
 
-      <RevisionesBloque pedido={pedido} bases={bases} entregables={entregables} />
+      {!isViewer && <RevisionesBloque pedido={pedido} bases={bases} entregables={entregables} />}
     </>
   )
 }

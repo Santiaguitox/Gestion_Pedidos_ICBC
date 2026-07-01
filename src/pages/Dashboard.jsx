@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TagSearch } from '@/components/ui/TagSearch'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { PRIORIDADES } from '@/lib/constants'
+import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import {
   ChevronDown, ChevronUp, LayoutList, AlignJustify, Filter, Tag, X,
@@ -70,7 +70,7 @@ export function calcularGrupo(pedido, hoy) {
   return 'mas_adelante'
 }
 
-function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, estados, limite }) {
+function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, estados, limite, role }) {
   // El Hook va ANTES del early return de abajo — las reglas de Hooks de
   // React exigen que se llamen siempre, en el mismo orden, en CADA
   // render, sin importar si después el componente retorna null. Tenerlo
@@ -112,8 +112,8 @@ function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, es
       </div>
       <div className="dia-group-cards">
         {visibles.map(p => vista === 'compact'
-          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
-          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
+          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
+          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
         )}
         {ocultos > 0 && (
           <button onClick={irAPedidosConFiltro} className="btn-ver-todos-pedidos">
@@ -131,7 +131,7 @@ function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, es
 // atención sin saturar el resto de la pantalla con colores. Si no hay
 // ningún pedido vencido, no se renderiza nada (no tiene sentido mostrar
 // una alerta vacía).
-function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estados }) {
+function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estados, role }) {
   const [open, setOpen] = useState(false)
   if (pedidos.length === 0) return null
 
@@ -148,8 +148,8 @@ function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estado
       {open && (
         <div className="vencidos-acordeon-cards">
           {pedidos.map(p => vista === 'compact'
-            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
-            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" />
+            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
+            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
           )}
         </div>
       )}
@@ -179,7 +179,7 @@ function StatCard({ label, cantidad, color, onClick, activo, destacado }) {
 }
 
 export default function Dashboard() {
-  const { user, profile } = useAuth()
+  const { user, profile, role } = useAuth()
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const { estados } = useEstados()
@@ -196,6 +196,7 @@ export default function Dashboard() {
   const [vista, setVista] = useLocalStorage('dashboard:vista', 'compact')
   const [filtrosOpen, setFiltrosOpen] = useLocalStorage('dashboard:filtrosOpen', true)
   const [excluirEsperando, setExcluirEsperando] = useLocalStorage('dashboard:excluirEsperando', false)
+  const isViewer = role === ROLES.VIEWER
 
   const hayFiltrosActivos = filtroEstado || filtroPrioridad || filtroTipo || filtroUsuario || filtroTag || filtroMisSubtareas
 
@@ -390,16 +391,20 @@ export default function Dashboard() {
                 <option value="sin_estado">Sin estado</option>
                 {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
               </select>
-              <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)} className="select-auto">
-                <option value="">Todos los usuarios</option>
-                <option value="mios">Mis pedidos</option>
-                {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
-              <select value={filtroMisSubtareas} onChange={e => setFiltroMisSubtareas(e.target.value)} className="select-auto">
-                <option value="">Mis subtareas</option>
-                <option value="pendientes">Pendientes</option>
-                <option value="terminadas">Terminadas</option>
-              </select>
+              {!isViewer && (
+                <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)} className="select-auto">
+                  <option value="">Todos los usuarios</option>
+                  <option value="mios">Mis pedidos</option>
+                  {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+              )}
+              {!isViewer && (
+                <select value={filtroMisSubtareas} onChange={e => setFiltroMisSubtareas(e.target.value)} className="select-auto">
+                  <option value="">Mis subtareas</option>
+                  <option value="pendientes">Pendientes</option>
+                  <option value="terminadas">Terminadas</option>
+                </select>
+              )}
               {tagsDisponibles.length > 0 && (
                 <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={setFiltroTag} />
               )}
@@ -441,6 +446,7 @@ export default function Dashboard() {
           filtroTag={filtroTag}
           tipos={tipos}
           estados={estados}
+          role={role}
         />
       )}
 
@@ -455,6 +461,7 @@ export default function Dashboard() {
           tipos={tipos}
           estados={estados}
           limite={meta.key === 'mas_adelante' ? 15 : undefined}
+          role={role}
         />
       ))}
     </div>

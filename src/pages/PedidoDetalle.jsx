@@ -159,6 +159,7 @@ export default function PedidoDetalle() {
   const canDelete = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
   const canWrite = role !== ROLES.VIEWER
   const isSuperAdmin = role === ROLES.SUPER_ADMIN
+  const isViewer = role === ROLES.VIEWER
   const subtareasCompletadas = subtareas.filter(s => s.completada).length
   const pctSubtareas = subtareas.length > 0 ? Math.round((subtareasCompletadas / subtareas.length) * 100) : 0
   const pctCompleto = pctSubtareas === 100 && subtareas.length > 0
@@ -232,7 +233,7 @@ export default function PedidoDetalle() {
           title="Detalles del pedido" defaultOpen={false}
         >
           <div className="det-info-mobile-grid">
-            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} />
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} isViewer={isViewer} />
           </div>
         </DetalleAcordeon>
       )}
@@ -268,40 +269,44 @@ export default function PedidoDetalle() {
               nombrePedido={pedido.asunto || pedido.id} />
           </DetalleAcordeon>
 
-          <DetalleAcordeon
-            id="base-datos-acordeon"
-            icon={<Database size={18} />} iconColor="#10B981" iconBg="rgba(16,185,129,0.1)"
-            title="Base de datos"
-            badge={bases.length > 0 ? bases.length : null}
-            badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
-            // Abierto si ya hay bases cargadas (para ver el resultado),
-            // o si el usuario puede escribir y ya hay al menos una
-            // pieza (ahí cargar una base tiene sentido inmediato). No
-            // se exige tener pieza para PODER cargar una base — ese es
-            // un flujo válido (suele llegar la base desde el primer
-            // mail del cliente, antes de tener el HTML armado) — solo
-            // se exige para que el acordeón arranque ABIERTO por
-            // default. Si las DOS (bases y piezas) están vacías, el
-            // pedido recién se está armando: arranca cerrado para no
-            // ocupar espacio con una sección sin nada todavía que hacer.
-            defaultOpen={bases.length > 0 || (canWrite && entregables.length > 0)}
-          >
-            <BaseDatosSection
-              pedidoId={id}
-              bases={bases}
-              canWrite={canWrite}
-              onUpdate={fetchPedido}
-              entregables={entregables}
-            />
-          </DetalleAcordeon>
+          {!isViewer && (
+            <DetalleAcordeon
+              id="base-datos-acordeon"
+              icon={<Database size={18} />} iconColor="#10B981" iconBg="rgba(16,185,129,0.1)"
+              title="Base de datos"
+              badge={bases.length > 0 ? bases.length : null}
+              badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
+              // Abierto si ya hay bases cargadas (para ver el resultado),
+              // o si el usuario puede escribir y ya hay al menos una
+              // pieza (ahí cargar una base tiene sentido inmediato). No
+              // se exige tener pieza para PODER cargar una base — ese es
+              // un flujo válido (suele llegar la base desde el primer
+              // mail del cliente, antes de tener el HTML armado) — solo
+              // se exige para que el acordeón arranque ABIERTO por
+              // default. Si las DOS (bases y piezas) están vacías, el
+              // pedido recién se está armando: arranca cerrado para no
+              // ocupar espacio con una sección sin nada todavía que hacer.
+              defaultOpen={bases.length > 0 || (canWrite && entregables.length > 0)}
+            >
+              <BaseDatosSection
+                pedidoId={id}
+                bases={bases}
+                canWrite={canWrite}
+                onUpdate={fetchPedido}
+                entregables={entregables}
+              />
+            </DetalleAcordeon>
+          )}
 
-          <DetalleAcordeon
-            icon={<Clock size={18} />} iconColor="var(--text-secondary)" iconBg="var(--bg-hover)"
-            title="Historial de actividad"
-            defaultOpen={false}
-          >
-            <PedidoHistorial pedidoId={id} />
-          </DetalleAcordeon>
+          {!isViewer && (
+            <DetalleAcordeon
+              icon={<Clock size={18} />} iconColor="var(--text-secondary)" iconBg="var(--bg-hover)"
+              title="Historial de actividad"
+              defaultOpen={false}
+            >
+              <PedidoHistorial pedidoId={id} />
+            </DetalleAcordeon>
+          )}
 
         </div>
 
@@ -309,7 +314,7 @@ export default function PedidoDetalle() {
             mobile esta misma info ya se mostró arriba como acordeón. */}
         {!isMobile && (
           <div className="det-info-rail">
-            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} />
+            <DetalleInfoBloques pedido={pedido} instancias={instancias} bases={bases} entregables={entregables} isViewer={isViewer} />
           </div>
         )}
       </div>

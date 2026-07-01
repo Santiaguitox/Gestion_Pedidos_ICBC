@@ -178,7 +178,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
               </div>
             </div>
           )}
-          {!revisionEnCurso && ent.revision_pruebas_total != null && (
+          {canWrite && !revisionEnCurso && ent.revision_pruebas_total != null && (
             <div className="entregable-revision-resultado-fila">
               <button
                 onClick={() => onVerDetalle(ent.link_online, ent.id)}

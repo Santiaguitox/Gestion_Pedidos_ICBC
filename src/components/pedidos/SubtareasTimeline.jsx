@@ -81,9 +81,10 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
         {subtareas.map((s, i) => (
           <div key={s.id} className="subtarea-item">
             <div className="subtarea-timeline">
-              <button onClick={() => onToggle(s.id, s.completada)}
+              <button onClick={() => canWrite && onToggle(s.id, s.completada)}
+                disabled={!canWrite}
                 className="subtarea-check"
-                style={{ border: `2px solid ${s.completada ? '#10B981' : 'var(--border-strong)'}`, background: s.completada ? '#10B981' : 'var(--bg-elevated)' }}>
+                style={{ border: `2px solid ${s.completada ? '#10B981' : 'var(--border-strong)'}`, background: s.completada ? '#10B981' : 'var(--bg-elevated)', cursor: canWrite ? 'pointer' : 'default', opacity: canWrite ? 1 : 0.7 }}>
                 {s.completada && <Check size={10} color="#fff" strokeWidth={3} />}
               </button>
               {i < subtareas.length - 1 && <div className="subtarea-line" />}

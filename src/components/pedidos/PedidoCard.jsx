@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/Badge'
-import { PRIORIDADES } from '@/lib/constants'
+import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { Calendar, ExternalLink, Copy, Check, ChevronDown, ChevronUp, Tag, Database, FileSearch } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -184,9 +184,10 @@ function resultadoBaseParaPieza(pedidoBase, entregableId) {
   return { base, evaluacion }
 }
 
-export function EntregablesCard({ entregables, pedidoBase }) {
+export function EntregablesCard({ entregables, pedidoBase, role }) {
   const navigate = useNavigate()
   const [expandido, setExpandido] = useState(false)
+  const ocultarRevisiones = role === ROLES.VIEWER
   if (!entregables?.length) return null
   const conNombre = entregables.filter(e => e.nombre_pieza)
   if (!conNombre.length) return null
@@ -232,7 +233,7 @@ export function EntregablesCard({ entregables, pedidoBase }) {
                 </a>
               </div>
             )}
-            {ent.revision_pruebas_total != null && (
+            {!ocultarRevisiones && ent.revision_pruebas_total != null && (
               ent.revision_pruebas_ok === ent.revision_pruebas_total ? (
                 <span className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}>
                   <FileSearch size={11} style={{ verticalAlign: '-1px' }} />
@@ -248,7 +249,7 @@ export function EntregablesCard({ entregables, pedidoBase }) {
                 </button>
               )
             )}
-            {(() => {
+            {!ocultarRevisiones && (() => {
               const r = resultadoBaseParaPieza(pedidoBase, ent.id)
               if (!r?.evaluacion) return null
               const severidad = SEVERIDAD_VISUAL_BASE[r.evaluacion.tipo === 'error_proxy' ? 'error_proxy' : (r.evaluacion.miss?.length ? 'miss' : 'ok')]
@@ -279,8 +280,9 @@ export function EntregablesCard({ entregables, pedidoBase }) {
 // apretar todo en una sola línea horizontal. El quiebre de línea lo hace
 // el CSS (.pedido-card-compact, ver global.css) vía flex-wrap + el orden
 // de los elementos acá ya está pensado para leerse bien apilado.
-export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app' }) {
+export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app', role }) {
   const navigate = useNavigate()
+  const ocultarRevisiones = role === ROLES.VIEWER
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
   const tipo = tipos.find(t => t.value === pedido.tipo)
   const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
@@ -312,7 +314,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
   // es 'advertencia'; rojo si es 'error'. Reusa peorRevisionDePedido
   // (ya calculado arriba), sin lógica de severidad nueva.
   const esRevisionPerfecta = peorRevision && peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total
-  const colorBordeRevision = !peorRevision || esRevisionPerfecta
+  const colorBordeRevision = ocultarRevisiones || !peorRevision || esRevisionPerfecta
     ? null
     : peorRevision.revision_severidad === 'error' ? 'var(--icbc-red)' : '#F59E0B'
 
@@ -349,7 +351,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
             </div>
           )}
-          {(peorRevision || peorBaseDePedido(pedido.pedido_base)) && (
+          {!ocultarRevisiones && (peorRevision || peorBaseDePedido(pedido.pedido_base)) && (
             <div className="pedido-compact-grupo">
               {peorRevision && (
                 peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total ? (
@@ -450,7 +452,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               </div>
             )}
 
-            {(() => {
+            {!ocultarRevisiones && (() => {
               const peorBase = peorBaseDePedido(pedido.pedido_base)
               const cantidadRevisiones = (peorRevision ? 1 : 0) + (peorBase ? 1 : 0)
               if (cantidadRevisiones === 0) return null
@@ -498,7 +500,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
   )
 }
 
-export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app' }) {
+export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app', role }) {
   const navigate = useNavigate()
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
   const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
@@ -529,7 +531,7 @@ export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], esta
       </div>
 
       <h3 className="pedido-title">{pedido.asunto}</h3>
-      <EntregablesCard entregables={entregables} pedidoBase={pedido.pedido_base} />
+      <EntregablesCard entregables={entregables} pedidoBase={pedido.pedido_base} role={role} />
 
       {pedido.descripcion && <p className="pedido-descripcion">{pedido.descripcion}</p>}
 

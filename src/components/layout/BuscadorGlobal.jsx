@@ -34,12 +34,12 @@ const SECCIONES = [
   { label: 'Usuarios', to: '/app/usuarios', icon: Users, rol: 'admin' },
   { label: 'Configuración', to: '/app/configuracion', icon: Settings, rol: 'admin' },
   { label: 'Papelera', to: '/app/papelera', icon: Trash2, rol: 'super_admin' },
-  // Viewer solo puede usar Revisión de BBDD (ver ProtectedRoute en
-  // App.jsx para la protección real de las rutas) — sinViewer oculta
-  // estas dos del buscador para ese rol, sin afectar el resto de los
-  // roles, que siguen viéndolas igual que antes.
+  // Viewer no tiene acceso a ninguna de las 3 herramientas (ver
+  // ProtectedRoute en App.jsx para la protección real de las rutas) —
+  // sinViewer oculta las tres del buscador para ese rol, sin afectar el
+  // resto de los roles, que siguen viéndolas igual que antes.
   { label: 'Revisión de emails', to: '/app/revision', icon: FileSearch, sinViewer: true },
-  { label: 'Revisión de BBDD', to: '/app/revision-bbdd', icon: Database },
+  { label: 'Revisión de BBDD', to: '/app/revision-bbdd', icon: Database, sinViewer: true },
   { label: 'Revisión de envíos', to: '/app/revision-envios', icon: MailCheck, sinViewer: true },
 ]
 

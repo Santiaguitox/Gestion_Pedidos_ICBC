@@ -69,9 +69,9 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
   const { unreadCount } = useNotificaciones()
   const isAdminOrAbove = role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
   const isSuperAdmin = role === ROLES.SUPER_ADMIN
-  // Viewer solo puede usar Revisión de BBDD — las otras dos herramientas
-  // (Revisión de emails, Revisión de envíos) ni se muestran en el menú
-  // ni son accesibles por URL directa (ver el ProtectedRoute con
+  // Viewer no tiene acceso a ninguna de las herramientas (Revisión de
+  // emails, Revisión de BBDD, Revisión de envíos) — ni se muestran en el
+  // menú ni son accesibles por URL directa (ver el ProtectedRoute con
   // requiredRoles en App.jsx para la protección real; ocultar el link
   // acá es solo para no mostrar una opción que de todas formas
   // redirigiría al Dashboard al clickearla).
@@ -145,11 +145,13 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
             <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
           </NavLink>
         )}
-        <NavLink to="/app/revision-bbdd" onClick={onNavClick}
-          className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-          title={collapsed ? 'Revisión de BBDD' : undefined}>
-          <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
-        </NavLink>
+        {!isViewer && (
+          <NavLink to="/app/revision-bbdd" onClick={onNavClick}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            title={collapsed ? 'Revisión de BBDD' : undefined}>
+            <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
+          </NavLink>
+        )}
         {!isViewer && (
           <NavLink to="/app/revision-envios" onClick={onNavClick}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}

@@ -209,8 +209,8 @@ export default function PedidosList({ onNew }) {
 
   function renderPedido(pedido) {
     const tarjeta = vista === 'compact'
-      ? <PedidoCardCompact pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" />
-      : <PedidoCardFull pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" />
+      ? <PedidoCardCompact pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" role={role} />
+      : <PedidoCardFull pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" role={role} />
     return (
       <div
         key={pedido.id}
@@ -330,11 +330,13 @@ export default function PedidosList({ onNew }) {
                   <option value="sin_estado">Sin estado</option>
                   {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
                 </select>
-                <select value={filtroUsuario} onChange={e => { setFiltroUsuario(e.target.value) }} className="select-auto">
-                  <option value="">Todos los usuarios</option>
-                  <option value="mios">Mis pedidos</option>
-                  {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
+                {role !== ROLES.VIEWER && (
+                  <select value={filtroUsuario} onChange={e => { setFiltroUsuario(e.target.value) }} className="select-auto">
+                    <option value="">Todos los usuarios</option>
+                    <option value="mios">Mis pedidos</option>
+                    {usuarios.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                )}
                 {tagsDisponibles.length > 0 && (
                   <div className="tags-filtro-ancho">
                     <TagSearch tags={tagsDisponibles} value={filtroTag} onChange={v => { setFiltroTag(v) }} />
