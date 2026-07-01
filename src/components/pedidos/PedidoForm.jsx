@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { PRIORIDADES } from '@/lib/constants'
+import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
 import { useInstancias } from '@/hooks/useInstancias'
@@ -44,7 +44,10 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.from('profiles').select('id,full_name,role').then(({ data }) => setUsuarios(data ?? []))
+    // Viewer no puede aparecer como opción en "Asignar a" — no tiene
+    // lógica de negocio que se le asigne un pedido (mismo criterio por
+    // el que se ocultó Notificaciones para ese rol).
+    supabase.from('profiles').select('id,full_name,role').then(({ data }) => setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER)))
   }, [])
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))

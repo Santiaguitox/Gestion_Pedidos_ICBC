@@ -48,8 +48,15 @@ export default function PedidoDetalle() {
   const { instancias } = useInstancias()
 
   useEffect(() => {
-    supabase.from('profiles').select('id, full_name, area_equipo').order('full_name').then(({ data }) => {
-      setUsuarios(data ?? [])
+    // Viewer no puede aparecer en el selector de "asignar a" de subtareas
+    // nuevas — no tiene lógica de negocio que se le asigne trabajo (ver
+    // el mismo criterio ya aplicado en PedidoForm.jsx para "Asignar a"
+    // del pedido, y por el que se ocultó Notificaciones para ese rol).
+    // usuariosConArea SÍ mantiene la lista completa sin filtrar: resuelve
+    // el área (chip de color) de gente YA asignada a subtareas viejas,
+    // así que no debe perder a nadie que ya esté asignado de antes.
+    supabase.from('profiles').select('id, full_name, area_equipo, role').order('full_name').then(({ data }) => {
+      setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER))
       setUsuariosConArea(data ?? [])
     })
   }, [])
