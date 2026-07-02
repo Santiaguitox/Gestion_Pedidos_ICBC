@@ -3,6 +3,7 @@ import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, La
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useNotificaciones } from '@/context/NotificacionesContext'
+import { DetectarInlineEnvolviendoOutlook } from '@/lib/revision/generales'
 import '@/styles/EditorPiezas.css'
 
 // ─── Temas de template — ICBC (fondo blanco), Avisos (fondo beige,
@@ -515,6 +516,7 @@ const AVISO_ICONO_POR_TIPO = {
   'no-reconocido': { Icono: Code, color: '#F97316' },
   'fuera-de-rango': { Icono: AlertCircle, color: '#DC2626' },
   'obsoleto': { Icono: AlertCircle, color: '#DC2626' },
+  'outlook-riesgo': { Icono: AlertCircle, color: '#DC2626' },
   'general': { Icono: Info, color: null }, // null = neutro, ver CSS
 }
 
@@ -4842,6 +4844,27 @@ export default function EditorPiezas() {
         const porHeuristica = importarHeuristico(htmlNormalizado)
         resultadoFinal = { ...porHeuristica, viaMarcadores: false }
       }
+
+      // Chequeo específico de riesgo Outlook — independiente de que
+      // la pieza se haya podido importar bien o no (es un problema del
+      // HTML ORIGINAL, no algo que importarDesdeHtml/importarHeuristico
+      // puedan arreglar ni que necesiten para funcionar). Mismo
+      // detector que usa "Revisión de HTML" — ver el comentario en
+      // DetectarInlineEnvolviendoOutlook (generales.js) para el detalle
+      // de por qué este caso puntual necesita mirar el string crudo en
+      // vez del DOM ya parseado. Se corre sobre htmlNormalizado (no
+      // sobre 'html' tal cual llegó) para evitar falsos negativos por
+      // las comillas simples que a veces trae el HTML obtenido por
+      // URL — esta detección, como todos los regex de este archivo,
+      // asume comillas dobles.
+      const riesgosOutlook = DetectarInlineEnvolviendoOutlook(htmlNormalizado)
+      if (riesgosOutlook.length > 0) {
+        resultadoFinal.avisos = [
+          ...riesgosOutlook.map(r => ({ texto: r.detalle, tipo: 'outlook-riesgo', canvasIdx: null })),
+          ...(resultadoFinal.avisos ?? []),
+        ]
+      }
+
       // El análisis en sí (parseo + regex) es síncrono y suele tardar
       // milisegundos — sin este mínimo, el step de "analizando" podría
       // aparecer y desaparecer antes de que el ojo lo registre. No es
@@ -5665,7 +5688,7 @@ export default function EditorPiezas() {
                                     title={esClickeable ? 'Ver en el preview' : undefined}
                                     style={a.tipo === 'obsoleto' ? { cursor: 'pointer' } : undefined}
                                   >
-                                    <span className="ep-importar-aviso-icono" style={color ? { background: color } : undefined}>
+                                    <span className="ep-importar-aviso-icono" style={color ? { background: color, color: '#fff' } : undefined}>
                                       <Icono size={15} />
                                     </span>
                                     <div className="ep-importar-aviso-texto">

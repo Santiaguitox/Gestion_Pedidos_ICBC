@@ -415,12 +415,61 @@ function DetectarEstructurasOutlook(htmlString) {
   return problemas
 }
 
+// Detecta tags de formato/línea (strong, em, b, i, u, span, a) cuyo
+// contenido arranca o termina pegado al borde de un bloque
+// condicional de Outlook (<!--[if ...]> ... <![endif]-->) — típico
+// accidente de edición: alguien aplicó negrita/cursiva/link justo al
+// lado de donde empieza o termina un comentario MSO, sin darse
+// cuenta de que lo estaba envolviendo.
+//
+// Por qué es grave y no cosmético: en Outlook (motor de Word), ese
+// bloque se "revela" como HTML real — una <table>/<tr>/<td> real,
+// quedando ANIDADA dentro de un tag en línea. Ese anidamiento es
+// inválido y Outlook lo renderiza de forma impredecible (puede romper
+// el ancho fijo que ese mismo bloque condicional existe para
+// garantizar). En cualquier OTRO cliente — y en el propio parser de
+// este validador — el bloque entero es un comentario inerte: nunca
+// hay una <table> real ahí, por eso el chequeo de "tabla anidada en
+// tag en línea" de más abajo (basado en el DOM, vía doc.querySelector)
+// nunca lo detecta — jamás hay un elemento <table> en el árbol para
+// que ese chequeo encuentre. Este chequeo trabaja sobre el STRING
+// crudo, mirando específicamente adentro del comentario, por eso sí
+// lo puede ver.
+export function DetectarInlineEnvolviendoOutlook(htmlString) {
+  const problemas = []
+  const tagsInline = ['strong', 'em', 'b', 'i', 'u', 'span', 'a']
+
+  tagsInline.forEach(tag => {
+    const regex = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi')
+    let m
+    while ((m = regex.exec(htmlString)) !== null) {
+      const contenido = m[1]
+      const tocaApertura = /^\s*<!--\[if/i.test(contenido)
+      const tocaCierre = /<!\[endif\]-->\s*$/i.test(contenido)
+      if (tocaApertura || tocaCierre) {
+        problemas.push({
+          detalle: `<${tag}> envuelve el borde de un bloque condicional de Outlook — probablemente quedó ahí por error de edición; en Outlook puede anidar una tabla dentro de un tag en línea y romper la estructura`,
+        })
+      }
+    }
+  })
+
+  return problemas
+}
+
 export function ValidarEstructuraHTML(doc, htmlString) {
   const problemas = []
 
   // Agregar al inicio
   const tagsMalCerrados = DetectarTagsMalCerrados(htmlString)
   problemas.push(...tagsMalCerrados)
+
+  // Ver comentario de la función — este caso puntual (inline
+  // envolviendo el borde de un bloque MSO) no lo cubre ni el chequeo
+  // de arriba (que borra el bloque Outlook entero antes de contar) ni
+  // el de "tabla anidada en tag inline" de más abajo (basado en el
+  // DOM, ciego a lo que hay dentro de un comentario).
+  problemas.push(...DetectarInlineEnvolviendoOutlook(htmlString))
 
   // Verificar tags mal anidados en tablas — crítico para emails
   const tablas = [...doc.querySelectorAll('table')]
