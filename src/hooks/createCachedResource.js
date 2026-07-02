@@ -15,14 +15,12 @@ import { supabase } from '@/lib/supabase'
 // habido que aplicarlo 4 veces por separado, con el riesgo real de
 // que una copia se actualice y las otras queden desincronizadas.
 //
-// Nota de comportamiento (preservada tal cual del código original,
-// no es un bug nuevo): si dos instancias del hook montan mientras el
-// fetch inicial todavía está en vuelo, LAS DOS disparan su propio
-// fetch (cache sigue siendo null hasta que el primero resuelve) —
-// redundante pero no incorrecto, cada instancia maneja su propio
-// 'loading' de punta a punta. No se "arregla" acá para no cambiar
-// comportamiento existente como parte de un refactor que debería ser
-// puramente estructural.
+// Deduplicación de fetch en vuelo: si dos instancias del hook montan
+// mientras el fetch inicial todavía no resolvió, comparten la MISMA
+// promesa (inflight) en vez de disparar dos requests idénticos. El
+// cache (resultado ya resuelto) y el inflight (promesa en curso) son
+// dos estados distintos: cache corta el fetch cuando ya hay datos,
+// inflight lo corta mientras están en camino.
 //
 // `key` es el nombre de la propiedad de datos en el objeto que
 // devuelve el hook (ej. 'estados' para useEstados) — configurable
@@ -32,11 +30,36 @@ import { supabase } from '@/lib/supabase'
 // tocar cada call site.
 export function createCachedResource({ table, select = '*', orderBy, ascending = true, key }) {
   let cache = null
+  let inflight = null   // promesa del fetch en curso, compartida entre instancias
   let listeners = []
 
   function notify(data) {
     cache = data
     listeners.forEach(fn => fn(data))
+  }
+
+  // Devuelve una promesa con los datos, garantizando UN solo request:
+  // si ya hay cache, resuelve al toque; si hay un fetch en vuelo,
+  // devuelve esa misma promesa; si no, arranca uno nuevo y lo guarda
+  // en inflight. El try/finally asegura que inflight se limpie tanto
+  // si el fetch resuelve como si tira una excepción — así un error
+  // puntual no deja el inflight "pegado" bloqueando futuros reintentos.
+  function loadData() {
+    if (cache) return Promise.resolve(cache)
+    if (inflight) return inflight
+    inflight = (async () => {
+      try {
+        let query = supabase.from(table).select(select)
+        if (orderBy) query = query.order(orderBy, { ascending })
+        const { data: rows } = await query
+        const result = rows ?? []
+        notify(result)
+        return result
+      } finally {
+        inflight = null
+      }
+    })()
+    return inflight
   }
 
   return function useCachedResource() {
@@ -45,23 +68,22 @@ export function createCachedResource({ table, select = '*', orderBy, ascending =
 
     useEffect(() => {
       listeners.push(setData)
-      if (!cache) fetchData()
+      if (!cache) {
+        setLoading(true)
+        loadData().finally(() => setLoading(false))
+      }
       return () => { listeners = listeners.filter(fn => fn !== setData) }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
-
-    async function fetchData() {
-      setLoading(true)
-      let query = supabase.from(table).select(select)
-      if (orderBy) query = query.order(orderBy, { ascending })
-      const { data: rows } = await query
-      notify(rows ?? [])
-      setLoading(false)
-    }
 
     async function refetch() {
       cache = null
-      await fetchData()
+      inflight = null
+      setLoading(true)
+      try {
+        await loadData()
+      } finally {
+        setLoading(false)
+      }
     }
 
     return { [key]: data, loading, refetch }
