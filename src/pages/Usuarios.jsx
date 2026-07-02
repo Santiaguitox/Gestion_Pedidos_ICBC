@@ -10,6 +10,7 @@ import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus, 
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { CopyBtn } from '@/components/pedidos/CopyBtn'
 
 const AREAS_EQUIPO = ['PM', 'Diseño', 'Programación', 'Comercial', 'Otro']
 
@@ -41,6 +42,10 @@ export default function Usuarios() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [confirmReset, setConfirmReset] = useState(null)
   const [resetting, setResetting] = useState(false)
+  // Guarda { email, link } del reset recién generado, para mostrarlo en
+  // un modal con botón de copiar. El link NO se manda por mail: el
+  // super_admin lo copia y se lo pasa al usuario por el canal que quiera.
+  const [linkReset, setLinkReset] = useState(null)
   const isMobile = useIsMobile()
   // Persiste entre sesiones, igual patrón que los filtros de
   // Notificaciones. En mobile se ignora (ver más abajo) y se fuerza
@@ -119,7 +124,10 @@ export default function Usuarios() {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error ?? 'Error al resetear contraseña')
-      showSuccess(`Se envió el link de reset a ${u.email}`)
+      if (!result.action_link) throw new Error('No se recibió el link de reset')
+      // No mandamos mail: mostramos el link para que el super_admin lo
+      // copie y se lo pase al usuario.
+      setLinkReset({ email: u.email, link: result.action_link })
     } catch (err) {
       showError(err.message || 'Error al resetear la contraseña')
     } finally {
@@ -422,7 +430,7 @@ export default function Usuarios() {
                     <div>
                       <p className="danger-zone-title">Resetear contraseña</p>
                       <p className="danger-zone-text">
-                        Se le enviará un email a {usuarioEditando.email} con un link para que establezca una nueva contraseña.
+                        Genera un link para que {usuarioEditando.email} establezca una nueva contraseña. El link se muestra en pantalla para que lo copies y se lo pases (no se envía por mail).
                       </p>
                     </div>
                     <button
@@ -484,12 +492,70 @@ export default function Usuarios() {
         <ConfirmModal
           open={true}
           title="Resetear contraseña"
-          message={`Se enviará un email a ${confirmReset.email} con un link para que establezca una nueva contraseña. ¿Confirmás?`}
-          confirmLabel="Enviar link de reset"
+          message={`Se generará un link de un solo uso para que ${confirmReset.email} establezca una nueva contraseña. Lo vas a poder copiar y pasárselo vos. ¿Confirmás?`}
+          confirmLabel={resetting ? 'Generando…' : 'Generar link'}
           variant="default"
           onConfirm={() => resetearPassword(confirmReset)}
           onCancel={() => setConfirmReset(null)}
         />
+      )}
+
+      {linkReset && (
+        <div className="modal-overlay" style={{ zIndex: 9998 }} onClick={() => setLinkReset(null)}>
+          <div className="modal" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="flex items-center gap-[0.625rem]">
+                <div className="confirm-icon-wrap"
+                  style={{ background: 'rgba(91,78,232,0.08)', border: '1px solid rgba(91,78,232,0.2)' }}>
+                  <KeyRound size={16} color="var(--icomm-violet)" />
+                </div>
+                <h2 className="modal-title">Link de reset generado</h2>
+              </div>
+              <button onClick={() => setLinkReset(null)} className="modal-close"><X size={18} /></button>
+            </div>
+
+            <div className="modal-body">
+              <p className="text-muted-sm" style={{ marginBottom: '0.875rem' }}>
+                Pasale este link a <strong>{linkReset.email}</strong>. Al abrirlo va a
+                caer directo en la pantalla para crear una nueva contraseña.
+              </p>
+
+              <div className="field">
+                <label className="field-label">Link de un solo uso</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
+                  <input
+                    readOnly
+                    value={linkReset.link}
+                    onFocus={e => e.target.select()}
+                    style={{ flex: 1, fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8rem' }}
+                  />
+                  <CopyBtn text={linkReset.link} size={15} />
+                </div>
+              </div>
+
+              <p style={{
+                marginTop: '0.875rem',
+                padding: '0.625rem 0.75rem',
+                borderRadius: '0.5rem',
+                background: 'rgba(245,158,11,0.08)',
+                border: '1px solid rgba(245,158,11,0.2)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.8rem',
+                lineHeight: 1.5,
+              }}>
+                ⚠️ El link caduca (~1 hora) y sirve una sola vez. Es una credencial:
+                cualquiera que lo tenga puede entrar como este usuario, así que evitá
+                pasarlo por canales públicos. Si vence o se pierde, generá uno nuevo.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" onClick={() => setLinkReset(null)} className="btn-primary" style={{ width: 'auto' }}>
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
