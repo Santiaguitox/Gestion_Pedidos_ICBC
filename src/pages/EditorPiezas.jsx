@@ -3,7 +3,7 @@ import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, La
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { DetectarInlineEnvolviendoOutlook } from '@/lib/revision/generales'
+import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado } from '@/lib/revision/generales'
 import '@/styles/EditorPiezas.css'
 
 // ─── Temas de template — ICBC (fondo blanco), Avisos (fondo beige,
@@ -517,6 +517,7 @@ const AVISO_ICONO_POR_TIPO = {
   'fuera-de-rango': { Icono: AlertCircle, color: '#DC2626' },
   'obsoleto': { Icono: AlertCircle, color: '#DC2626' },
   'outlook-riesgo': { Icono: AlertCircle, color: '#DC2626' },
+  'contenido-duplicado': { Icono: AlertCircle, color: '#DC2626' },
   'general': { Icono: Info, color: null }, // null = neutro, ver CSS
 }
 
@@ -4861,6 +4862,22 @@ export default function EditorPiezas() {
       if (riesgosOutlook.length > 0) {
         resultadoFinal.avisos = [
           ...riesgosOutlook.map(r => ({ texto: r.detalle, tipo: 'outlook-riesgo', canvasIdx: null })),
+          ...(resultadoFinal.avisos ?? []),
+        ]
+      }
+
+      // Chequeo de contenido duplicado (ver DetectarContenidoDuplicado
+      // en generales.js) — importa especialmente ACÁ, porque
+      // importarHeuristico puede terminar "absorbiendo" el contenido
+      // duplicado en un resultado que a simple vista se ve razonable
+      // (bloques que se pisan/mergean sin tirar error), sin que quien
+      // importó se entere de que el HTML de origen ya venía roto. El
+      // aviso avisa aunque el import general haya salido bien, para
+      // que se confirme a mano que no se perdió nada al mergear.
+      const riesgosDuplicado = DetectarContenidoDuplicado(htmlNormalizado)
+      if (riesgosDuplicado.length > 0) {
+        resultadoFinal.avisos = [
+          ...riesgosDuplicado.map(r => ({ texto: r.detalle, tipo: 'contenido-duplicado', canvasIdx: null })),
           ...(resultadoFinal.avisos ?? []),
         ]
       }

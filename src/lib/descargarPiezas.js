@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { REVISION_CONFIG } from '@/lib/revision/config'
-import { DetectarBalanceTags, DetectarInlineEnvolviendoOutlook } from '@/lib/revision/generales'
+import { DetectarBalanceTags, DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado } from '@/lib/revision/generales'
 
 async function fetchHtml(url) {
   const res = await fetch(`${REVISION_CONFIG.PROXY_URL}?url=${encodeURIComponent(url)}`)
@@ -31,6 +31,7 @@ function validarEstructura(html) {
   return [
     ...DetectarBalanceTags(html, TAGS_VALIDAR),
     ...DetectarInlineEnvolviendoOutlook(html),
+    ...DetectarContenidoDuplicado(html),
   ].map(p => p.detalle)
 }
 

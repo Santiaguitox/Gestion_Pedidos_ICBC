@@ -474,6 +474,69 @@ export function DetectarInlineEnvolviendoOutlook(htmlString) {
   return problemas
 }
 
+// Detecta señales de que el HTML de la pieza tiene CONTENIDO
+// DUPLICADO — el caso típico: se pegó el envío completo dos veces en
+// el mismo documento por error al armarla (copiar/pegar de más, un
+// merge que salió mal, etc.). El balance de tags no agarra este caso:
+// si todo el bloque se duplica simétrico, cada <table> sigue teniendo
+// su </table>, la cuenta global sigue "cerrando" perfecto aunque el
+// documento esté objetivamente roto — hace falta mirar señales de
+// contenido, no de anidamiento.
+//
+// Dos señales, cada una específica de una pieza de email real:
+//
+// 1. El "preheader" (el texto oculto que se ve como preview en la
+//    bandeja de entrada — técnica estándar: display:none + font-size
+//    de 1px + opacity:0 en el mismo <div>) aparece más de una vez.
+//    Una pieza tiene un solo snippet de preview; verlo dos veces es
+//    huella directa de contenido duplicado.
+// 2. Más de un <style> en el documento — el <head> de una pieza trae
+//    uno solo con todos los estilos de Outlook/responsive; un segundo
+//    <style> casi siempre significa que se pegó el <head> completo
+//    una segunda vez.
+//
+// Ninguna de las dos señales depende de la otra — se reportan por
+// separado porque cada una ya alcanza sola para sospechar, y juntas
+// dejan bastante claro qué pasó.
+//
+// OJO con la señal 2 en modo URL: la plataforma que hostea las piezas
+// inyecta SU PROPIO <style> fijo (el de soporte VML: `v\:* {behavior:
+// url(#default#VML); ...}`, necesario para formas/óvalos vectoriales
+// de Outlook) ADEMÁS del que trae la pieza — está en TODAS las piezas
+// reales, no es señal de nada. Analizado por URL (traerHtmlDeUrl trae
+// el HTML de la plataforma tal cual, sin sacar nada — ver
+// RevisionEnvios.jsx / ejecutarRevision.js / descargarPiezas.js) una
+// pieza sana ya arranca en 2 <style> por esto solo. Se descarta ese
+// bloque puntual antes de contar, si no CUALQUIER pieza sana analizada
+// por URL daría falso positivo acá.
+const STYLE_VML_PLATAFORMA = /<style[^>]*>\s*v\\:\*\s*\{[^{}]*behavior:\s*url\(#default#VML\)[^{}]*\}\s*<\/style>/gi
+
+export function DetectarContenidoDuplicado(htmlString) {
+  const problemas = []
+  const sinStyleDePlataforma = htmlString.replace(STYLE_VML_PLATAFORMA, '')
+
+  const divsConStyle = [...sinStyleDePlataforma.matchAll(/<div[^>]*style=["']([^"']*)["'][^>]*>/gi)].map(m => m[1])
+  const preheaders = divsConStyle.filter(style =>
+    /display:\s*none/i.test(style) &&
+    /font-size:\s*1px/i.test(style) &&
+    /opacity:\s*0\b/i.test(style)
+  ).length
+  if (preheaders > 1) {
+    problemas.push({
+      detalle: `El texto oculto de preview (preheader) aparece ${preheaders} veces — señal típica de que el contenido de la pieza quedó pegado por duplicado`,
+    })
+  }
+
+  const cantidadStyle = (sinStyleDePlataforma.match(/<style/gi) || []).length
+  if (cantidadStyle > 1) {
+    problemas.push({
+      detalle: `El documento tiene ${cantidadStyle} bloques <style> propios de la pieza (sin contar el de VML de la plataforma) — lo normal es uno solo; puede indicar que el <head> de la pieza quedó pegado más de una vez`,
+    })
+  }
+
+  return problemas
+}
+
 export function ValidarEstructuraHTML(doc, htmlString) {
   const problemas = []
 
@@ -487,6 +550,11 @@ export function ValidarEstructuraHTML(doc, htmlString) {
   // el de "tabla anidada en tag inline" de más abajo (basado en el
   // DOM, ciego a lo que hay dentro de un comentario).
   problemas.push(...DetectarInlineEnvolviendoOutlook(htmlString))
+
+  // Contenido duplicado (ver comentario de la función) — un caso que
+  // el balance de tags no puede ver porque el documento sigue
+  // "balanceado" aunque esté objetivamente duplicado.
+  problemas.push(...DetectarContenidoDuplicado(htmlString))
 
   // Verificar tags mal anidados en tablas — crítico para emails
   const tablas = [...doc.querySelectorAll('table')]
