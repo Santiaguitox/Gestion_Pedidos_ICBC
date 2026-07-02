@@ -89,7 +89,7 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 
 **Auditoría de Piezas** — escanea una lista de piezas (pegadas como texto simple `Nombre | URL` o pegando una tabla completa de Excel/Sheets) buscando coincidencias de texto visible, links o imágenes contra reglas definidas por el usuario (ej. "¿en cuáles de estas 40 piezas todavía aparece este link viejo?"). Devuelve piezas con coincidencia, sin coincidencia y con error, exportable como TXT.
 
-**Editor de Piezas** — editor visual de emails por bloques drag-and-drop (`EditorPiezas.jsx`). Permite armar una pieza arrastrando bloques de contenido (texto, imágenes, módulos) desde una biblioteca lateral a un canvas central, con las siguientes capacidades:
+**Editor de Piezas** — editor visual de emails por bloques drag-and-drop. La UI vive en `EditorPiezas.jsx`; toda la lógica pura de HTML (export, import, campos, redes, catálogo de bloques) vive en `src/lib/editor/` como funciones testeables sin React — ver "Arquitectura del Editor de Piezas" más abajo. Permite armar una pieza arrastrando bloques de contenido (texto, imágenes, módulos) desde una biblioteca lateral a un canvas central, con las siguientes capacidades:
 
 - **Templates visuales** (ICBC / Avisos / Mall): cambian fondo, color de texto y borde de la pieza sin tocar el contenido de cada bloque. El color del borde sigue al header elegido (CG_* rojo, EB_* negro, PAY_* marrón), no al tema.
 - **Header seleccionable**: 8 variantes (CG, CG Mall, CG Comex, CG Malba, EB, EB Malba, EB Inversiones, Pay Sueldos), seleccionable por click o drag. Las redes sociales del header se pueden reordenar por drag-and-drop y activar/desactivar individualmente.
@@ -104,9 +104,47 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 
 ---
 
+## Arquitectura del Editor de Piezas
+
+`EditorPiezas.jsx` contiene únicamente la UI (componentes, estado de React, drag-and-drop). Toda la lógica de manipulación de HTML vive en `src/lib/editor/` como funciones puras string → string/estructura, sin React ni DOM (la regla de oro de "nunca DOMParser" aplica igual acá):
+
+| Módulo | Qué contiene |
+|--------|--------------|
+| `constantes.js` | `TEMAS`, `LEGAL_FIJO_HTML`, `FIRMA_INSTITUCIONAL_DEFAULT`, `colorPorPrefijoHeader`, data de `REDES_SOCIALES` (los íconos React quedan en el JSX como `REDES_ICONOS`) |
+| `bloques.js` | Catálogo de bloques cargado con `import.meta.glob` sobre los templates reales. Único módulo que depende de Vite — aislado a propósito |
+| `htmlUtils.js` | Utilidades genéricas: `extraerTdsConBalance`, `formaDeTags`/`similitudDeForma`, `quitarWrapperSiEnvuelveTodo`, `normalizarNegritas`, `limpiarHtml*`, `validarUrl` |
+| `campos.js` | `detectarCampos` / `actualizarCampoEnHtml` (contrato posicionOrden vs posicionContenido documentado ahí) |
+| `redesSociales.js` | `detectarRedesSociales` / `reordenarRedesSociales` |
+| `exportar.js` | `generarExport` + helpers de estilo (`construirCanvasStyles`, `aplicarColorTexto`/`revertirColorTexto`, `wrapPreview`) |
+| `importar.js` | `importarDesdeHtml` (marcadores) + `importarHeuristico` (piezas externas) y todos sus clasificadores |
+| `thumbs.js` | Miniaturas SVG de la biblioteca |
+
+El grafo de dependencias es acíclico: `constantes` y `bloques` son hojas; `importar` es el único que depende de casi todo lo demás.
+
+---
+
+## Tests
+
+```bash
+npm test          # corre la suite una vez
+npm run test:watch
+```
+
+La suite (Vitest, `src/**/__tests__/*.test.js`, entorno node — sin DOM) cubre la lógica pura más frágil del proyecto, usando los **templates HTML reales** de `src/data/Templates` como fixtures:
+
+- **Roundtrip completo** `generarExport → importarDesdeHtml` con todo el estado posible: tema Mall (tinte/destinte de color), redes activas/inactivas y reordenadas, legales en modo corrido y separado, firma institucional, indicadores con sigla multi-palabra, imágenes principal/footer, y los caminos de fail-soft (slug desconocido → código personalizado con aviso).
+- **Campos**: detección texto/imagen/link, exclusión de links sociales y de `<a>` dentro de texto editable, y el fix de vaciar-y-reescribir por `posicionOrden`.
+- **Redes sociales**: detección por dominio y por `data-red`, reordenamiento estable, red desactivada que sigue siendo detectable.
+- **htmlUtils**: balance real de `<td>` anidados, wrapper que envuelve todo vs. parcial, vector de forma de tags.
+- **Revisión** (`lib/revision/generales.js`): `DetectarContenidoDuplicado` (incluyendo el descarte del `<style>` VML de la plataforma) y `DetectarInlineEnvolviendoOutlook`.
+
+La config vive en `vitest.config.js` (separada de `vite.config.js` para no cargar los plugins de React/Tailwind al testear). Al agregar lógica nueva a `lib/editor` o `lib/revision`, sumá el caso ahí — estas funciones se rompen en silencio al ajustar una regex, y la suite es lo único que lo hace visible.
+
+---
+
 ## Marcadores del Editor de Piezas
 
-El HTML que exporta el Editor de Piezas (`Copiar HTML` / `Descargar HTML`, en `EditorPiezas.jsx` → `generarExport()`) incluye comentarios y atributos invisibles en cualquier cliente de correo. Son los cimientos del **sistema de importación** (botón "🔗 Importar" en el editor, ya habilitado) que puede reconstruir una pieza completa a partir de su HTML ya exportado (vía marcadores, 100% determinístico) o a partir de una pieza externa de la plataforma sin marcadores (vía heurística).
+El HTML que exporta el Editor de Piezas (`Copiar HTML` / `Descargar HTML`, en `src/lib/editor/exportar.js` → `generarExport()`) incluye comentarios y atributos invisibles en cualquier cliente de correo. Son los cimientos del **sistema de importación** (botón "🔗 Importar" en el editor, ya habilitado) que puede reconstruir una pieza completa a partir de su HTML ya exportado (vía marcadores, 100% determinístico) o a partir de una pieza externa de la plataforma sin marcadores (vía heurística).
 
 Esta sección documenta el formato exacto para que la implementación del parser no dependa de releer `generarExport()` línea por línea.
 
@@ -139,7 +177,7 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 
 ### Estado de implementación
 
-1. **Parser de marcadores** — **implementado** (`importarDesdeHtml()` en `EditorPiezas.jsx`). Lee el HTML completo buscando cada marcador de la tabla arriba y reconstruye el estado equivalente al que recibe `generarExport`. El bloque de contenido se reconstruye cruzando el `slug` contra `BLOQUES` (mismo patrón que ya usa `headerDesdeSlug()` al restaurar el borrador de `localStorage`), tomando el HTML interno del marcador como `htmlEditado`.
+1. **Parser de marcadores** — **implementado** (`importarDesdeHtml()` en `src/lib/editor/importar.js`). Lee el HTML completo buscando cada marcador de la tabla arriba y reconstruye el estado equivalente al que recibe `generarExport`. El bloque de contenido se reconstruye cruzando el `slug` contra `BLOQUES` (mismo patrón que ya usa `headerDesdeSlug()` al restaurar el borrador de `localStorage`), tomando el HTML interno del marcador como `htmlEditado`.
 
    - **Tema**: sin marcador propio — se infiere por igualdad exacta contra el `<td>` específico que `generarExport` usa para `bgContenido` (no contra el color suelto en cualquier parte del HTML, que puede coincidir por casualidad con el color de la banda de header).
    - **Color de texto**: si el tema detectado no es ICBC, el HTML interno de cada bloque tiene el color del tema "quemado" (`aplicarColorTexto` lo escribe así al exportar) — `revertirColorTexto()` lo revierte al valor base `#333333` antes de guardarlo como `htmlEditado`, para que cambiar de tema después de importar siga funcionando igual que en una pieza armada nativamente en el editor.
@@ -147,7 +185,7 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
    - **HTML sin ningún marcador de bloque**: `resultado` es `null` — no es un caso de "bloques desactualizados", es "no hay nada reconocible".
    - Validado con una batería de pruebas manuales (roundtrip básico, bloques repetidos del mismo slug, tema Mall con reversión de color, legales corridos/separados, imágenes, indicadores, slug desconocido, HTML ajeno) — no hay suite automatizada corriendo en CI todavía, las pruebas se hicieron ad hoc durante el desarrollo.
 
-2. **Heurística sin marcadores** (caso "pieza externa", armada fuera de este editor o de una versión vieja sin marcadores) — **implementada** (`importarHeuristico()`, justo después de `importarDesdeHtml()` en `EditorPiezas.jsx`). Se usa solo cuando `importarDesdeHtml()` devuelve `resultado: null` (no encontró ningún marcador).
+2. **Heurística sin marcadores** (caso "pieza externa", armada fuera de este editor o de una versión vieja sin marcadores) — **implementada** (`importarHeuristico()`, en `src/lib/editor/importar.js` junto a `importarDesdeHtml()`). Se usa solo cuando `importarDesdeHtml()` devuelve `resultado: null` (no encontró ningún marcador).
 
    Validada contra **10 piezas reales de la plataforma + 1 pieza vieja de 2019** (no contra un solo supuesto) — el análisis confirmó **tres familias estructurales reales**, no una sola con variaciones menores:
 
@@ -173,7 +211,7 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 
    El botón final ("Cargar en el editor") cumple una doble función a propósito: confirma la importación y, si había contenido armado en el canvas, lo reemplaza — no hay una segunda confirmación tipo "esto va a borrar lo que tenías", el mismo gesto cubre ambas cosas. Solo se **bloquea** cuando `resultado` es `null` (no hay absolutamente nada reconocible para cargar); con `confianza: 'baja'` pero `resultado` no-null (la heurística sí armó algo, aunque con poca certeza) el botón queda habilitado, cambiando de texto a "Cargar igual (no recomendado)" — nunca se le impide al usuario decidir cuando hay datos reales, solo se le avisa con claridad.
 
-4. **Feedback visual de bloques no reconocidos** — **implementado** (`marcarBloquesNoReconocidosParaPreview()` en `EditorPiezas.jsx`). En el preview del paso 3, los bloques que no matchearon ningún template se marcan visualmente antes de que el usuario confirme:
+4. **Feedback visual de bloques no reconocidos** — **implementado** (`marcarBloquesNoReconocidosParaPreview()` en `src/lib/editor/importar.js`). En el preview del paso 3, los bloques que no matchearon ningún template se marcan visualmente antes de que el usuario confirme:
 
    - **Outline punteado amarillo** + etiqueta "No reconocido": bloque que cayó como código personalizado (no matcheó ningún template por similitud insuficiente).
    - **Outline punteado rojo** + etiqueta "Fuera de lugar": bloque detectado fuera del área de contenido esperada (posible HTML mal armado en la pieza original).
@@ -292,7 +330,7 @@ src/
 │   ├── RevisionEmail.jsx            # Revisión de emails
 │   ├── RevisionBase.jsx             # Revisión de BBDD
 │   ├── RevisionEnvios.jsx           # Revisión de envíos
-│   ├── EditorPiezas.jsx             # Editor visual de piezas HTML por bloques drag-and-drop
+│   ├── EditorPiezas.jsx             # Editor de piezas — solo la UI; la lógica está en lib/editor/
 │   ├── SetPassword.jsx
 │   └── Usuarios.jsx
 ├── workers/
