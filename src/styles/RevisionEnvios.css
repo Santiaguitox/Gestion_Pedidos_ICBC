@@ -16,6 +16,15 @@
   --yellow-text: #F59E0B;
   --yellow-bg: rgba(245, 158, 11, 0.08);
   --yellow-border: rgba(245, 158, 11, 0.3);
+  /* Info (badges de tipo de campo detectado — link/imagen): color
+     fijo en vez de --accent-secondary porque ese cambia entre tema
+     claro/oscuro y no tiene variantes -bg/-border ya armadas como sí
+     tienen green/red/yellow; más simple mantener esta escala propia
+     que resolver el mismo color con color-mix() (sin uso previo en el
+     resto del proyecto, se prefiere no introducirlo acá). */
+  --info-text: #6366F1;
+  --info-bg: rgba(99, 102, 241, 0.08);
+  --info-border: rgba(99, 102, 241, 0.28);
   font-family: var(--font-body);
 }
 
@@ -486,4 +495,207 @@
   .re2-actions { flex-direction: column; align-items: stretch; }
   .re2-btn-analizar { justify-content: center; width: 100%; }
   .re2-btn-reset { width: 100%; }
+}
+
+/* ─── Switch de vista (Comparar / Generar base de test) ─────────────────
+   Reusa la clase .re2-tabs (mismo look que el switch HTML/URL de más
+   abajo) pero un poco más grande, porque acá decide entre dos flujos
+   completos de la herramienta, no solo el formato del input. Vive
+   AFUERA de .re2-workspace, directo sobre el fondo de la página — el
+   fondo gris (--bg-hover) que .re2-tabs trae por defecto casi no
+   contrasta ahí (los dos son grises muy parecidos), a diferencia del
+   switch HTML/URL de más abajo que sí queda sobre blanco
+   (--bg-surface, el fondo del workspace). Por eso acá se fuerza un
+   fondo propio en vez de heredar el de .re2-tabs. ─────────────────── */
+.re2-tabs.re2-vista-switch {
+  align-self: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+.re2-vista-switch button {
+  padding: 7px 16px;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── Generar base de test ────────────────────────────────────────────── */
+.re2-gen-campos { display: flex; flex-direction: column; gap: 10px; }
+.re2-gen-campos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 9px;
+}
+.re2-gen-campo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.re2-gen-campo-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.re2-gen-campo-nombre {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.re2-gen-campo-row input {
+  width: 100%;
+}
+/* Badge de tipo detectado (link/imagen) por el nombre del campo —
+   color propio (accent-secondary) para no confundirse con los verdes/
+   rojos/amarillos de ok/miss/unused, que son evaluativos y esto es
+   solo informativo. */
+.re2-tag-tipo {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid var(--info-border);
+  white-space: nowrap;
+}
+
+.re2-gen-emails { display: flex; flex-direction: column; gap: 10px; }
+.re2-gen-emails-list { display: flex; flex-direction: column; gap: 8px; }
+.re2-gen-email-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.re2-gen-email-row input { flex: 1; }
+.re2-gen-quitar-email {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.re2-gen-quitar-email:hover { color: var(--accent-primary); border-color: var(--red-border); }
+
+.re2-gen-add-email {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.re2-gen-add-email:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* Nombre de archivo editable */
+.re2-gen-nombre { display: flex; flex-direction: column; gap: 6px; }
+.re2-gen-nombre-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 340px;
+}
+.re2-gen-nombre-input input { flex: 1; }
+.re2-gen-nombre-input span { font-size: 12.5px; color: var(--text-muted); }
+
+/* ─── Pantalla partida: controles a la izquierda, preview en vivo a la
+   derecha — mismo lenguaje visual que el preview de "Revisión de
+   emails" (re-layout / re-preview-* en RevisionEmail.css), clases
+   propias re2-* porque cada herramienta mantiene su CSS aislado. La
+   columna derecha se deja crecer hasta 720px (680px de iframe + su
+   padding) para que en pantallas grandes entre completo sin necesitar
+   scroll — ver el porqué del ancho fijo del iframe más abajo. ──────── */
+.re2-gen-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 720px);
+  gap: 20px;
+  align-items: start;
+}
+.re2-gen-controles { display: flex; flex-direction: column; gap: 16px; }
+
+.re2-col-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.re2-preview-outer {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.re2-preview-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+.re2-preview-titlebar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); }
+.re2-preview-titlebar span { font-size: 12px; color: var(--text-muted); }
+/* overflow-x: auto — si la columna disponible termina siendo más
+   angosta que el iframe (ver nota abajo), se scrollea horizontal en
+   vez de romper el layout de la página. */
+.re2-preview-body { padding: 16px; overflow-x: auto; }
+/* Ancho FIJO de 680px (mismo criterio que .ep-preview-modal en
+   EditorPiezas.css) en vez de 100% — un iframe con width:100% adopta
+   el ancho VISUAL del contenedor que le toque, y si ese contenedor
+   termina siendo angosto (columna del grid comprimida, ventana chica),
+   el @media max-width:600px que casi todas las piezas traen en su
+   propio HTML se dispara solo, mostrando la versión mobile del email
+   sin que nadie lo haya pedido. El viewport interno del iframe depende
+   de su ancho REAL en píxeles, no de cómo se lo vea achicado por CSS
+   — por eso 680px fijo acá: fuerza que la pieza siempre renderice su
+   versión de escritorio en preview. Recién en el breakpoint mobile de
+   abajo se vuelve fluido a propósito, para que ahí sí se vea la
+   versión mobile real de la pieza. */
+.re2-iframe {
+  display: block;
+  width: 680px;
+  border: none;
+  background: #fff;
+  min-height: 200px;
+}
+.re2-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .re2-gen-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* Con muchos campos (pieza con 8-10 variables) uno por línea se
+     hace larguísimo — de a 2 por fila usa mucho menos alto sin que
+     los inputs queden ilegibles. */
+  .re2-gen-campos-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* Acá sí queremos la versión mobile real de la pieza — el iframe
+     pasa a fluido, así su ancho real queda por debajo de los ~600px
+     que dispara el media query mobile del HTML del email. */
+  .re2-iframe { width: 100%; }
 }

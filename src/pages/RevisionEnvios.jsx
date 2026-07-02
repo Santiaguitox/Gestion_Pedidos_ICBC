@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { REVISION_CONFIG } from '@/lib/revision/config'
 import {
-  compararCampos, validateCsvHeaders, leerMuestraDeArchivo,
+  compararCampos, validateCsvHeaders, leerMuestraDeArchivo, extractFields,
 } from '@/lib/revision-envios/comparar'
+import { valoresPorDefecto, generarCsvBaseTest, emailValido, reemplazarCampos, tipoCampo } from '@/lib/revision-envios/generarBase'
 import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
-import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft, RefreshCw, Info } from 'lucide-react'
+import { Search, Trash2, RotateCcw, Upload, FileText, AlertTriangle, X, Check, Lock, Table2, ArrowLeft, RefreshCw, Info, Wand2, Plus, Download, Link2, Image as ImageIcon } from 'lucide-react'
 import { Section } from '@/components/pedidos/Section'
 import '@/styles/RevisionEnvios.css'
 
@@ -126,6 +127,27 @@ export default function RevisionEnvios() {
   const [progreso, setProgreso] = useState(0)
   const fileInputRef = useRef(null)
 
+  // ── Generar base de test ──────────────────────────────────────────
+  // vista decide qué mitad de la herramienta se muestra: comparar
+  // (la de siempre, contra una base real) o generar (arma una base
+  // desde cero a partir de los campos que detecta en la pieza).
+  const [vista, setVista] = useState('comparar')
+  // camposResultado = { campos, tieneEmail } o null — campos es la
+  // lista de <*Campo*> detectados SIN el campo "Email" (ese se maneja
+  // aparte, siempre como columna obligatoria). tieneEmail avisa si la
+  // pieza además usa <*Email*> como merge tag dentro del HTML (poco
+  // común, pero si pasa se completa solo con el email de cada fila).
+  const [camposResultado, setCamposResultado] = useState(null)
+  const [valoresCampos, setValoresCampos] = useState({}) // { campo: valor editable }
+  const [emailsTest, setEmailsTest] = useState([''])
+  const [nombreBase, setNombreBase] = useState('') // nombre de archivo editable; vacío = automático
+  // HTML crudo ya resuelto (post fetch, si vino por URL) — se guarda
+  // aparte de camposResultado para poder recalcular el preview en vivo
+  // sin volver a pegarle a la URL cada vez que se edita un valor.
+  const [htmlDetectado, setHtmlDetectado] = useState('')
+  const [previewHtml, setPreviewHtml] = useState('')
+  const previewIframeRef = useRef(null)
+
   const avisosHeader = headerRaw.trim() ? validateCsvHeaders(headerRaw) : []
 
   async function cargarArchivo(file) {
@@ -148,40 +170,184 @@ export default function RevisionEnvios() {
   function handleReiniciar() {
     setHtml(''); setUrl(''); setUrlError(''); setHeaderRaw(''); setMuestra(null)
     setNombreArchivo(''); setError(''); setResultado(null)
+    setCamposResultado(null); setValoresCampos({}); setEmailsTest([''])
+    setNombreBase(''); setHtmlDetectado(''); setPreviewHtml('')
+  }
+
+  // Valida la URL de la pieza (mismo criterio en ambos flujos, comparar
+  // y generar) — separado de handleAnalizar para no duplicarlo.
+  function validarUrlPieza() {
+    if (modo !== 'url') return true
+    try {
+      const host = new URL(url).hostname
+      // Misma validación (y mismo motivo) que en RevisionEmail.jsx —
+      // ver ese archivo para el detalle completo del porqué del
+      // punto delante en .icommarketing.com.
+      if (host !== 'icommarketing.com' && !host.endsWith('.icommarketing.com')) {
+        setUrlError('Solo se pueden analizar piezas de icommarketing.com')
+        return false
+      }
+      return true
+    } catch { setUrlError('La URL ingresada no es válida'); return false }
+  }
+
+  // Fetch + animación en paralelo, reusado por comparar y por generar
+  // — el usuario ve avance mientras se espera el HTML real, en vez de
+  // quedarse con el botón quieto sin ninguna señal de que algo pasa.
+  async function obtenerHtmlAAnalizar() {
+    const [htmlAAnalizar] = await Promise.all([
+      modo === 'html' ? Promise.resolve(html) : traerHtmlDeUrl(url),
+      animarProgreso(setProgreso)
+    ])
+    return htmlAAnalizar
   }
 
   async function handleAnalizar() {
     if (!headerRaw.trim()) { setError('Falta el encabezado de la base.'); return }
     const inputValido = modo === 'html' ? html.trim() : url.trim()
     if (!inputValido) { setError(modo === 'html' ? 'Falta el HTML del mail.' : 'Falta la URL de la pieza.'); return }
-
-    if (modo === 'url') {
-      try {
-        const host = new URL(url).hostname
-        // Misma validación (y mismo motivo) que en RevisionEmail.jsx —
-        // ver ese archivo para el detalle completo del porqué del
-        // punto delante en .icommarketing.com.
-        if (host !== 'icommarketing.com' && !host.endsWith('.icommarketing.com')) {
-          setUrlError('Solo se pueden analizar piezas de icommarketing.com')
-          return
-        }
-      } catch { setUrlError('La URL ingresada no es válida'); return }
-    }
+    if (!validarUrlPieza()) return
 
     setUrlError(''); setError(''); setCargando(true); setResultado(null); setProgreso(0)
     try {
-      // Animación y fetch en paralelo — el usuario ve avance mientras
-      // se espera el HTML real, en vez de quedarse con el botón en
-      // "Analizando…" sin ninguna señal de que algo está pasando.
-      const [htmlAAnalizar] = await Promise.all([
-        modo === 'html' ? Promise.resolve(html) : traerHtmlDeUrl(url),
-        animarProgreso(setProgreso)
-      ])
+      const htmlAAnalizar = await obtenerHtmlAAnalizar()
       setResultado(compararCampos(headerRaw, htmlAAnalizar))
     } catch (err) {
       setError(err.message || 'No se pudo completar el análisis.')
     }
     setCargando(false)
+  }
+
+  // Detecta los campos <*Campo*> de la pieza y prepara el formulario
+  // de la base de test — no necesita ningún encabezado de base previo,
+  // a diferencia de handleAnalizar, porque el objetivo acá es
+  // generarla de cero.
+  async function handleDetectarCampos() {
+    const inputValido = modo === 'html' ? html.trim() : url.trim()
+    if (!inputValido) { setError(modo === 'html' ? 'Falta el HTML del mail.' : 'Falta la URL de la pieza.'); return }
+    if (!validarUrlPieza()) return
+
+    setUrlError(''); setError(''); setCargando(true); setCamposResultado(null); setProgreso(0)
+    try {
+      const htmlAAnalizar = await obtenerHtmlAAnalizar()
+      setHtmlDetectado(htmlAAnalizar)
+      const todosLosCampos = [...extractFields(htmlAAnalizar)]
+      // El campo Email, si la pieza lo usa como merge tag, no se pide
+      // por separado — se completa solo con el email de cada fila. El
+      // resto de los campos sí quedan editables, con "{Campo} Test"
+      // como valor de arranque.
+      const tieneEmail = todosLosCampos.some(c => c.toLowerCase() === 'email')
+      const campos = todosLosCampos.filter(c => c.toLowerCase() !== 'email')
+      setCamposResultado({ campos, tieneEmail })
+      // Se preservan los valores ya editados por el usuario para
+      // campos que se repiten entre una detección y la siguiente (ej.
+      // apretó "Detectar campos" de nuevo tras cambiar la URL a otra
+      // versión de la misma pieza) — solo se completan de cero los
+      // campos nuevos.
+      setValoresCampos(prev => {
+        const defaults = valoresPorDefecto(campos)
+        const nuevo = {}
+        campos.forEach(c => { nuevo[c] = prev[c] ?? defaults[c] })
+        return nuevo
+      })
+    } catch (err) {
+      setError(err.message || 'No se pudo completar la detección.')
+    }
+    setCargando(false)
+  }
+
+  function actualizarValorCampo(campo, valor) {
+    setValoresCampos(prev => ({ ...prev, [campo]: valor }))
+  }
+
+  function actualizarEmailTest(idx, valor) {
+    setEmailsTest(prev => prev.map((e, i) => i === idx ? valor : e))
+  }
+
+  function agregarEmailTest() {
+    setEmailsTest(prev => [...prev, ''])
+  }
+
+  function quitarEmailTest(idx) {
+    // Nunca deja la lista vacía — siempre queda al menos un input,
+    // aunque esté vacío, para no perder el lugar donde escribir.
+    setEmailsTest(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+  }
+
+  const emailsTestValidos = emailsTest.map(e => e.trim()).filter(Boolean)
+  const hayEmailInvalido = emailsTest.some(e => e.trim() && !emailValido(e))
+
+  function handleDescargarBase() {
+    if (!camposResultado) return
+    const csv = generarCsvBaseTest(camposResultado.campos, valoresCampos, emailsTest)
+    const nombre = nombreBaseGenerada()
+    const blob = new Blob([csv], { type: 'text/plain;charset=windows-1252' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = nombre
+    a.click()
+    // Mismo criterio que RevisionBase.jsx — revocar con delay evita
+    // que Firefox corte la descarga si se revoca la URL al toque.
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+
+  // Nombre automático (el que se usa como placeholder y como fallback
+  // si el usuario no escribió nada) — separado de nombreBaseGenerada
+  // para poder mostrarlo como placeholder sin generar el .csv.
+  function nombreBaseAuto() {
+    if (modo === 'url' && url) {
+      try {
+        const ultimoSegmento = new URL(url).pathname.split('/').filter(Boolean).pop()
+        if (ultimoSegmento) return `base_test_${ultimoSegmento.replace(/\.[^/.]+$/, '')}`
+      } catch { /* usa el nombre genérico de abajo */ }
+    }
+    return 'base_test'
+  }
+
+  // Limpia lo que haya escrito el usuario: saca una extensión si la
+  // llegó a tipear ella misma, y cualquier carácter que no sea seguro
+  // para un nombre de archivo (barras, dos puntos, etc. rompen la
+  // descarga o el nombre en algunos sistemas de archivos).
+  function sanitizarNombreArchivo(nombre) {
+    return nombre
+      .trim()
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]/g, '')
+      .replace(/\s+/g, '_')
+  }
+
+  function nombreBaseGenerada() {
+    const base = sanitizarNombreArchivo(nombreBase) || nombreBaseAuto()
+    return `${base}.csv`
+  }
+
+  // Preview en vivo: recalcula el HTML con los valores de prueba
+  // actuales cada vez que cambia algún campo, el email o se detecta
+  // una pieza nueva. Debounced 250ms para no relanzar el iframe (que
+  // recarga entero al cambiar srcDoc) en cada tecla — con el debounce
+  // el reemplazo se siente "en vivo" igual, sin el parpadeo de
+  // recargar el iframe en cada letra tipeada.
+  useEffect(() => {
+    if (!htmlDetectado) { setPreviewHtml(''); return }
+    const id = setTimeout(() => {
+      const emailPreview = emailsTest.find(e => e.trim()) || 'test@ejemplo.com'
+      setPreviewHtml(reemplazarCampos(htmlDetectado, valoresCampos, emailPreview))
+    }, 250)
+    return () => clearTimeout(id)
+  }, [htmlDetectado, valoresCampos, emailsTest])
+
+  function handlePreviewIframeLoad() {
+    const iframe = previewIframeRef.current
+    if (!iframe) return
+    try {
+      const h = iframe.contentDocument?.body?.scrollHeight
+      if (h) iframe.style.height = h + 'px'
+    } catch {
+      // Mismo caso que en RevisionEmail.jsx — acceder a contentDocument
+      // puede tirar un error de seguridad cross-origin en algunos
+      // navegadores aunque el contenido sea srcDoc local; si falla, el
+      // iframe no se auto-ajusta esa vez, no es crítico.
+    }
   }
 
   // Auto-disparo del análisis cuando se llega desde el deep-link de
@@ -221,13 +387,32 @@ export default function RevisionEnvios() {
 
       <div>
         <h1 className="page-title">Revisión de envíos</h1>
-        <p className="page-subtitle">Campos &lt;*Campo*&gt; del mail vs. columnas de la base</p>
+        <p className="page-subtitle">
+          {vista === 'comparar'
+            ? <>Campos &lt;*Campo*&gt; del mail vs. columnas de la base</>
+            : <>Generá una base de test con los campos que detecte la pieza</>}
+        </p>
+      </div>
+
+      {/* Switch entre las dos mitades de la herramienta — cambiar de
+          vista no pisa nada de lo cargado en la otra (la pieza HTML/URL
+          es compartida entre ambas a propósito, ya que las dos la
+          necesitan; el resto de cada vista vive en su propio estado). */}
+      <div className="re2-tabs re2-vista-switch">
+        <button className={vista === 'comparar' ? 'active' : ''} onClick={() => setVista('comparar')}>
+          Comparar con mi base
+        </button>
+        <button className={vista === 'generar' ? 'active' : ''} onClick={() => setVista('generar')}>
+          <Wand2 size={13} />Generar base de test
+        </button>
       </div>
 
       <div className="re2-workspace">
 
-        {/* Sección — Encabezado de la base */}
-        <div className="re2-ws-section">
+        {/* Sección — Encabezado de la base (solo aplica al modo
+            comparar: en "Generar base de test" el objetivo es
+            justamente no necesitar tener una base todavía). */}
+        {vista === 'comparar' && <div className="re2-ws-section">
           <div className="re2-ws-section-label"><span>Encabezado de la base</span><div className="re2-ws-rule" /></div>
 
           {nombreArchivo ? (
@@ -268,7 +453,7 @@ export default function RevisionEnvios() {
           )}
 
           {muestra && <TablaMuestra headers={muestra.headers} filas={muestra.filas} avisos={avisosHeader} />}
-        </div>
+        </div>}
 
         {/* Sección — Pieza a validar */}
         <div className="re2-ws-section">
@@ -319,11 +504,18 @@ export default function RevisionEnvios() {
         {error && <div className="re2-error-banner">{error}</div>}
 
         <div className="re2-actions">
-          <button onClick={handleAnalizar} disabled={cargando} className="re2-btn-analizar">
-            <Search size={15} />
-            {cargando ? 'Analizando…' : 'Analizar'}
-          </button>
-          {(resultado || headerRaw || html || url) && (
+          {vista === 'comparar' ? (
+            <button onClick={handleAnalizar} disabled={cargando} className="re2-btn-analizar">
+              <Search size={15} />
+              {cargando ? 'Analizando…' : 'Analizar'}
+            </button>
+          ) : (
+            <button onClick={handleDetectarCampos} disabled={cargando} className="re2-btn-analizar">
+              <Wand2 size={15} />
+              {cargando ? 'Detectando…' : 'Detectar campos'}
+            </button>
+          )}
+          {(resultado || camposResultado || headerRaw || html || url) && (
             <button onClick={handleReiniciar} className="re2-btn-reset" title="Empezar de nuevo">
               <RotateCcw size={15} />
             </button>
@@ -339,7 +531,7 @@ export default function RevisionEnvios() {
           (cargando o resultado), cerrado si todavía no se analizó
           nada — incluye el caso de auto-run con datos precargados,
           que debe verse de una sin tener que abrir nada. */}
-      {(cargando || resultado) && (
+      {vista === 'comparar' && (cargando || resultado) && (
         <Section
           title="Resultado"
           icon={<Search size={16} />}
@@ -457,6 +649,174 @@ export default function RevisionEnvios() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Formulario de "Generar base de test" — arranca abierto en
+          cuanto hay algo para mostrar (cargando o ya detectados los
+          campos), mismo criterio que el acordeón de Resultado de
+          arriba. */}
+      {vista === 'generar' && (cargando || camposResultado) && (
+        <Section
+          title="Base de test"
+          icon={<Wand2 size={16} />}
+          defaultOpen={true}
+        >
+          {cargando && (
+            <div className="re2-processing">
+              <div className="re2-processing-head">
+                <div className="re2-spinner" />
+                <div className="re2-processing-filename">
+                  {modo === 'html' ? 'Analizando HTML pegado' : (url || 'Analizando pieza')}
+                </div>
+              </div>
+              <div className="re2-processing-top">
+                <div className="re2-processing-label">Buscando campos personalizados…</div>
+                <div className="re2-processing-pct">{progreso}%</div>
+              </div>
+              <div className="re2-progress-track"><div className="re2-progress-fill" style={{ width: `${progreso}%` }} /></div>
+              <div className="re2-processing-note">Armando la lista de campos &lt;*Campo*&gt; de la pieza — no se guarda nada.</div>
+            </div>
+          )}
+
+          {camposResultado && (
+            <div className="re2-resultado">
+
+              {/* Nombre del archivo — editable, con el automático (a
+                  partir de la URL de la pieza, o "base_test" si no hay
+                  URL) como placeholder cuando está vacío. */}
+              <div className="re2-gen-nombre">
+                <label className="re2-tag-section-title" htmlFor="re2-nombre-base">Nombre del archivo</label>
+                <div className="re2-gen-nombre-input">
+                  <input
+                    id="re2-nombre-base"
+                    type="text"
+                    value={nombreBase}
+                    onChange={e => setNombreBase(e.target.value)}
+                    placeholder={nombreBaseAuto()}
+                  />
+                  <span>.csv</span>
+                </div>
+              </div>
+
+              <div className="re2-gen-layout">
+
+                {/* Controles — campos detectados + emails + descarga */}
+                <div className="re2-gen-controles">
+                  {camposResultado.campos.length === 0 ? (
+                    <div className="re2-sin-campos">
+                      <Info size={18} />
+                      <p>
+                        Esta pieza no tiene ningún campo personalizado <code>&lt;*Campo*&gt;</code> —
+                        la base de test va a tener solo la columna <b>Email</b>.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="re2-gen-campos">
+                      <div className="re2-tag-section-title">Campos detectados — el valor de prueba se puede editar</div>
+                      <div className="re2-gen-campos-grid">
+                        {camposResultado.campos.map(campo => {
+                          const tipo = tipoCampo(campo)
+                          return (
+                            <label key={campo} className="re2-gen-campo-row">
+                              <span className="re2-gen-campo-label">
+                                <span className="re2-gen-campo-nombre">&lt;*{campo}*&gt;</span>
+                                {tipo !== 'texto' && (
+                                  <span
+                                    className={`re2-tag-tipo re2-tag-tipo-${tipo}`}
+                                    title={tipo === 'link'
+                                      ? 'Detectado como link por su nombre — el valor de prueba arranca con una URL real'
+                                      : 'Detectado como imagen por su nombre — el valor de prueba arranca con una URL de imagen real'}
+                                  >
+                                    {tipo === 'link' ? <><Link2 size={10} />URL</> : <><ImageIcon size={10} />Imagen</>}
+                                  </span>
+                                )}
+                              </span>
+                              <input
+                                type="text"
+                                value={valoresCampos[campo] ?? ''}
+                                onChange={e => actualizarValorCampo(campo, e.target.value)}
+                              />
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {camposResultado.tieneEmail && (
+                    <div className="re2-aviso re2-aviso-warning">
+                      <Info size={13} />
+                      <span>Esta pieza también usa <b>&lt;*Email*&gt;</b> como campo — se completa solo con el email de cada fila, no hace falta cargarlo aparte.</span>
+                    </div>
+                  )}
+
+                  <div className="re2-gen-emails">
+                    <div className="re2-tag-section-title">Emails de destino — una fila de la base por cada uno</div>
+                    <div className="re2-gen-emails-list">
+                      {emailsTest.map((email, i) => (
+                        <div key={i} className="re2-gen-email-row">
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={e => actualizarEmailTest(i, e.target.value)}
+                            placeholder="test@icomm.com.ar"
+                            className={email.trim() && !emailValido(email) ? 'input-error' : ''}
+                          />
+                          {emailsTest.length > 1 && (
+                            <button onClick={() => quitarEmailTest(i)} className="re2-gen-quitar-email" title="Quitar">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={agregarEmailTest} className="re2-gen-add-email">
+                      <Plus size={13} />Agregar otro email
+                    </button>
+                    {hayEmailInvalido && <p className="msg-error" style={{ marginTop: 6 }}>Hay un email con formato inválido.</p>}
+                  </div>
+
+                  <div className="re2-actions">
+                    <button
+                      onClick={handleDescargarBase}
+                      disabled={emailsTestValidos.length === 0 || hayEmailInvalido}
+                      className="re2-btn-analizar"
+                    >
+                      <Download size={15} />Descargar base de test (.csv)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preview en vivo — misma pieza, con los <*Campo*>
+                    reemplazados por los valores de prueba de la
+                    izquierda a medida que se editan. */}
+                <div>
+                  <p className="re2-col-label">Vista previa</p>
+                  <div className="re2-preview-outer">
+                    <div className="re2-preview-titlebar">
+                      <span className="dot" />
+                      <span>Pieza con los datos de prueba</span>
+                    </div>
+                    <div className="re2-preview-body">
+                      {previewHtml ? (
+                        <iframe
+                          ref={previewIframeRef}
+                          srcDoc={previewHtml}
+                          title="Vista previa de la pieza con los datos de prueba"
+                          onLoad={handlePreviewIframeLoad}
+                          className="re2-iframe"
+                        />
+                      ) : (
+                        <div className="re2-preview-empty">Preparando la vista previa…</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
           )}
         </Section>
