@@ -1638,6 +1638,26 @@ select:focus {
 }
 @keyframes busquedaGlobalSpin { to { transform: rotate(360deg); } }
 
+/* Fallback de <Suspense> para las páginas cargadas con React.lazy —
+   vive dentro de <main class="main-content"> en AppLayout.jsx, así que
+   solo tapa el área de contenido mientras baja el chunk de la página;
+   sidebar/topbar quedan montados y visibles todo el tiempo, no hay
+   parpadeo del layout general al navegar entre herramientas. */
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+.page-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--icbc-red);
+  border-radius: 50%;
+  animation: busquedaGlobalSpin 600ms linear infinite;
+}
+
 .busqueda-global-group-label {
   font-family: var(--font-display);
   font-size: 0.625rem;

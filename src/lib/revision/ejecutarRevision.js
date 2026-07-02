@@ -60,19 +60,42 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
   const srcList = [...new Set(imagenes.map(img => img.getAttribute('src')).filter(Boolean))]
   const cacheDatos = {}
 
-  for (let idx = 0; idx < srcList.length; idx++) {
-    // El análisis de imágenes ocupa del 10% al 90% del progreso total —
-    // se deja margen al principio (parseo/estructura) y al final
-    // (validadores finales) para que la barra no salte de 0 a 100 de
-    // golpe en piezas con pocas imágenes.
-    const porcentaje = srcList.length > 0 ? 10 + Math.round(((idx + 1) / srcList.length) * 80) : 50
-    onProgreso?.(`Verificando imagen ${idx + 1} de ${srcList.length}...`, porcentaje)
-    const src = srcList[idx]
+  // Antes se pedía una imagen a la vez (un await fetch por imagen, en
+  // fila) — con piezas de 15-20 imágenes eso suma varios segundos de
+  // espera pura por latencia de red, uno detrás del otro. Ahora se
+  // piden en paralelo con un tope de concurrencia (no todas juntas,
+  // para no saturar el proxy con N fetches simultáneos de una pieza
+  // con muchas imágenes). El progreso se reporta por CANTIDAD
+  // COMPLETADA, no por índice de arranque — con paralelismo real las
+  // imágenes no terminan en el mismo orden en que se lanzaron.
+  const CONCURRENCIA_IMAGENES = 5
+  let completadas = 0
+
+  async function verificarImagen(src) {
     try {
       const response = await fetch(`${REVISION_CONFIG.PROXY_URL}?modo=imagen&url=${encodeURIComponent(src)}`)
       if (response.ok) cacheDatos[src] = await response.json()
     } catch {}
+    completadas++
+    const porcentaje = srcList.length > 0 ? 10 + Math.round((completadas / srcList.length) * 80) : 50
+    onProgreso?.(`Verificando imagen ${completadas} de ${srcList.length}...`, porcentaje)
   }
+
+  // Pool simple de concurrencia acotada: cada "worker" toma la
+  // próxima imagen de una cola compartida (índice mutable) hasta que
+  // se vacía — más simple que trocear en lotes fijos, y un worker que
+  // termina rápido no queda esperando a que arranque el próximo lote,
+  // toma directamente la siguiente imagen disponible.
+  let siguiente = 0
+  async function worker() {
+    while (siguiente < srcList.length) {
+      const src = srcList[siguiente++]
+      await verificarImagen(src)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCIA_IMAGENES, srcList.length) }, worker)
+  )
 
   const [dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates] = await Promise.all([
     Promise.resolve(ValidarDominioImagenes(doc)),

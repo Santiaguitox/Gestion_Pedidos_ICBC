@@ -1,3 +1,4 @@
+import { lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
@@ -6,21 +7,35 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
-import Pedidos from '@/pages/Pedidos'
-import PedidoDetalle from '@/pages/PedidoDetalle'
-import Calendario from '@/pages/Calendario'
-import Notificaciones from '@/pages/Notificaciones'
-import RevisionEmail from '@/pages/RevisionEmail'
-import RevisionBase from '@/pages/RevisionBase'
-import RevisionEnvios from '@/pages/RevisionEnvios'
-import EditorPiezas from '@/pages/EditorPiezas'
-import AuditoriaPiezas from '@/pages/AuditoriaPiezas'
-import Usuarios from '@/pages/Usuarios'
-import Papelera from '@/pages/Papelera'
-import Configuracion from '@/pages/Configuracion'
 import SetPassword from '@/pages/SetPassword'
 import { ROLES } from '@/lib/constants'
 import '@/styles/global.css'
+
+// Code-splitting por ruta: estas páginas NO se importan estático —
+// antes, TODO el JS de las 13 páginas (EditorPiezas.jsx solo son
+// ~5.700 líneas) bajaba entero en el primer load de cualquier
+// usuario, incluso alguien que jamás abre esa herramienta en la
+// sesión (o que ni siquiera tiene el rol para hacerlo, como 'viewer'
+// con Editor de Piezas / Auditoría de Piezas / las 3 de Revisión).
+// Con lazy(), Vite genera un chunk aparte por página que recién se
+// pide de la red cuando React Router realmente navega a esa ruta.
+// Login, Dashboard y SetPassword quedan afuera de esto a propósito:
+// son las páginas que se ven sí o sí apenas se entra a la app (login,
+// landing post-login, link de reseteo de contraseña) — lazy-loadearlas
+// solo agregaría un flash de loading en el camino más común, sin
+// ahorrar nada real (se piden igual, siempre).
+const Pedidos = lazy(() => import('@/pages/Pedidos'))
+const PedidoDetalle = lazy(() => import('@/pages/PedidoDetalle'))
+const Calendario = lazy(() => import('@/pages/Calendario'))
+const Notificaciones = lazy(() => import('@/pages/Notificaciones'))
+const RevisionEmail = lazy(() => import('@/pages/RevisionEmail'))
+const RevisionBase = lazy(() => import('@/pages/RevisionBase'))
+const RevisionEnvios = lazy(() => import('@/pages/RevisionEnvios'))
+const EditorPiezas = lazy(() => import('@/pages/EditorPiezas'))
+const AuditoriaPiezas = lazy(() => import('@/pages/AuditoriaPiezas'))
+const Usuarios = lazy(() => import('@/pages/Usuarios'))
+const Papelera = lazy(() => import('@/pages/Papelera'))
+const Configuracion = lazy(() => import('@/pages/Configuracion'))
 
 
 export default function App() {

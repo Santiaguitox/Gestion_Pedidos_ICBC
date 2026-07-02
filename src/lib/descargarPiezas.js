@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { REVISION_CONFIG } from '@/lib/revision/config'
+import { DetectarBalanceTags, DetectarInlineEnvolviendoOutlook } from '@/lib/revision/generales'
 
 async function fetchHtml(url) {
   const res = await fetch(`${REVISION_CONFIG.PROXY_URL}?url=${encodeURIComponent(url)}`)
@@ -13,19 +14,24 @@ async function fetchHtml(url) {
 // Se excluyen los void elements que no tienen cierre: img, br, hr, meta, input, link
 const TAGS_VALIDAR = ['table', 'tbody', 'tr', 'td', 'div', 'span', 'a', 'p', 'strong', 'em', 'ul', 'ol', 'li']
 
-// Valida que los tags abran y cierren correctamente.
-// Devuelve array de strings con los problemas encontrados, o [] si está ok.
+// Valida que los tags abran y cierren correctamente. Devuelve array de
+// strings con los problemas encontrados, o [] si está ok.
+//
+// Reusa el mismo motor que "Revisión de HTML" (generales.js) en vez de
+// mantener una copia propia — la copia anterior no descartaba los
+// bloques condicionales de Outlook antes de contar (falso positivo en
+// piezas con el patrón de conditional comments partido en dos) ni
+// detectaba tags en línea envolviendo el borde de un bloque MSO
+// (mismo riesgo real que ya se corrigió en Revisión de HTML y en el
+// modal de importación del Editor de Piezas — ver
+// DetectarInlineEnvolviendoOutlook). Se mapea a strings (en vez de los
+// objetos { detalle } de generales.js) para no tener que tocar nada
+// de lo que ya consume 'problemas' más abajo en este archivo.
 function validarEstructura(html) {
-  const problemas = []
-  for (const tag of TAGS_VALIDAR) {
-    // Contar aperturas (excluir self-closing y comentarios)
-    const aperturas = (html.match(new RegExp(`<${tag}[\\s>]`, 'gi')) ?? []).length
-    const cierres   = (html.match(new RegExp(`</${tag}>`, 'gi')) ?? []).length
-    if (aperturas !== cierres) {
-      problemas.push(`<${tag}>: ${aperturas} apertura${aperturas !== 1 ? 's' : ''}, ${cierres} cierre${cierres !== 1 ? 's' : ''}`)
-    }
-  }
-  return problemas
+  return [
+    ...DetectarBalanceTags(html, TAGS_VALIDAR),
+    ...DetectarInlineEnvolviendoOutlook(html),
+  ].map(p => p.detalle)
 }
 
 // Limpia el HTML: solo estilos con @media + contenido desde el preheader.
@@ -120,18 +126,36 @@ export async function descargarPiezaIndividual(pieza, { continuar = false } = {}
   const { html, problemas } = limpiarHtml(await fetchHtml(pieza.link_online))
   if (problemas.length > 0 && !continuar) return { problemas }
 
-  const zip = new JSZip()
-  zip.file(nombreArchivo(pieza), html)
-  const blob = await zip.generateAsync({ type: 'blob' })
-  triggerDescarga(blob, nombreArchivo(pieza).replace('.html', '.zip'))
+  // Una sola pieza no necesita ZIP — zippear un solo archivo solo
+  // agrega un paso extra de descomprimir sin ganar nada. El ZIP tiene
+  // sentido recién cuando hay más de un archivo adentro (ver
+  // descargarTodasLasPiezas).
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  triggerDescarga(blob, nombreArchivo(pieza))
   return { problemas: [] }
 }
 
-// Descarga todas las piezas con link como un único ZIP.
+// Descarga todas las piezas con link. Si hay más de una, las junta en
+// un único ZIP — pero si hay exactamente una (caso común: pedido con
+// una sola pieza cargada), delega directo a descargarPiezaIndividual
+// para bajar el .html plano en vez de armar un ZIP de un solo
+// archivo. El botón que dispara esto ya distingue el label ("Descargar
+// HTML" vs "Descargar todas (N)") según esta misma cantidad — antes
+// el label decía "HTML" pero por debajo igual zippeaba, inconsistencia
+// real que se corrige acá.
 // Devuelve { problemas: { [nombre]: string[] } } con los problemas por pieza.
 export async function descargarTodasLasPiezas(entregables, nombrePedido, { continuar = false } = {}) {
   const conLink = entregables.filter(e => e.link_online)
   if (!conLink.length) throw new Error('Ninguna pieza tiene link cargado')
+
+  if (conLink.length === 1) {
+    const pieza = conLink[0]
+    const { problemas } = await descargarPiezaIndividual(pieza, { continuar })
+    if (problemas.length > 0) {
+      return { problemas: { [pieza.nombre_pieza || pieza.link_online]: problemas } }
+    }
+    return { problemas: {} }
+  }
 
   const resultados = await Promise.all(conLink.map(async pieza => {
     try {

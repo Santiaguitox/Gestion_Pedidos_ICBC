@@ -1,6 +1,6 @@
 # Gestión de Pedidos ICBC × icomm
 
-App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación (BBDD, piezas HTML, campos de personalización) y un buscador global.
+App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación y auditoría (BBDD, piezas HTML, campos de personalización, escaneo masivo de piezas) y un buscador global.
 
 ---
 
@@ -37,7 +37,13 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 - Cargar piezas con nombre y link online (link único por pedido)
 - Aprobar/desaprobar piezas individualmente — una pieza aprobada solo puede editarla `super_admin`
 - Revisión automática en segundo plano de cada pieza con link (estructura, links, imágenes, legales) — el resultado queda guardado como resumen clickeable
+- Descargar todas las piezas del pedido como ZIP, o una individual — valida balance de tags HTML antes de descargar y avisa si hay algo raro
 - Copiar nombres y links al portapapeles
+
+### Base de datos (del pedido)
+- Adjuntar la base de contactos real de un pedido (mismo lector liviano que Revisión de envíos: solo header + muestra chica, nunca la base completa)
+- Verificación automática de compatibilidad contra la(s) pieza(s) del pedido — pill OK / campos faltantes por pieza
+- Deep-link a "Revisión de envíos" con el header y la pieza ya precargados, para ver el detalle completo sin volver a pegar nada
 
 ### Registro en Google Sheets
 - Al finalizar un pedido, se puede registrar en la hoja "Pedidos 2026" via Edge Function
@@ -75,9 +81,13 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 
 **Revisión de emails** — valida la estructura, links, imágenes y legales de una pieza HTML (pegada o por URL). Detecta coincidencias con plantillas obsoletas conocidas. El resultado se integra con Piezas entregables (revisión automática al cargar un link).
 
-**Revisión de BBDD** — analiza, verifica y compara bases de contactos (CSV/TXT) antes de un envío. Soporta archivos grandes (validado con bases de 400MB+) con dos modos de cálculo de diffs: rápido (en memoria) o seguro (vía IndexedDB) según el tamaño de la base.
+**Revisión de BBDD** — 4 pasos sobre una base de contactos (CSV/TXT): **Analizar** (validación general), **Verificar** (detalle de errores por fila), **Comparar** (diff contra otra base — dos modos de cálculo, rápido en memoria o seguro vía IndexedDB, según el tamaño) y **Segmentar** (armar condiciones AND/OR sobre las columnas — es igual a / contiene / empieza con / es vacío, etc. — y descargar el CSV filtrado). Comparar y Segmentar corren en Web Workers (`compare.worker.js` / `segmentar.worker.js`) en streaming, validado con bases de 400MB+ sin problemas de memoria.
 
-**Revisión de envíos** — valida que los campos de personalización (`<*Campo*>`) de un mail tengan su columna correspondiente en el encabezado de la base de contactos, evitando que el envío real deje placeholders sin reemplazar. Solo lee las primeras líneas de cualquier archivo subido (encabezado + una muestra chica de filas) — nunca la base completa.
+**Revisión de envíos** — dos modos:
+- **Comparar con mi base**: valida que los campos de personalización (`<*Campo*>`) de un mail tengan su columna correspondiente en el encabezado de la base de contactos, evitando que el envío real deje placeholders sin reemplazar. Solo lee las primeras líneas de cualquier archivo subido (encabezado + una muestra chica de filas) — nunca la base completa.
+- **Generar base de test**: detecta los campos `<*Campo*>` de una pieza (pegada o por URL) y arma una base de test descargable (CSV) con un valor de prueba editable por campo — campos que el nombre delata como link o imagen arrancan con una URL real de ejemplo en vez de un placeholder de texto. Incluye preview en vivo de la pieza con los valores ya reemplazados (a tamaño real de escritorio, no la versión mobile) y permite cargar uno o más emails de destino, una fila de base por cada uno.
+
+**Auditoría de Piezas** — escanea una lista de piezas (pegadas como texto simple `Nombre | URL` o pegando una tabla completa de Excel/Sheets) buscando coincidencias de texto visible, links o imágenes contra reglas definidas por el usuario (ej. "¿en cuáles de estas 40 piezas todavía aparece este link viejo?"). Devuelve piezas con coincidencia, sin coincidencia y con error, exportable como TXT.
 
 **Editor de Piezas** — editor visual de emails por bloques drag-and-drop (`EditorPiezas.jsx`). Permite armar una pieza arrastrando bloques de contenido (texto, imágenes, módulos) desde una biblioteca lateral a un canvas central, con las siguientes capacidades:
 
@@ -192,29 +202,41 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 src/
 ├── components/
 │   ├── auth/
-│   │   └── ProtectedRoute.jsx
+│   │   ├── ProtectedRoute.jsx
+│   │   ├── PerfilUsuario.jsx       # Modal de perfil del usuario logueado
+│   │   └── CambiarPassword.jsx     # Modal de cambio de contraseña (usado desde PerfilUsuario)
 │   ├── layout/
 │   │   ├── AppLayout.jsx           # Sidebar, topbar mobile, toasts
-│   │   └── BuscadorGlobal.jsx      # Command palette (Cmd/Ctrl+K)
+│   │   ├── BuscadorGlobal.jsx      # Command palette (Cmd/Ctrl+K)
+│   │   └── LogoRotator.jsx         # Splash inicial: rota logo icomm/ICBC con blur dissolve
 │   ├── pedidos/
 │   │   ├── PedidoForm.jsx          # Modal crear/editar pedido
 │   │   ├── PedidoCard.jsx          # Card de pedido (avatar, colorAvatar, iniciales)
 │   │   ├── EntregablesSection.jsx  # Piezas + revisión automática integrada
+│   │   ├── BaseDatosSection.jsx    # Sección "Base de datos" — adjuntar base y verificar compatibilidad (ver Funcionalidades)
 │   │   ├── SubtareasTimeline.jsx   # Subtareas + flujo de registro en Sheet (Diseño)
 │   │   ├── SheetModal.jsx          # Modal de registro en Sheet (pedido completo)
 │   │   ├── SheetDisenoModal.jsx    # Modal de registro en Sheet (subtarea Diseño)
 │   │   ├── PedidoHistorial.jsx     # Timeline de actividad
-│   │   └── PedidosList.jsx         # Lista con filtros
+│   │   ├── PedidosList.jsx         # Lista con filtros
+│   │   ├── DetalleAcordeon.jsx     # Acordeón con ícono+badge, usado en las 4 secciones de Detalle de Pedido
+│   │   ├── DetalleInfoBloques.jsx  # Bloques de info del header de Detalle de Pedido
+│   │   ├── EstadoPopover.jsx       # Popover de cambio de estado (con registro de actividad)
+│   │   ├── Section.jsx             # Acordeón genérico reusable (usado fuera de Detalle de Pedido)
+│   │   ├── SuccessModal.jsx        # Modal de confirmación genérico (ícono ✓ + mensaje)
+│   │   └── CopyBtn.jsx             # Botón "copiar al portapapeles" con feedback de 1.5s
 │   ├── revision/
 │   │   └── ResultadoPanel.jsx      # Cards de resultado de Revisión de emails
 │   ├── revision-base/
-│   │   └── CompareTabBase.jsx      # Pestaña "Comparar" de Revisión de BBDD
+│   │   ├── CompareTabBase.jsx      # Pestaña "Comparar" de Revisión de BBDD
+│   │   └── SegmentarTabBase.jsx    # Pestaña "Segmentar" de Revisión de BBDD (filtros AND/OR + export CSV)
 │   └── ui/
 │       ├── Badge.jsx
 │       ├── ConfirmModal.jsx
 │       ├── DatePicker.jsx
 │       ├── GrupoLabel.jsx          # Label "Pedidos Activos/Finalizados"
 │       ├── CargaTrabajoModal.jsx
+│       ├── HelpPopover.jsx         # Ícono de ayuda clickeable con popover (reemplaza texto explicativo siempre visible)
 │       └── TagSearch.jsx
 ├── context/
 │   ├── AuthContext.jsx              # Sesión y perfil del usuario
@@ -224,9 +246,12 @@ src/
 │   ├── useActividad.js              # Registro de actividad en pedidos
 │   ├── useEstados.js                # Estados (con cache)
 │   ├── useInstancias.js             # Instancias (con cache)
+│   ├── useIsMobile.js               # Hook reactivo de breakpoint (resize listener, no solo lectura una vez)
 │   ├── useLocalStorage.js           # Lectura lazy + escritura con try/catch (usado por el borrador del Editor de Piezas)
 │   ├── usePedidos.js                # CRUD de pedidos + realtime + paginación
-│   └── useTipos.js                  # Tipos (con cache)
+│   ├── useTagsDisponibles.js        # Tags únicos de TODOS los pedidos, sin paginar (para el selector de filtro)
+│   ├── useTipos.js                  # Tipos (con cache)
+│   └── useUsuarios.js               # Usuarios (con cache compartido entre instancias del hook)
 ├── data/
 │   └── Templates/
 │       ├── index.js                 # Solo exporta el template marcado `deprecado: true`, para Revisión de emails
@@ -239,15 +264,23 @@ src/
 │   ├── constants.js                 # Roles, prioridades, colores
 │   ├── supabase.js                  # Cliente Supabase
 │   ├── supabaseHelper.js            # Helpers runSupabase / runSupabaseSilent
+│   ├── descargarPiezas.js           # Descarga de piezas (ZIP o individual) con validación de estructura previa
+│   ├── auditoria/                   # Lógica de Auditoría de Piezas
+│   │   └── ejecutarAuditoria.js
 │   ├── revision/                    # Lógica de Revisión de emails
 │   │   ├── config.js
 │   │   ├── ejecutarRevision.js
 │   │   ├── generales.js
+│   │   ├── helpers.js
 │   │   ├── imagenes.js
 │   │   └── templates.js
-│   └── revision-envios/
-│       └── comparar.js              # Lógica de Revisión de envíos
+│   └── revision-envios/             # Lógica de Revisión de envíos
+│       ├── comparar.js              # Modo "Comparar con mi base"
+│       ├── generarBase.js           # Modo "Generar base de test"
+│       ├── animarProgreso.js        # Animación de progreso compartida por los dos modos
+│       └── versionesPieza.js        # Detecta sufijos _v1/_v2/etc. en el nombre y filtra a la última versión (usado por BaseDatosSection)
 ├── pages/
+│   ├── AuditoriaPiezas.jsx          # Auditoría de Piezas
 │   ├── Calendario.jsx
 │   ├── Configuracion.jsx
 │   ├── Dashboard.jsx
@@ -264,12 +297,15 @@ src/
 │   └── Usuarios.jsx
 ├── workers/
 │   ├── validator.worker.js          # Análisis de Revisión de BBDD
-│   └── compare.worker.js            # Comparación de Revisión de BBDD (modo seguro)
+│   ├── compare.worker.js            # Comparación de Revisión de BBDD (modo seguro)
+│   ├── segmentar.worker.js          # Segmentación de Revisión de BBDD (streaming, filtros AND/OR)
+│   └── worker-utils.js              # Lectura/parseo de archivos compartido entre los 3 workers
 └── styles/
     ├── global.css                   # Variables CSS, componentes, dark/light
     ├── RevisionEmail.css            # Aislado, propio de esa herramienta
     ├── RevisionBase.css             # Aislado, propio de esa herramienta
     ├── RevisionEnvios.css           # Aislado, propio de esa herramienta
+    ├── AuditoriaPiezas.css          # Aislado, propio de esa herramienta
     └── EditorPiezas.css             # Aislado, propio de esa herramienta
 ```
 
@@ -281,6 +317,7 @@ src/
 |---------|-------------|
 | `invite-user` | Invita un usuario nuevo vía Supabase Auth |
 | `delete-user` | Elimina un usuario de Auth y su perfil |
+| `reset-user-password` | Fuerza el reset de contraseña de otro usuario — solo `super_admin` |
 | `escribir-sheet` | Escribe una fila en Google Sheets (hoja pedidos o diseño) |
 
 ---
@@ -311,7 +348,7 @@ npm install
 npm run dev
 ```
 
-**Nota:** algunas funcionalidades (modo URL de Revisión de emails / Revisión de envíos) dependen de la Edge Function `/api/proxy`, que solo corre en el deploy de Vercel — en local, el modo URL puede no funcionar; usar el modo "Pegar HTML" para probar esa lógica sin depender del proxy.
+**Nota:** el modo URL de Revisión de emails, Revisión de envíos, Auditoría de Piezas, "Base de datos" del pedido y la descarga de piezas dependen todos de la misma función serverless de Vercel `/api/proxy.js` (no confundir con las Edge Functions de Supabase de la tabla arriba — corre como función Node normal porque usa `dns`/`net`, incompatibles con runtime edge), que solo corre en el deploy de Vercel — en local, el modo URL puede no funcionar; usar el modo "Pegar HTML" (donde esté disponible) para probar esa lógica sin depender del proxy.
 
 ---
 
@@ -323,4 +360,4 @@ El proyecto se deploya automáticamente en Vercel al hacer push a `main`. Las va
 
 ## Tema
 
-La app soporta modo oscuro y claro. El tema se guarda en `localStorage` y se aplica via `data-theme` en el `<html>`. Las variables CSS están definidas en `global.css` bajo `[data-theme="dark"]` y `[data-theme="light"]`. Las 4 herramientas (3 de revisión + Editor de Piezas) tienen su propio CSS aislado, con sus propias variables semánticas mapeadas a las del tema general (no usan `global.css` directamente, para evitar colisiones de nombres de clase).
+La app soporta modo oscuro y claro. El tema se guarda en `localStorage` y se aplica via `data-theme` en el `<html>`. Las variables CSS están definidas en `global.css` bajo `[data-theme="dark"]` y `[data-theme="light"]`. Las 5 herramientas (4 de revisión/auditoría + Editor de Piezas) tienen su propio CSS aislado, con sus propias variables semánticas mapeadas a las del tema general (no usan `global.css` directamente, para evitar colisiones de nombres de clase).

@@ -357,8 +357,18 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
 
   async function handleDescargaIndividual(pieza) {
     try {
-      const { problemas } = await descargarPiezaIndividual(pieza)
-      if (problemas.length > 0) {
+      // A un viewer no se le muestra este modal — es la misma
+      // categoría de información que ya se le oculta en los pills de
+      // revisión automática (ver ocultarRevisiones en PedidoCard.jsx y
+      // el pill "X/Y pruebas superadas" más abajo en este archivo,
+      // ambos gateados por role/canWrite): avisos de que "hay errores
+      // en esta pieza" no son algo de lo que un viewer deba enterarse.
+      // continuar: !canWrite fuerza la descarga directa para viewer
+      // sin pasar por el gate — sigue pudiendo copiar/descargar la
+      // pieza igual que siempre, sí o sí se pierde es el detalle
+      // técnico de qué encontró la validación.
+      const { problemas } = await descargarPiezaIndividual(pieza, { continuar: !canWrite })
+      if (canWrite && problemas.length > 0) {
         setModalValidacion({
           problemas: { [pieza.nombre_pieza || 'Pieza']: problemas },
           onContinuar: () => {
@@ -374,8 +384,9 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
 
   async function handleDescargaTodas() {
     try {
-      const { problemas } = await descargarTodasLasPiezas(entregables, nombrePedido)
-      if (Object.keys(problemas).length > 0) {
+      // Mismo criterio que handleDescargaIndividual — ver comentario ahí.
+      const { problemas } = await descargarTodasLasPiezas(entregables, nombrePedido, { continuar: !canWrite })
+      if (canWrite && Object.keys(problemas).length > 0) {
         setModalValidacion({
           problemas,
           onContinuar: () => {

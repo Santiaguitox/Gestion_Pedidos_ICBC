@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -285,7 +285,9 @@ export default function AppLayout() {
         </div>
 
         <main className="main-content">
-          <Outlet />
+          <Suspense fallback={<div className="page-loading"><div className="page-loading-spinner" /></div>}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

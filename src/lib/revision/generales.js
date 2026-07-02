@@ -339,15 +339,23 @@ function DetectarAtributosMalCerrados(htmlString) {
   return problemas
 }
 
-function DetectarTagsMalCerrados(htmlString) {
+// Cuenta aperturas/cierres de cada tag en `tags`, ignorando el
+// contenido de bloques condicionales de Outlook (adentro se abren y
+// cierran tags a propósito de forma asimétrica por bloque — ver
+// DetectarEstructurasOutlook) y las variables de personalización
+// <*Campo*> (no son tags reales). Extraída de DetectarTagsMalCerrados
+// para poder reusarla tal cual desde otros lugares que necesitan este
+// mismo chequeo con su propia lista de tags — antes de esto,
+// descargarPiezas.js (Piezas entregables) tenía su propia copia de
+// este conteo SIN el descarte de bloques Outlook, dando falsos
+// positivos en piezas con el patrón de conditional comments partido
+// en dos (abre en un comentario, cierra en otro más abajo).
+export function DetectarBalanceTags(htmlString, tags) {
   const problemas = []
-  
-  // Eliminar bloques condicionales de Outlook antes de contar tags
-  const htmlSinOutlook = htmlString
-  .replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '')
-  .replace(/<\*[^*]*\*>/g, 'VARIABLE_PERSONALIZACION')
 
-  const tags = ['table', 'tbody', 'tr', 'td', 'th', 'div', 'p', 'span', 'a', 'strong', 'em', 'b', 'i']
+  const htmlSinOutlook = htmlString
+    .replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '')
+    .replace(/<\*[^*]*\*>/g, 'VARIABLE_PERSONALIZACION')
 
   tags.forEach(tag => {
     const abiertos = (htmlSinOutlook.match(new RegExp(`<${tag}[\\s>]`, 'gi')) || []).length
@@ -362,6 +370,15 @@ function DetectarTagsMalCerrados(htmlString) {
       }
     }
   })
+
+  return problemas
+}
+
+function DetectarTagsMalCerrados(htmlString) {
+  const problemas = []
+
+  const tags = ['table', 'tbody', 'tr', 'td', 'th', 'div', 'p', 'span', 'a', 'strong', 'em', 'b', 'i']
+  problemas.push(...DetectarBalanceTags(htmlString, tags))
 
   // Sumar validación de atributos
   problemas.push(...DetectarAtributosMalCerrados(htmlString))
