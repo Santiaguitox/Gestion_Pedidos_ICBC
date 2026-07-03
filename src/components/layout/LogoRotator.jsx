@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTheme } from '@/context/ThemeContext'
 import iconmLogoFull from '@/assets/Icomm_Logo.png'
 import iconmLogoMobile from '@/assets/Icomm_Logo_Mobile.png'
 import icbcLogoFull from '@/assets/ICBC_Logo.png'
+import icbcLogoFullDark from '@/assets/ICBC_Logo_Dark.png'
 import icbcLogoMobile from '@/assets/ICBC_Logo_Mobile.png'
 
 // Mismo timing que el prototipo de referencia (HTML standalone, opción
@@ -14,13 +16,23 @@ const DELAY_MS = 10000
 // sidebar expandido. variant 'mobile' = solo el isotipo (cuadrado),
 // usado en el sidebar colapsado de desktop Y en la topbar de mobile
 // real — ambos casos comparten el mismo par de imágenes reducidas.
+//
+// El ICBC "full" tiene una franja en negro que no se lee bien sobre
+// el fondo oscuro del sidebar — 'fullDark' es la misma pieza con esa
+// versión armada para tema oscuro. No hace falta un dark del
+// 'mobile': ese es solo el isotipo rojo, se ve bien en los dos temas
+// (por eso no tiene entrada acá).
 const LOGOS = {
   full: [iconmLogoFull, icbcLogoFull],
+  fullDark: [iconmLogoFull, icbcLogoFullDark],
   mobile: [iconmLogoMobile, icbcLogoMobile],
 }
 
 export function LogoRotator({ variant = 'full' }) {
-  const logos = LOGOS[variant]
+  const { theme } = useTheme()
+  // Swap puntual: solo la variante 'full' tiene versión dark, y solo
+  // se usa con el tema en 'dark'. 'mobile' nunca entra acá.
+  const logos = variant === 'full' && theme === 'dark' ? LOGOS.fullDark : LOGOS[variant]
   // visibleIndex: qué logo tiene la clase "visible"; el resto "hidden"
   const [visibleIndex, setVisibleIndex] = useState(0)
   const nextIndex = useRef(1)
