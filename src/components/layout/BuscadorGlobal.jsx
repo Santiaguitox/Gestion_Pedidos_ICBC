@@ -27,20 +27,20 @@ function useDebounced(value, delay) {
 // / isSuperAdmin de ahí, así el buscador nunca ofrece navegar a algo que
 // el usuario no vería tampoco en su menú lateral.
 const SECCIONES = [
-  { label: 'Dashboard', to: '/app', icon: LayoutGrid },
-  { label: 'Pedidos', to: '/app/pedidos', icon: ListTodo },
-  { label: 'Calendario', to: '/app/calendario', icon: CalendarDays },
-  { label: 'Notificaciones', to: '/app/notificaciones', icon: Bell, sinViewer: true },
-  { label: 'Usuarios', to: '/app/usuarios', icon: Users, rol: 'admin' },
-  { label: 'Configuración', to: '/app/configuracion', icon: Settings, rol: 'admin' },
-  { label: 'Papelera', to: '/app/papelera', icon: Trash2, rol: 'super_admin' },
+  { label: 'Dashboard', to: '/', icon: LayoutGrid },
+  { label: 'Pedidos', to: '/pedidos', icon: ListTodo },
+  { label: 'Calendario', to: '/calendario', icon: CalendarDays },
+  { label: 'Notificaciones', to: '/notificaciones', icon: Bell, sinViewer: true },
+  { label: 'Usuarios', to: '/usuarios', icon: Users, rol: 'admin' },
+  { label: 'Configuración', to: '/configuracion', icon: Settings, rol: 'admin' },
+  { label: 'Papelera', to: '/papelera', icon: Trash2, rol: 'super_admin' },
   // Viewer no tiene acceso a ninguna de las 3 herramientas (ver
   // ProtectedRoute en App.jsx para la protección real de las rutas) —
   // sinViewer oculta las tres del buscador para ese rol, sin afectar el
   // resto de los roles, que siguen viéndolas igual que antes.
-  { label: 'Revisión de emails', to: '/app/revision', icon: FileSearch, sinViewer: true },
-  { label: 'Revisión de BBDD', to: '/app/revision-bbdd', icon: Database, sinViewer: true },
-  { label: 'Revisión de envíos', to: '/app/revision-envios', icon: MailCheck, sinViewer: true },
+  { label: 'Revisión de emails', to: '/revision', icon: FileSearch, sinViewer: true },
+  { label: 'Revisión de BBDD', to: '/revision-bbdd', icon: Database, sinViewer: true },
+  { label: 'Revisión de envíos', to: '/revision-envios', icon: MailCheck, sinViewer: true },
 ]
 
 function puedeVerSeccion(seccion, role) {
@@ -211,7 +211,7 @@ export default function BuscadorGlobal({ open, onClose, role }) {
   }, [itemsCombinados.length])
 
   const irAPedido = useCallback((pedido) => {
-    navigate(`/app/pedidos/${pedido.id}`, { state: { from: location.pathname } })
+    navigate(`/pedidos/${pedido.id}`, { state: { from: location.pathname } })
     onClose()
   }, [navigate, onClose, location.pathname])
 

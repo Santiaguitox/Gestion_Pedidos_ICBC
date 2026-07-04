@@ -141,7 +141,7 @@ function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, onVerifi
       ? piezaDe(entregableId)
       : entregables.find(e => e.link_online)
     if (!pieza?.link_online) return
-    navigate('/app/revision-envios', {
+    navigate('/revision-envios', {
       state: { headerLine: base.header_line, url: pieza.link_online }
     })
   }

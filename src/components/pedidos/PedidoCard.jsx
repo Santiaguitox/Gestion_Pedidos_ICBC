@@ -241,7 +241,7 @@ export function EntregablesCard({ entregables, pedidoBase, role }) {
                 </span>
               ) : (
                 <button
-                  onClick={() => navigate('/app/revision', { state: { url: ent.link_online, entregableId: ent.id } })}
+                  onClick={() => navigate('/revision', { state: { url: ent.link_online, entregableId: ent.id } })}
                   className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
                 >
                   <FileSearch size={11} style={{ verticalAlign: '-1px' }} />
@@ -260,7 +260,7 @@ export function EntregablesCard({ entregables, pedidoBase, role }) {
                   : 'Compatible con la base'
               return (
                 <button
-                  onClick={() => navigate('/app/revision-envios', { state: { headerLine: r.base.header_line, url: ent.link_online, volverA: { pedidoId: r.base.pedido_id } } })}
+                  onClick={() => navigate('/revision-envios', { state: { headerLine: r.base.header_line, url: ent.link_online, volverA: { pedidoId: r.base.pedido_id } } })}
                   className={`entregable-revision-resumen entregable-revision-${severidad}`}
                 >
                   <Database size={11} style={{ verticalAlign: '-1px' }} />
@@ -280,13 +280,13 @@ export function EntregablesCard({ entregables, pedidoBase, role }) {
 // apretar todo en una sola línea horizontal. El quiebre de línea lo hace
 // el CSS (.pedido-card-compact, ver global.css) vía flex-wrap + el orden
 // de los elementos acá ya está pensado para leerse bien apilado.
-export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app', role }) {
+export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/', role }) {
   const navigate = useNavigate()
   const ocultarRevisiones = role === ROLES.VIEWER
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
   const tipo = tipos.find(t => t.value === pedido.tipo)
   const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
-  const irAlDetalle = () => navigate(`/app/pedidos/${pedido.id}`, { state: { from: origenRuta } })
+  const irAlDetalle = () => navigate(`/pedidos/${pedido.id}`, { state: { from: origenRuta } })
   const fechaTexto = pedido.fecha_limite
     ? format(new Date(pedido.fecha_limite + 'T00:00:00'), 'd MMM', { locale: es })
     : null
@@ -302,7 +302,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
   // deep-link que usa el riel de info en PedidoDetalle — auto-corre el
   // análisis sin esperar un click más.
   function irARevisionEnvios(headerLine, url) {
-    navigate('/app/revision-envios', { state: { headerLine, url, volverA: { pedidoId: pedido.id } } })
+    navigate('/revision-envios', { state: { headerLine, url, volverA: { pedidoId: pedido.id } } })
   }
   // Acordeón mobile: arranca colapsado (tipo y prioridad son campos
   // obligatorios al crear un pedido, así que el cuerpo expandido nunca
@@ -364,7 +364,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
                   </span>
                 ) : (
                   <button
-                    onClick={e => { e.stopPropagation(); navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
+                    onClick={e => { e.stopPropagation(); navigate('/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
                     className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
                     title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
                   >
@@ -473,7 +473,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
                         </span>
                       ) : (
                         <button
-                          onClick={() => navigate('/app/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
+                          onClick={() => navigate('/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
                           className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
                           title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
                         >
@@ -500,14 +500,14 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
   )
 }
 
-export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/app', role }) {
+export function PedidoCardFull({ pedido, onTagClick, filtroTag, tipos = [], estados = [], origenRuta = '/', role }) {
   const navigate = useNavigate()
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
   const estadosBadge = estados.filter(e => (pedido.estados ?? []).includes(e.value))
   const entregables = Array.isArray(pedido.entregable)
     ? pedido.entregable
     : pedido.entregable ? [pedido.entregable] : []
-  const irAlDetalle = () => navigate(`/app/pedidos/${pedido.id}`, { state: { from: origenRuta } })
+  const irAlDetalle = () => navigate(`/pedidos/${pedido.id}`, { state: { from: origenRuta } })
 
   return (
     <div

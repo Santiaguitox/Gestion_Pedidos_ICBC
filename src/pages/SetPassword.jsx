@@ -28,7 +28,7 @@ export default function SetPassword() {
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password })
     if (error) { setError(error.message); setLoading(false); return }
-    navigate('/app')
+    navigate('/')
   }
 
   // if (!ready) return (

@@ -147,7 +147,7 @@ export default function Notificaciones() {
 
   function handleClick(n) {
     if (!n.leida) marcarLeida(n.id)
-    if (n.pedido_id) navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } })
+    if (n.pedido_id) navigate(`/pedidos/${n.pedido_id}`, { state: { from: '/notificaciones' } })
   }
 
   return (
@@ -329,7 +329,7 @@ export default function Notificaciones() {
                       {menuItemAbierto === n.id && (
                         <div className="notif-dropdown" onClick={e => e.stopPropagation()}>
                           {n.pedido_id && (
-                            <button onClick={() => { navigate(`/app/pedidos/${n.pedido_id}`, { state: { from: '/app/notificaciones' } }); setMenuItemAbierto(null) }}>
+                            <button onClick={() => { navigate(`/pedidos/${n.pedido_id}`, { state: { from: '/notificaciones' } }); setMenuItemAbierto(null) }}>
                               <ExternalLink size={15} />Ir al pedido
                             </button>
                           )}

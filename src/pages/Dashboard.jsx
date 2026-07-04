@@ -97,7 +97,7 @@ function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, es
     const hoyCalc = new Date(); hoyCalc.setHours(0, 0, 0, 0)
     const finProxSemana = endOfWeek(addWeeks(hoyCalc, 1), { weekStartsOn: 1 })
     const desde = new Date(finProxSemana); desde.setDate(desde.getDate() + 1)
-    navigate('/app/pedidos', { state: { venceDesde: format(desde, 'yyyy-MM-dd') } })
+    navigate('/pedidos', { state: { venceDesde: format(desde, 'yyyy-MM-dd') } })
   }
 
   return (
@@ -112,8 +112,8 @@ function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, es
       </div>
       <div className="dia-group-cards">
         {visibles.map(p => vista === 'compact'
-          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
-          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
+          ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
+          : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
         )}
         {ocultos > 0 && (
           <button onClick={irAPedidosConFiltro} className="btn-ver-todos-pedidos">
@@ -148,8 +148,8 @@ function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estado
       {open && (
         <div className="vencidos-acordeon-cards">
           {pedidos.map(p => vista === 'compact'
-            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
-            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app" role={role} />
+            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
+            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
           )}
         </div>
       )}

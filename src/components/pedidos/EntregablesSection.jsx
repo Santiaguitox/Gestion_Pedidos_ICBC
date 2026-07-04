@@ -233,7 +233,7 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
   // migración 20260621000000) y, si la pieza sigue siendo la misma al
   // terminar, actualiza el resumen guardado con el resultado nuevo.
   function verDetalle(link, entregableId) {
-    navigate('/app/revision', { state: { url: link, entregableId } })
+    navigate('/revision', { state: { url: link, entregableId } })
   }
 
   // Corre la revisión completa para una pieza puntual, actualizando su

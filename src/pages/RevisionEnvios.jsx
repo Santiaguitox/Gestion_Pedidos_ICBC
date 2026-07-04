@@ -378,7 +378,7 @@ export default function RevisionEnvios() {
           medio. Si se llegó por cualquier otro camino, no se muestra. */}
       {navState?.volverA && (
         <button
-          onClick={() => navigate(`/app/pedidos/${navState.volverA.pedidoId}`)}
+          onClick={() => navigate(`/pedidos/${navState.volverA.pedidoId}`)}
           className="btn-back"
         >
           <ArrowLeft size={16} /><span>Volver al pedido</span>

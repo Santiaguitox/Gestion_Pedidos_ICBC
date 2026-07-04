@@ -9,8 +9,8 @@ export default function ProtectedRoute({ children, requiredRole, requiredRoles }
 
   if (!session) return <Navigate to="/login" replace />
 
-  if (requiredRoles && !requiredRoles.includes(role)) return <Navigate to="/app" replace />
-  if (requiredRole && role !== requiredRole) return <Navigate to="/app" replace />
+  if (requiredRoles && !requiredRoles.includes(role)) return <Navigate to="/" replace />
+  if (requiredRole && role !== requiredRole) return <Navigate to="/" replace />
 
   return children
 }

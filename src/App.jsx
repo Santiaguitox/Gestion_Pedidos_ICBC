@@ -46,7 +46,7 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route index element={<Dashboard />} />
                 <Route path="pedidos" element={<Pedidos />} />
                 <Route path="pedidos/:id" element={<PedidoDetalle />} />
@@ -98,7 +98,7 @@ export default function App() {
                 } />
               </Route>
               <Route path="/set-password" element={<SetPassword />} />
-              <Route path="*" element={<Navigate to="/app" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
         </NotificacionesProvider>

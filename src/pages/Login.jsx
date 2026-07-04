@@ -38,7 +38,7 @@ export default function Login() {
       return
     }
 
-    navigate('/app', { replace: true })
+    navigate('/', { replace: true })
   }
 
   return (

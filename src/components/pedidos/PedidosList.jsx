@@ -209,8 +209,8 @@ export default function PedidosList({ onNew }) {
 
   function renderPedido(pedido) {
     const tarjeta = vista === 'compact'
-      ? <PedidoCardCompact pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" role={role} />
-      : <PedidoCardFull pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/app/pedidos" role={role} />
+      ? <PedidoCardCompact pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/pedidos" role={role} />
+      : <PedidoCardFull pedido={pedido} onTagClick={setFiltroTag} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/pedidos" role={role} />
     return (
       <div
         key={pedido.id}

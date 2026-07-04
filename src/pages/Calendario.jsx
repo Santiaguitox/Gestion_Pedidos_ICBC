@@ -28,7 +28,7 @@ function PedidoItemPanel({ p, estados, navigate }) {
   const prio = PRIORIDADES.find(x => x.value === p.prioridad)
   const esFinalizado = p.estados?.includes('finalizado')
   return (
-    <div onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
+    <div onClick={() => navigate(`/pedidos/${p.id}`, { state: { from: '/calendario' } })}
       className="cal-pedido-item"
       style={{ opacity: esFinalizado ? 0.6 : 1 }}>
       <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ export default function Calendario() {
                   {activos.map(p => {
                     const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                     return (
-                      <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
+                      <div key={p.id} onClick={() => navigate(`/pedidos/${p.id}`, { state: { from: '/calendario' } })}
                         className="pedido-card-full" style={{ cursor: 'pointer' }}>
                         <div className="flex items-center gap-2">
                           {prio && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: prio.color, flexShrink: 0 }} />}
@@ -222,7 +222,7 @@ export default function Calendario() {
                       {finalizados.map(p => {
                         const prio = PRIORIDADES.find(x => x.value === p.prioridad)
                         return (
-                          <div key={p.id} onClick={() => navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } })}
+                          <div key={p.id} onClick={() => navigate(`/pedidos/${p.id}`, { state: { from: '/calendario' } })}
                             className="pedido-card-full" style={{ cursor: 'pointer', opacity: 0.6 }}>
                             <div className="flex items-center gap-2">
                               {prio && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: prio.color, flexShrink: 0 }} />}
@@ -308,7 +308,7 @@ export default function Calendario() {
                     const esFinalizado = p.estados?.includes('finalizado')
                     return (
                       <div key={p.id}
-                        onClick={e => { e.stopPropagation(); navigate(`/app/pedidos/${p.id}`, { state: { from: '/app/calendario' } }) }}
+                        onClick={e => { e.stopPropagation(); navigate(`/pedidos/${p.id}`, { state: { from: '/calendario' } }) }}
                         className="cal-event"
                         style={{ borderLeft: `3px solid ${prio?.color ?? '#6B7280'}`, opacity: esFinalizado ? 0.5 : 1 }}>
                         <span className="cal-event-text">{p.asunto}</span>

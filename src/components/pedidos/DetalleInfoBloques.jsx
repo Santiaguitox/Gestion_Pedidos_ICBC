@@ -112,7 +112,7 @@ function RevisionesBloque({ pedido, bases, entregables }) {
   function irARevisionDirecto(base, pieza) {
     const link = pieza?.link_online || entregables.find(e => e.link_online)?.link_online
     if (!link) { irABaseDatos({ preventDefault: () => {} }); return }
-    navigate('/app/revision-envios', {
+    navigate('/revision-envios', {
       state: {
         headerLine: base.header_line,
         url: link,

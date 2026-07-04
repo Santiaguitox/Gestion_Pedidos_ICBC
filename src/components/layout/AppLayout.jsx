@@ -88,9 +88,9 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
       {/* Nav */}
       <nav className="sidebar-nav flex flex-col flex-1 overflow-y-auto">
         {[
-          { to: '/app',            label: 'Dashboard',  icon: LayoutGrid,  end: true },
-          { to: '/app/pedidos',    label: 'Pedidos',    icon: ListTodo },
-          { to: '/app/calendario', label: 'Calendario', icon: CalendarDays },
+          { to: '/',            label: 'Dashboard',  icon: LayoutGrid,  end: true },
+          { to: '/pedidos',    label: 'Pedidos',    icon: ListTodo },
+          { to: '/calendario', label: 'Calendario', icon: CalendarDays },
         ].map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end}
             onClick={onNavClick}
@@ -106,7 +106,7 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
             reciba notificaciones — se oculta la sección entera junto
             con el resto de las herramientas. */}
         {!isViewer && (
-          <NavLink to="/app/notificaciones" onClick={onNavClick}
+          <NavLink to="/notificaciones" onClick={onNavClick}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? 'Notificaciones' : undefined}>
             <div className="relative flex items-center shrink-0">
@@ -122,12 +122,12 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
         {isAdminOrAbove && (
           <>
             <div className="sidebar-separator" />
-            <NavLink to="/app/usuarios" onClick={onNavClick}
+            <NavLink to="/usuarios" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Usuarios' : undefined}>
               <Users size={18} />{!collapsed && <span>Usuarios</span>}
             </NavLink>
-            <NavLink to="/app/configuracion" onClick={onNavClick}
+            <NavLink to="/configuracion" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Configuración' : undefined}>
               <Settings size={18} />{!collapsed && <span>Configuración</span>}
@@ -136,7 +136,7 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
         )}
 
         {isSuperAdmin && (
-          <NavLink to="/app/papelera" onClick={onNavClick}
+          <NavLink to="/papelera" onClick={onNavClick}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? 'Papelera' : undefined}>
             <Trash2 size={18} />{!collapsed && <span>Papelera</span>}
@@ -147,27 +147,27 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
           <>
             <div className="sidebar-separator" />
             {!collapsed && <span className="sidebar-section-label">Herramientas</span>}
-            <NavLink to="/app/revision" onClick={onNavClick}
+            <NavLink to="/revision" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Revisión de emails' : undefined}>
               <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}
             </NavLink>
-            <NavLink to="/app/revision-bbdd" onClick={onNavClick}
+            <NavLink to="/revision-bbdd" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Revisión de BBDD' : undefined}>
               <Database size={18} />{!collapsed && <span>Revisión de BBDD</span>}
             </NavLink>
-            <NavLink to="/app/revision-envios" onClick={onNavClick}
+            <NavLink to="/revision-envios" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Revisión de envíos' : undefined}>
               <MailCheck size={18} />{!collapsed && <span>Revisión de envíos</span>}
             </NavLink>
-            <NavLink to="/app/editor-piezas" onClick={onNavClick}
+            <NavLink to="/editor-piezas" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Editor de piezas' : undefined}>
               <PenLine size={18} />{!collapsed && <span>Editor de piezas</span>}
             </NavLink>
-            <NavLink to="/app/auditoria-piezas" onClick={onNavClick}
+            <NavLink to="/auditoria-piezas" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Auditoría de piezas' : undefined}>
               <ScanSearch size={18} />{!collapsed && <span>Auditoría de piezas</span>}
@@ -291,7 +291,7 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/app/pedidos/${pedidoId}`)} />
+      <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/pedidos/${pedidoId}`)} />
       <FeedbackToast feedback={feedback} onDismiss={dismissFeedback} />
       {showPerfil && <PerfilUsuario onClose={() => setShowPerfil(false)} />}
       <BuscadorGlobal open={showBuscador} onClose={() => setShowBuscador(false)} role={role} />
