@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useEffect, forwardRef } from 'react'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -1070,7 +1071,7 @@ const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, he
 
 // ─── Categoría colapsable ───────────────────────────────────────────────────
 function CategoriaColapsable({ titulo, children, count = null }) {
-  const [abierto, setAbierto] = useState(true)
+  const [abierto, setAbierto] = useState(false)
   return (
     <div className="ep-categoria">
       <button className="ep-categoria-header" onClick={() => setAbierto(v => !v)}>
@@ -1173,6 +1174,8 @@ function headerDesdeSlag(slug) {
 }
 
 export default function EditorPiezas() {
+  useDocumentTitle('Editor de Piezas')
+
   const { showSuccess } = useNotificaciones()
   const [busqueda, setBusqueda] = useState('')
   // Pestaña activa del selector CG/EB/Pay dentro de "Header" en la

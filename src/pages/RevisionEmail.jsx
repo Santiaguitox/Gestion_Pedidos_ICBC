@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -7,6 +8,8 @@ import { Search, Trash2, RotateCcw } from 'lucide-react'
 import '@/styles/RevisionEmail.css'
 
 export default function RevisionEmail() {
+  useDocumentTitle('Revisión HTML')
+
   const location = useLocation()
   // Si se llega desde la pieza de un pedido ("Ver detalle"), state.url
   // trae el link a precargar — se arranca directo en modo 'url' con ese

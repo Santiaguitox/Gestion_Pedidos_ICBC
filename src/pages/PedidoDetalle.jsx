@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
 import { useAuth } from '@/context/AuthContext'
@@ -151,6 +152,8 @@ export default function PedidoDetalle() {
       showError(err.message || 'Error al registrar en Sheet')
     }
   }
+
+  useDocumentTitle(pedido ? `Pedido: ${pedido.asunto}` : 'Pedido')
 
   if (loading) return <div className="loading-text">Cargando…</div>
   if (!pedido) return <div className="loading-text">Pedido no encontrado.</div>

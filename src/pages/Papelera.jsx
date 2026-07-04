@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
@@ -10,6 +11,8 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function Papelera() {
+  useDocumentTitle('Papelera')
+
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const { tipos } = useTipos()

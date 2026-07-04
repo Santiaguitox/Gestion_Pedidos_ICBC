@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   ScanSearch, Plus, X, RotateCcw, AlertTriangle, CheckCircle2,
@@ -400,6 +401,8 @@ function FilaPiezaSimple({ pieza, error }) {
 const SELECCION_TABLA_INICIAL = { columnasNombre: [], columnaPrincipal: null, columnaLink: null }
 
 export default function AuditoriaPiezas() {
+  useDocumentTitle('Auditoría de Piezas')
+
   const [modoCarga, setModoCarga] = useState('simple') // 'simple' | 'tabla'
 
   // Modo simple

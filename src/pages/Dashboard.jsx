@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TagSearch } from '@/components/ui/TagSearch'
@@ -179,6 +180,8 @@ function StatCard({ label, cantidad, color, onClick, activo, destacado }) {
 }
 
 export default function Dashboard() {
+  useDocumentTitle('Dashboard')
+
   const { user, profile, role } = useAuth()
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)

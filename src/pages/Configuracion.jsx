@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useEstados } from '@/hooks/useEstados'
@@ -228,6 +229,8 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
 }
 
 export default function Configuracion() {
+  useDocumentTitle('Configuración')
+
   const { estados, loading: loadingEstados, refetch: refetchEstados } = useEstados()
   const { tipos, loading: loadingTipos, refetch: refetchTipos } = useTipos()
   const { instancias, loading: loadingInstancias, refetch: refetchInstancias } = useInstancias()

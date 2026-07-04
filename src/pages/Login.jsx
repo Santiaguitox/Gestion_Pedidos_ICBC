@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -5,6 +6,8 @@ import icommLogo from '@/assets/Icomm_Logo.png'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
+  useDocumentTitle('Iniciar sesión')
+
   const navigate = useNavigate()
 
   const [email, setEmail] = useState('')

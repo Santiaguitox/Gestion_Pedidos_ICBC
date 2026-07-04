@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -5,6 +6,8 @@ import icommLogo from '@/assets/Icomm_Logo.png'
 import { Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function SetPassword() {
+  useDocumentTitle('Crear contraseña')
+
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')

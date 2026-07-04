@@ -38,7 +38,7 @@ const SECCIONES = [
   // ProtectedRoute en App.jsx para la protección real de las rutas) —
   // sinViewer oculta las tres del buscador para ese rol, sin afectar el
   // resto de los roles, que siguen viéndolas igual que antes.
-  { label: 'Revisión de emails', to: '/revision', icon: FileSearch, sinViewer: true },
+  { label: 'Revisión de emails', to: '/revision-html', icon: FileSearch, sinViewer: true },
   { label: 'Revisión de BBDD', to: '/revision-bbdd', icon: Database, sinViewer: true },
   { label: 'Revisión de envíos', to: '/revision-envios', icon: MailCheck, sinViewer: true },
 ]

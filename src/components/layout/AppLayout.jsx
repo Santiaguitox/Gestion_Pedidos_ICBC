@@ -147,7 +147,7 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
           <>
             <div className="sidebar-separator" />
             {!collapsed && <span className="sidebar-section-label">Herramientas</span>}
-            <NavLink to="/revision" onClick={onNavClick}
+            <NavLink to="/revision-html" onClick={onNavClick}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title={collapsed ? 'Revisión de emails' : undefined}>
               <FileSearch size={18} />{!collapsed && <span>Revisión de emails</span>}

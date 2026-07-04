@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useCallback } from 'react'
 import '@/styles/RevisionBase.css'
 import CompareTabBase from '@/components/revision-base/CompareTabBase'
@@ -37,6 +38,8 @@ const TONE_STYLES = {
 }
 
 export default function RevisionBase() {
+  useDocumentTitle('Revisión BBDD')
+
   const [tab, setTab] = useState('analizar')
 
   // ANALYZE

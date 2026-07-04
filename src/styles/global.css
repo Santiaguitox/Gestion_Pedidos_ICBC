@@ -3752,11 +3752,19 @@ select:focus {
 /* ─── Toolbar con el switch Grilla/Tabla — fila propia, separada del
    header de la página, justo arriba de las tarjetas/tabla. El switch
    en sí reusa .re-tabs (Revisión de emails) con texto+ícono, igual
-   patrón visual que ya existe ahí, sin clases nuevas. ─── */
+   patrón visual que ya existe ahí, sin clases nuevas. Vive directo
+   sobre el fondo de la página (igual que el switch de vista en
+   Revisión de Envíos) — el fondo gris (--bg-hover) que .re-tabs trae
+   por defecto casi no contrasta ahí, así que se fuerza un fondo propio
+   igual que se resolvió en Revisión de Envíos (.re2-vista-switch). ─── */
 .usuarios-toolbar {
   display: flex;
   align-items: center;
   margin-bottom: 0.25rem;
+}
+.usuarios-toolbar .re-tabs {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
 }
 .usuarios-toolbar .re-tabs button {
   display: inline-flex;

@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -11,6 +12,12 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
+// .re-tabs (el switch Grilla/Tabla de acá abajo) está definido en
+// RevisionEmail.css. Sin este import, esos estilos base solo cargaban
+// si en esa sesión ya se había visitado Revisión HTML antes (cada
+// página es un chunk separado) — entrando directo a Usuarios el switch
+// quedaba sin padding/fondo en píldora/gap entre ícono y texto.
+import '@/styles/RevisionEmail.css'
 
 const AREAS_EQUIPO = ['PM', 'Diseño', 'Programación', 'Comercial', 'Otro']
 
@@ -24,6 +31,8 @@ const AVATAR_COLOR_PRESETS = [
 ]
 
 export default function Usuarios() {
+  useDocumentTitle('Usuarios')
+
   const { role: myRole, user: myUser } = useAuth()
   const { showSuccess, showError } = useNotificaciones()
   const [usuarios, setUsuarios] = useState([])

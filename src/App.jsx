@@ -56,7 +56,7 @@ export default function App() {
                     <Notificaciones />
                   </ProtectedRoute>
                 } />
-                <Route path="revision" element={
+                <Route path="revision-html" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <RevisionEmail />
                   </ProtectedRoute>

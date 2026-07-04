@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { REVISION_CONFIG } from '@/lib/revision/config'
@@ -110,6 +111,8 @@ function TablaMuestra({ headers, filas, avisos }) {
 }
 
 export default function RevisionEnvios() {
+  useDocumentTitle('Revisión de Envíos')
+
   const { state: navState } = useLocation()
   const navigate = useNavigate()
   const [modo, setModo] = useState('url')

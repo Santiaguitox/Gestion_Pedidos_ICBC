@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificaciones } from '@/context/NotificacionesContext'
@@ -46,6 +47,8 @@ function agruparPorFecha(items, ahora) {
 }
 
 export default function Notificaciones() {
+  useDocumentTitle('Notificaciones')
+
   const navigate = useNavigate()
   const {
     notificaciones,

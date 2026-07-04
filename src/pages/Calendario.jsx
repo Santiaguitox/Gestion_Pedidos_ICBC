@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePedidos } from '@/hooks/usePedidos'
@@ -45,6 +46,8 @@ function PedidoItemPanel({ p, estados, navigate }) {
 }
 
 export default function Calendario() {
+  useDocumentTitle('Calendario')
+
   const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState(new Date())
   // Ref al bloque del día de "hoy" dentro de la lista de timeline — solo

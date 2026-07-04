@@ -241,7 +241,7 @@ export function EntregablesCard({ entregables, pedidoBase, role }) {
                 </span>
               ) : (
                 <button
-                  onClick={() => navigate('/revision', { state: { url: ent.link_online, entregableId: ent.id } })}
+                  onClick={() => navigate('/revision-html', { state: { url: ent.link_online, entregableId: ent.id } })}
                   className={`entregable-revision-resumen entregable-revision-${ent.revision_severidad}`}
                 >
                   <FileSearch size={11} style={{ verticalAlign: '-1px' }} />
@@ -364,7 +364,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
                   </span>
                 ) : (
                   <button
-                    onClick={e => { e.stopPropagation(); navigate('/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
+                    onClick={e => { e.stopPropagation(); navigate('/revision-html', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } }) }}
                     className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
                     title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
                   >
@@ -473,7 +473,7 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
                         </span>
                       ) : (
                         <button
-                          onClick={() => navigate('/revision', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
+                          onClick={() => navigate('/revision-html', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
                           className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
                           title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
                         >
