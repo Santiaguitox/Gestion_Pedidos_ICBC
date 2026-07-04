@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import icommLogo from '@/assets/Icomm_Logo.png'
 import { Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function SetPassword() {
@@ -42,9 +43,7 @@ export default function SetPassword() {
       <div className="login-card">
 
         <div className="login-logo">
-          <span className="text-[var(--icbc-red)]">ICBC</span>
-          <span className="font-light text-[var(--text-muted)]">×</span>
-          <span className="text-[var(--icomm-violet)]">icomm</span>
+          <img src={icommLogo} alt="icomm" />
         </div>
 
         <h1 className="mb-1 text-2xl font-bold [font-family:var(--font-display)]">Crear contraseña</h1>

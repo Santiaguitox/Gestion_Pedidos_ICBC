@@ -322,6 +322,17 @@ select:focus {
   margin-bottom: 2rem;
 }
 
+/* El branding del login/set-password es el logo de icomm (el mismo
+   asset del sidebar expandido, 181x53 natural) en lugar del viejo
+   "ICBC x icomm" en texto — la herramienta es interna de la agencia
+   y el dominio nuevo ya no referencia al cliente. El PNG es azul
+   sobre transparente: se lee bien sobre la tarjeta de ambos temas. */
+.login-logo img {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+
 .login-form {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import icommLogo from '@/assets/Icomm_Logo.png'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
@@ -48,9 +49,7 @@ export default function Login() {
       <div className="login-card">
 
         <div className="login-logo">
-          <span className="text-[var(--icbc-red)]">ICBC</span>
-          <span className="font-light text-[var(--text-muted)]">×</span>
-          <span className="text-[var(--icomm-violet)]">icomm</span>
+          <img src={icommLogo} alt="icomm" />
         </div>
 
         <h1 className="text-2xl font-bold [font-family:var(--font-display)]">Gestión de pedidos</h1>

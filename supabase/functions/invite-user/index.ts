@@ -44,7 +44,10 @@ serve(async (req) => {
     // Invitar usuario — Supabase manda el email automáticamente
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: { full_name, role },
-      redirectTo: 'https://gestion-pedidos-icbc.vercel.app/set-password'
+      // Dominio custom (antes apuntaba al alias *.vercel.app — quedaba
+      // funcionando de casualidad gracias al redirect 308 de vercel.json,
+      // pero el link del email debe nacer apuntando al dominio real).
+      redirectTo: 'https://teamworkhub.app/set-password'
     })
 
     if (error) throw error

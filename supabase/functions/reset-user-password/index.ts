@@ -50,7 +50,7 @@ serve(async (req) => {
       type: 'recovery',
       email,
       options: {
-        redirectTo: 'https://gestion-pedidos-icbc.vercel.app/set-password',
+        redirectTo: 'https://teamworkhub.app/set-password',
       },
     })
 
