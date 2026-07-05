@@ -165,7 +165,8 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
           </div>
         </div>
 
-        {open && (
+        <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
           <div className="config-section-body">
             <div className="config-section-toolbar">
               <button onClick={() => { setShowForm(v => !v); setError('') }} className="btn-header-action">
@@ -212,7 +213,8 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
               ))}
             </div>
           </div>
-        )}
+        </div>
+        </div>
       </div>
 
       {confirmEliminar && (

@@ -20,7 +20,11 @@ export function DetalleAcordeon({ id, icon, iconColor, iconBg, title, badge, bad
         </button>
         {headerAction && <div className="det-acc-header-action" onClick={e => e.stopPropagation()}>{headerAction}</div>}
       </div>
-      {open && <div className="det-acc-body">{children}</div>}
+      <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
+          <div className="det-acc-body">{children}</div>
+        </div>
+      </div>
     </div>
   )
 }

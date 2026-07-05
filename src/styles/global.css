@@ -5826,3 +5826,41 @@ select:focus {
   padding: 0.375rem 0.5rem;
 }
 
+/* ─── Animación compartida para TODOS los acordeones del proyecto
+   (Section, DetalleAcordeon, CategoriaColapsable de Editor de Piezas,
+   VencidosAcordeon de Dashboard) ─────────────────────────────────────
+   Antes, el contenido se montaba/desmontaba con `{abierto && <div>}`:
+   React agrega o saca el nodo del DOM de golpe, así que no hay alto
+   que animar. La solución es que el contenido SIEMPRE esté montado, y
+   en cambio animar esta clase de 0fr a 1fr con grid-template-rows —
+   la forma estándar de animar hacia un alto "auto" sin medir nada por
+   JS (no se puede hacer con `height`/`max-height` porque el contenido
+   tiene alto variable).
+
+   OJO — probado a mano: hacen falta TRES niveles, no dos. Si el
+   padding/border del contenido real vive directo en el hijo que tiene
+   overflow:hidden, el colapso a 0 NO funciona (el padding sigue
+   empujando el alto igual, confirmado renderizando y midiendo). Por
+   eso .acordeon-anim-clip va limpio (sin padding propio) y el
+   contenido con su padding real queda un nivel más adentro:
+
+   <div class="acordeon-anim [abierto]">
+     <div class="acordeon-anim-clip">
+       <div class="section-accordion-body">...contenido real...</div>
+     </div>
+   </div> */
+.acordeon-anim {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+.acordeon-anim.abierto {
+  grid-template-rows: 1fr;
+}
+.acordeon-anim-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+
+
+

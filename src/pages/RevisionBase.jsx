@@ -428,7 +428,8 @@ export default function RevisionBase() {
                           <span className="rb-problem-count-label">filas</span>
                           <span className={`rb-chevron ${open ? 'open' : ''}`}><ChevronDown size={18} /></span>
                         </button>
-                        {open && (
+                        <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+                        <div className="acordeon-anim-clip">
                           <div className="rb-problem-detail">
                             <div className="rb-problem-detail-shown">{fmt(detailRows.length)} filas mostradas{count > detailRows.length ? ` de ${fmt(count)} totales` : ''}</div>
                             <div className="rb-table-wrap">
@@ -451,7 +452,8 @@ export default function RevisionBase() {
                               </div>
                             )}
                           </div>
-                        )}
+                        </div>
+                        </div>
                       </div>
                     )
                   })}

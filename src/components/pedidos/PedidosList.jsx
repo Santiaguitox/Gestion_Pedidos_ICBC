@@ -310,7 +310,8 @@ export default function PedidosList({ onNew }) {
           </div>
         </div>
 
-        {filtrosOpen && (
+        <div className={`acordeon-anim${filtrosOpen ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
           <div className="panel-body">
 
             {/* Bloque 1: Filtros básicos */}
@@ -468,7 +469,8 @@ export default function PedidosList({ onNew }) {
               </button>
             )}
           </div>
-        )}
+        </div>
+        </div>
       </div>
 
       {hayNuevos && (

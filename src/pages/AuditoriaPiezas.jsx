@@ -350,7 +350,8 @@ function CardPiezaConMatch({ item, abiertaPorDefault }) {
         <span className="ap-badge-matches">{totalOcurrencias} coincidencia{totalOcurrencias !== 1 ? 's' : ''}</span>
       </button>
 
-      {open && (
+      <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+      <div className="acordeon-anim-clip">
         <div className="ap-card-body">
           {item.hallazgos.map((h, i) => {
             const Icono = ICONO_TIPO[h.regla.tipo]
@@ -374,7 +375,8 @@ function CardPiezaConMatch({ item, abiertaPorDefault }) {
             )
           })}
         </div>
-      )}
+      </div>
+      </div>
     </div>
   )
 }

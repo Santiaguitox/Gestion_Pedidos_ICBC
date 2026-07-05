@@ -11,7 +11,11 @@ export function Section({ title, icon, defaultOpen = true, badge, children }) {
         {badge != null && <span className="badge-count">{badge}</span>}
         {open ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
       </button>
-      {open && <div className="section-accordion-body">{children}</div>}
+      <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
+          <div className="section-accordion-body">{children}</div>
+        </div>
+      </div>
     </div>
   )
 }

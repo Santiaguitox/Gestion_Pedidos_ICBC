@@ -1079,7 +1079,11 @@ function CategoriaColapsable({ titulo, children, count = null }) {
         {count != null && <span className="ep-categoria-count">{count}</span>}
         <ChevronDown size={13} className="ep-categoria-chevron" style={{ transform: abierto ? 'rotate(180deg)' : 'none' }} />
       </button>
-      {abierto && <div className="ep-categoria-body">{children}</div>}
+      <div className={`acordeon-anim${abierto ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
+          <div className="ep-categoria-body">{children}</div>
+        </div>
+      </div>
     </div>
   )
 }

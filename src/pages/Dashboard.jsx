@@ -146,14 +146,16 @@ function VencidosAcordeon({ pedidos, vista, onTagClick, filtroTag, tipos, estado
           {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </span>
       </button>
-      {open && (
-        <div className="vencidos-acordeon-cards">
-          {pedidos.map(p => vista === 'compact'
-            ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
-            : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
-          )}
+      <div className={`acordeon-anim${open ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
+          <div className="vencidos-acordeon-cards">
+            {pedidos.map(p => vista === 'compact'
+              ? <PedidoCardCompact key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
+              : <PedidoCardFull key={p.id} pedido={p} onTagClick={onTagClick} filtroTag={filtroTag} tipos={tipos} estados={estados} origenRuta="/" role={role} />
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -378,7 +380,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {filtrosOpen && (
+        <div className={`acordeon-anim${filtrosOpen ? ' abierto' : ''}`}>
+        <div className="acordeon-anim-clip">
           <div className="panel-body">
             <div className="filters-row">
               <select value={filtroPrioridad} onChange={e => setFiltroPrioridad(e.target.value)} className="select-auto">
@@ -430,7 +433,8 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        )}
+        </div>
+        </div>
       </div>
 
       {loading && <p className="text-muted-sm">Cargando…</p>}
