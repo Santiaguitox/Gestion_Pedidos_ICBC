@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Poppins:wght@600&display=swap');
 
 @import "tailwindcss";
 
@@ -17,6 +17,8 @@
   --radius-xl:  24px;
   --font-display: 'DM Sans', sans-serif;
   --font-body:    'Inter', sans-serif;
+  --font-brand:   'Poppins', 'DM Sans', sans-serif;
+  --wm-grad: linear-gradient(92deg, #0533C9 0%, #2457F1 42%, #3C94ED 72%, #47BDDF 100%);
   --transition: 150ms ease;
 }
  
@@ -33,6 +35,10 @@
   --accent-primary: var(--icbc-red);
   --accent-hover:   var(--icbc-red-dim);
   --accent-secondary: var(--icomm-violet);
+  /* El wordmark en dark arranca un paso más claro que en light — el
+     primer tramo del gradiente (#0533C9) casi se pierde contra
+     --bg-surface oscuro si se reusa el mismo degradé de siempre. */
+  --wm-grad: linear-gradient(92deg, #4A72FF 0%, #5B85FF 40%, #4BA6F2 70%, #55CBEC 100%);
   --badge-bg:       rgba(91,78,232,0.15);
   --badge-border:   rgba(91,78,232,0.3);
   --red-bg-soft:    rgba(208,17,27,0.12);
@@ -277,6 +283,43 @@ select:focus {
 }
 .btn-primary:disabled { opacity: 0.6; }
 
+/* Modificador de marca para el botón principal de Login/SetPassword —
+   NO toca .btn-primary (lo usan Usuarios, Configuración, PedidoForm,
+   etc. con el rojo institucional).
+
+   Calcado del botón "Solicitar demo" real de icommkt.com que Santi
+   señaló como referencia: fondo con el degradé de marca fijo (se ve
+   entero y vívido siempre, sin animar), y la "vida" viene de la
+   flechita (ArrowRight) que se desliza al hover/focus — una simple
+   transition de transform, sin keyframes ni animation-play-state.
+   Por eso no puede quedar "a mitad de camino": una transition SIEMPRE
+   interpola hacia el estado vigente (adentro o afuera de :hover), la
+   dirección se invierte sola apenas se deja de cumplir la condición. */
+.btn-primary.btn-primary-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--wm-grad);
+}
+
+.btn-primary.btn-primary-brand .btn-arrow {
+  display: flex;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.btn-primary.btn-primary-brand:hover .btn-arrow,
+.btn-primary.btn-primary-brand:focus-visible .btn-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary.btn-primary-brand .btn-arrow { transition: none; }
+}
+
 /* ─── Feedback ────────────────────────────────────────────────────────────── */
 .msg-error {
   font-size: 0.8125rem;
@@ -288,15 +331,30 @@ select:focus {
 }
 
 /* ─── Decorative blobs ────────────────────────────────────────────────────── */
-.blob-red-tr {
+/* Fondo de marca para Login/SetPassword: el isotipo TeamWorkHub, bien
+   clarito, apenas asomando en dos esquinas — mismo recurso que ya usamos
+   en la imagen para redes (TeamWorkHubApp.jpg): grande arriba a la
+   derecha, más chico abajo a la izquierda. object-position lo recorta
+   contra el borde del viewport en vez de flotar suelto en el medio. */
+.auth-bg-iso {
   pointer-events: none;
   position: absolute;
-  top: -200px;
-  right: -200px;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(208,17,27,0.12) 0%, transparent 70%);
+  opacity: 0.14;
+  z-index: 0;
+}
+
+.auth-bg-iso-tr {
+  top: -110px;
+  right: -130px;
+  width: 460px;
+  height: 460px;
+}
+
+.auth-bg-iso-bl {
+  bottom: -90px;
+  left: -110px;
+  width: 300px;
+  height: 300px;
 }
 
 /* ─── Login ───────────────────────────────────────────────────────────────── */
@@ -322,15 +380,66 @@ select:focus {
   margin-bottom: 2rem;
 }
 
-/* El branding del login/set-password es el logo de icomm (el mismo
-   asset del sidebar expandido, 181x53 natural) en lugar del viejo
-   "ICBC x icomm" en texto — la herramienta es interna de la agencia
-   y el dominio nuevo ya no referencia al cliente. El PNG es azul
-   sobre transparente: se lee bien sobre la tarjeta de ambos temas. */
+/* El branding del login/set-password pasó de "solo icomm" al lockup
+   completo de marca (isotipo + wordmark TeamWorkHub) — ver
+   AuthBrandBackdrop.jsx y login-brand-lockup más abajo. .login-logo
+   img sigue existiendo por compatibilidad, pero el logo de icomm en
+   estas pantallas ahora vive en la pill "Powered by" del pie. */
 .login-logo img {
   height: 30px;
   width: auto;
   display: block;
+}
+
+.login-brand-lockup img {
+  height: 34px;
+  width: 34px;
+}
+
+.wordmark {
+  font-family: var(--font-brand);
+  font-weight: 600;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  background: var(--wm-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wordmark sup {
+  font-size: 0.42em;
+  font-weight: 600;
+  background: none;
+  -webkit-text-fill-color: #47BDDF;
+  vertical-align: super;
+  letter-spacing: 0;
+}
+
+/* Pill "Powered by icomm" al pie de Login/SetPassword — mismo criterio
+   que la imagen para redes (TeamWorkHubApp.jpg): la agencia queda
+   acreditada sin competir con la marca del producto en la tarjeta. */
+.powered-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.powered-pill img {
+  height: 14px;
+  width: auto;
 }
 
 .login-form {
@@ -5362,8 +5471,18 @@ select:focus {
     margin-top: 1.25rem;
   }
 
-  .blob-red-tr {
-    display: none;
+  .auth-bg-iso-tr {
+    width: 260px;
+    height: 260px;
+    top: -70px;
+    right: -80px;
+  }
+
+  .auth-bg-iso-bl {
+    width: 180px;
+    height: 180px;
+    bottom: -50px;
+    left: -60px;
   }
 
   /* Ocultar sidebar normal */

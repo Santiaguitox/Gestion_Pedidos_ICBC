@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import icommLogo from '@/assets/Icomm_Logo.png'
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
 
 export default function Login() {
   useDocumentTitle('Iniciar sesión')
@@ -45,14 +46,15 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
+    <div className="relative flex flex-col min-h-screen items-center justify-center gap-6 overflow-hidden p-4 sm:p-6">
 
-      <div className="blob-red-tr" />
+      <AuthBrandBackdrop />
 
       <div className="login-card">
 
-        <div className="login-logo">
-          <img src={icommLogo} alt="icomm" />
+        <div className="login-logo login-brand-lockup">
+          <img src="/icon-192.png" alt="TeamWorkHub" />
+          <span className="wordmark">TeamWorkHub<sup>.app</sup></span>
         </div>
 
         <h1 className="text-2xl font-bold [font-family:var(--font-display)]">Gestión de pedidos</h1>
@@ -95,11 +97,15 @@ export default function Login() {
 
           {error && <p className="msg-error">{error}</p>}
 
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading ? 'Ingresando…' : 'Ingresar'}
+          <button type="submit" disabled={loading} className="btn-primary btn-primary-brand">
+            {loading ? 'Ingresando…' : <>Ingresar <span className="btn-arrow"><ArrowRight size={18} stroke-width={3} /></span></>}
           </button>
 
         </form>
+      </div>
+
+      <div className="powered-pill">
+        Powered by <img src={icommLogo} alt="icomm" />
       </div>
     </div>
   )

@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import icommLogo from '@/assets/Icomm_Logo.png'
-import { Lock, Eye, EyeOff } from 'lucide-react'
+import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
+import { Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
 
 export default function SetPassword() {
   useDocumentTitle('Crear contraseña')
@@ -41,12 +42,13 @@ export default function SetPassword() {
   // )
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
-      <div className="blob-red-tr" />
+    <div className="relative flex flex-col min-h-screen items-center justify-center gap-6 overflow-hidden p-4 sm:p-6">
+      <AuthBrandBackdrop />
       <div className="login-card">
 
-        <div className="login-logo">
-          <img src={icommLogo} alt="icomm" />
+        <div className="login-logo login-brand-lockup">
+          <img src="/icon-192.png" alt="TeamWorkHub" />
+          <span className="wordmark">TeamWorkHub<sup>.app</sup></span>
         </div>
 
         <h1 className="mb-1 text-2xl font-bold [font-family:var(--font-display)]">Crear contraseña</h1>
@@ -79,11 +81,15 @@ export default function SetPassword() {
 
           {error && <p className="msg-error">{error}</p>}
 
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading ? 'Guardando…' : 'Guardar contraseña'}
+          <button type="submit" disabled={loading} className="btn-primary btn-primary-brand">
+            {loading ? 'Guardando…' : <>Guardar contraseña <span className="btn-arrow"><ArrowRight size={16} /></span></>}
           </button>
 
         </form>
+      </div>
+
+      <div className="powered-pill">
+        Powered by <img src={icommLogo} alt="icomm" />
       </div>
     </div>
   )
