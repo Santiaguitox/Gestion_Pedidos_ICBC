@@ -2230,9 +2230,14 @@ input[autocomplete="off"] { }
 }
 .ep-m-categoria { display: flex; flex-direction: column; gap: 8px; }
 .ep-m-categoria-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 8px;
   background: none; border: none; padding: 4px 0; cursor: pointer;
   font: 700 12px Inter, sans-serif; color: #5A5F7A; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ep-m-categoria-header > span:first-child { flex: 1; text-align: left; }
+.ep-m-categoria-count {
+  font: 700 10px Inter, sans-serif; color: #9EA3BE; background: #F0F1F8;
+  border-radius: 999px; padding: 1px 7px; text-transform: none; letter-spacing: normal;
 }
 .ep-m-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ep-m-bloque-card {
@@ -2309,7 +2314,8 @@ input[autocomplete="off"] { }
 .ep-m-preview-full { position: fixed; inset: 0; z-index: 390; background: #0D0F20; display: flex; flex-direction: column; }
 .ep-m-preview-topbar {
   flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; background: rgba(255,255,255,0.06);
+  padding: 12px 14px; padding-top: max(12px, calc(env(safe-area-inset-top) + 6px));
+  background: rgba(255,255,255,0.06);
 }
 .ep-m-preview-topbar button:first-child { color: #fff; background: none; border: none; cursor: pointer; }
 .ep-m-preview-switch { display: flex; gap: 4px; background: rgba(255,255,255,0.08); border-radius: 999px; padding: 3px; }
@@ -2319,7 +2325,13 @@ input[autocomplete="off"] { }
 }
 .ep-m-preview-switch button.activo { background: #fff; color: #0D0F20; }
 .ep-m-preview-frame-wrap { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; }
-.ep-m-preview-frame-wrap.mobile { max-width: 380px; margin: 0 auto; }
+/* Antes tenía max-width:380px — tenía sentido para simular "ancho de
+   celular" viendo el modal DESDE desktop, pero EditorMobile solo se
+   monta cuando ya estás en un celular real: ese tope artificial
+   achicaba el iframe de más en cualquier teléfono más ancho que 380px
+   (la mayoría hoy). El modo Mobile pasa a usar el ancho real
+   disponible, igual que el resto del preview. */
+.ep-m-preview-frame-wrap.mobile { max-width: 100%; }
 .ep-m-preview-frame-wrap.desktop {
   /* Ancho real de escritorio (640px, mismo valor que ya usaba el
      iframe acá) — antes el iframe tenía width:100% + max-width:640px,
@@ -2372,7 +2384,7 @@ input[autocomplete="off"] { }
 /* ── Legales adicionales ── */
 .ep-m-legal-item { display: flex; flex-direction: column; gap: 6px; }
 .ep-m-legal-item-head { display: flex; align-items: center; justify-content: space-between; font: 600 12px Inter, sans-serif; color: #5A5F7A; }
-.ep-m-legal-item-head button { color: #9EA3BE; background: none; border: none; cursor: pointer; }
+.ep-m-legal-item-head button { color: #9EA3BE; background: none; border: none; cursor: pointer; padding: 6px; margin: -6px; }
 .ep-m-btn-agregar {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   border: 1px dashed #C8CCDE; border-radius: 10px; padding: 12px;
@@ -2386,7 +2398,7 @@ input[autocomplete="off"] { }
 }
 .ep-m-indicador-row .ep-m-input { flex: 1; padding: 8px; }
 .ep-m-input-ref { flex: none !important; width: 48px; text-align: center; }
-.ep-m-indicador-row button { color: #9EA3BE; background: none; border: none; cursor: pointer; flex-shrink: 0; }
+.ep-m-indicador-row button { color: #9EA3BE; background: none; border: none; cursor: pointer; flex-shrink: 0; padding: 6px; margin: -6px; }
 
 /* ── Legal genérico (solo lectura) ── */
 .ep-m-legal-locked {
@@ -2504,6 +2516,14 @@ input[autocomplete="off"] { }
   padding: 11px; border: 1px solid #E2E5F0; border-radius: 9px; cursor: pointer;
 }
 .ep-m-btn-ghost:disabled { opacity: 0.5; }
+
+/* RichEditor (toolbar de negrita/cursiva/color/link) es compartido con
+   desktop, donde 26x26px con mouse anda bien. Con el dedo es chico y
+   están muy pegados entre sí (2px de gap) — fácil tocar el de al lado
+   por error. Se agranda solo acá, con un selector de ancestro
+   (.ep-m-root), sin tocar el toolbar de escritorio. */
+.ep-m-root .ep-rich-toolbar { gap: 4px; padding: 6px 8px; }
+.ep-m-root .ep-rich-btn { width: 34px; height: 34px; }
 
 /* ── Fila fija de Espaciador en la biblioteca (mobile) — mismo
    criterio que .ep-spacer-row de escritorio: siempre visible, nunca

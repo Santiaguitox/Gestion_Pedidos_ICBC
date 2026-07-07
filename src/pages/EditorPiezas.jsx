@@ -22,10 +22,18 @@ import { generarExport, wrapPreview } from '@/lib/editor/exportar.js'
 // Detección de mobile por viewport — mismo breakpoint (768px) que ya
 // usa EditorPiezas.css para ocultar los paneles laterales en desktop.
 // No toca ningún camino de desktop: solo decide qué árbol renderizar.
+// Se usa el lado más chico del viewport (no innerWidth solo) para que
+// no cambie al rotar el dispositivo: el ancho de un celular grande en
+// horizontal (ej. iPhone Pro Max ~926px) supera fácil los 768px y
+// haría que, al rotarlo, se muestre de golpe el editor de escritorio
+// completo en vez del mobile. El lado corto de un celular no cambia
+// entre portrait y landscape, así que basarse en el mínimo mantiene
+// la misma versión del editor sin importar la orientación.
 function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint)
+  const medir = () => Math.min(window.innerWidth, window.innerHeight) <= breakpoint
+  const [isMobile, setIsMobile] = useState(medir)
   useEffect(() => {
-    function onResize() { setIsMobile(window.innerWidth <= breakpoint) }
+    function onResize() { setIsMobile(medir()) }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [breakpoint])
@@ -1078,13 +1086,35 @@ const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, he
     return () => iframe.removeEventListener('load', handler)
   }, [srcDoc, width])
 
+  // El width prop cubre el cambio explícito Desktop/Mobile del modal de
+  // preview, pero en el canvas normal el ancho real lo da el CSS
+  // (width:100% del contenedor flex) — no hay ningún prop que cambie
+  // cuando eso pasa. Sin este observer, rotar el celular (o cualquier
+  // otro cambio de layout que angoste/ensanche la tarjeta) deja el
+  // iframe con el alto medido en el ancho anterior: contenido cortado
+  // o espacio vacío de más, según para qué lado cambió. ResizeObserver
+  // reacciona al tamaño real del propio iframe sin importar la causa.
+  useEffect(() => {
+    const iframe = refInterna.current
+    if (!iframe || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => ajustarAlto())
+    ro.observe(iframe)
+    return () => ro.disconnect()
+  }, [])
+
   return <iframe ref={ref} className={className} srcDoc={srcDoc} title={title}
     scrolling="no" style={{ height: height || 40, border: 'none', display: 'block', width: width || '100%', background: '#fff' }} />
 })
 
 // ─── Categoría colapsable ───────────────────────────────────────────────────
-function CategoriaColapsable({ titulo, children, count = null }) {
+function CategoriaColapsable({ titulo, children, count = null, busqueda = '' }) {
   const [abierto, setAbierto] = useState(false)
+  // Auto-expandir (nunca auto-colapsar) cuando la búsqueda tiene
+  // resultados acá — sin esto, escribir algo que está en una
+  // categoría cerrada no mostraba nada hasta abrirla a mano.
+  useEffect(() => {
+    if (busqueda && count > 0) setAbierto(true)
+  }, [busqueda])
   return (
     <div className="ep-categoria">
       <button className="ep-categoria-header" onClick={() => setAbierto(v => !v)}>
@@ -2096,7 +2126,7 @@ export default function EditorPiezas() {
         <div className="ep-biblioteca-lista">
 
           {bloquesFiltradosHeader.length > 0 && (
-            <CategoriaColapsable titulo="Header" count={bloquesFiltradosHeader.length}>
+            <CategoriaColapsable titulo="Header" count={bloquesFiltradosHeader.length} busqueda={busqueda}>
               {(() => {
                 // Mismos colores que el selector de segmento de
                 // Modulo_Doble_Con_Imagen_Punteada — así la pestaña activa
@@ -2172,7 +2202,7 @@ export default function EditorPiezas() {
                 .filter(Boolean)
               if (bloques.length === 0) return null
               return (
-                <CategoriaColapsable key={g.label} titulo={g.label} count={bloques.length}>
+                <CategoriaColapsable key={g.label} titulo={g.label} count={bloques.length} busqueda={busqueda}>
                   {bloques.map(bloque => (
                     <div key={bloque.id}
                       className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''}`}
@@ -2852,9 +2882,10 @@ function EditorMobile(props) {
     legalFijoHtml,
   } = props
 
-  // 'canvas' | 'library' | 'editBlock' | 'editHeader' | 'menu' | 'preview'
-  // | 'import' | 'piezasFijas' | 'pf-imgPrincipal' | 'pf-imgFooter'
-  // | 'pf-legales' | 'pf-fci' | 'pf-indicadores' | 'pf-legalGenerico'
+  // 'canvas' | 'library' | 'editBlock' | 'editHeader' | 'menu' | 'import'
+  // (las "zonas fijas" — imagen principal, footer, legales, FCI,
+  // indicadores, legal genérico — no son pantallas propias: viven como
+  // acordeones dentro del canvas, ver zonasAbiertas más abajo)
   const [screen, setScreen] = useState('canvas')
   const [reorderMode, setReorderMode] = useState(false)
   const [busquedaLib, setBusquedaLib] = useState('')
@@ -2917,6 +2948,29 @@ function EditorMobile(props) {
 
   const bloquesFiltrados = q => (lista) => !q ? lista : lista.filter(b => b.nombre.toLowerCase().includes(q.toLowerCase()))
   const filtro = bloquesFiltrados(busquedaLib)
+
+  const CATEGORIAS_LIB = [
+    { key: 'Header', label: 'Header', lista: BLOQUES_HEADER, esHeader: true },
+    { key: 'Contenido', label: 'Contenido', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Contenido' && b.slug !== 'Espaciador') },
+    { key: 'Botones', label: 'Botones', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Botones') },
+  ]
+
+  // Auto-expandir (nunca auto-colapsar) las categorías que tengan
+  // resultados mientras hay una búsqueda activa — igual criterio que
+  // se suma ahora también en desktop (CategoriaColapsable). Sin esto,
+  // escribir algo que está en una categoría cerrada no mostraba nada
+  // hasta abrirla a mano, dejando la búsqueda "muda".
+  useEffect(() => {
+    if (!busquedaLib) return
+    setCatAbierta(prev => {
+      let cambio = false
+      const next = { ...prev }
+      for (const cat of CATEGORIAS_LIB) {
+        if (!next[cat.key] && filtro(cat.lista).length > 0) { next[cat.key] = true; cambio = true }
+      }
+      return cambio ? next : prev
+    })
+  }, [busquedaLib])
 
   return (
     <div className="ep-m-root">
@@ -3257,14 +3311,11 @@ function EditorMobile(props) {
               </div>
             )}
             <div className="ep-m-sheet-body">
-              {[
-                { key: 'Header', label: 'Header', lista: BLOQUES_HEADER, esHeader: true },
-                { key: 'Contenido', label: 'Contenido', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Contenido' && b.slug !== 'Espaciador') },
-                { key: 'Botones', label: 'Botones', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Botones') },
-              ].map(cat => (
+              {CATEGORIAS_LIB.map(cat => (
                 <div key={cat.key} className="ep-m-categoria">
                   <button className="ep-m-categoria-header" onClick={() => setCatAbierta(p => ({ ...p, [cat.key]: !p[cat.key] }))}>
                     <span>{cat.label}</span>
+                    <span className="ep-m-categoria-count">{filtro(cat.lista).length}</span>
                     <ChevronDown size={16} style={{ transform: catAbierta[cat.key] ? 'rotate(180deg)' : 'none' }} />
                   </button>
                   {catAbierta[cat.key] && (
@@ -3545,20 +3596,20 @@ function EditorMobile(props) {
                 </>
               )
             )}
-
-            {importarResultado && (
-              <div className="ep-m-import-footer">
-                <button className="ep-m-btn-ghost" onClick={() => setImportarResultado(null)}>Volver</button>
-                <button
-                  className={importarResultado.confianza === 'baja' || !importarResultado.resultado ? 'ep-m-btn-ghost' : 'ep-m-btn-primary'}
-                  onClick={confirmarImportacionMobile}
-                  disabled={!importarResultado.resultado}
-                >
-                  {importarResultado.confianza === 'baja' ? 'Cargar igual (no recomendado)' : 'Cargar en el editor'}
-                </button>
-              </div>
-            )}
           </div>
+
+          {importarResultado && (
+            <div className="ep-m-sheet-footer ep-m-import-footer">
+              <button className="ep-m-btn-ghost" onClick={() => setImportarResultado(null)}>Volver</button>
+              <button
+                className={importarResultado.confianza === 'baja' || !importarResultado.resultado ? 'ep-m-btn-ghost' : 'ep-m-btn-primary'}
+                onClick={confirmarImportacionMobile}
+                disabled={!importarResultado.resultado}
+              >
+                {importarResultado.confianza === 'baja' ? 'Cargar igual (no recomendado)' : 'Cargar en el editor'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
