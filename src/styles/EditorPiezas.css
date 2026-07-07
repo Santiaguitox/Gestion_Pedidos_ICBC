@@ -2038,3 +2038,472 @@ input[autocomplete="off"] { }
   display: block;
   background: #fff;
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   EDITOR MOBILE (ep-m-*) — árbol completamente aparte del desktop de
+   arriba. Prefijo dedicado para que nunca colisione con las clases
+   ep-* de escritorio. Activo solo cuando EditorPiezas.jsx detecta
+   viewport ≤768px (useIsMobile) y renderiza <EditorMobile>.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* .main-content es el contenedor de scroll de TODA la app (flex:1 +
+   overflow-y:auto, ver global.css). Eso es lo que rompía este editor:
+   topbar y toolbar quedaban "sticky" DENTRO de esa zona de scroll, pero
+   la lista de bloques scrolleaba con el resto de la página por detrás
+   de ellos en vez de quedar quieta. El patrón correcto (el mismo que
+   .ep-root de escritorio, y el del prototipo aprobado) es que topbar y
+   toolbar queden completamente AFUERA del área que scrollea: acá no
+   scrollea .main-content, scrollea únicamente .ep-m-canvas-scroll.
+   Por eso .main-content se anula (padding:0, overflow:hidden) sólo
+   cuando contiene a .ep-m-root, y .ep-m-root pasa a ocupar todo ese
+   espacio como columna flex con su propio scroll interno. */
+.main-content:has(> .ep-m-root) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ep-m-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base, #F4F5FA);
+  font-family: 'Inter', sans-serif;
+}
+
+/* ── Barra superior fija (afuera de la zona de scroll: no hace falta
+   sticky, nunca se mueve) ── */
+.ep-m-topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E5F0;
+}
+.ep-m-topbar-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ep-m-nombre { font: 700 14px 'DM Sans', sans-serif; color: #0D0F20; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-m-guardado { display: flex; align-items: center; gap: 4px; font: 500 10px Inter, sans-serif; color: #10B981; }
+.ep-m-topbar-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ep-m-icon-btn {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  color: #0D0F20; background: transparent; border: none; cursor: pointer;
+}
+.ep-m-icon-btn:active { background: #F0F1F8; }
+
+/* ── Barra de herramientas del canvas (contador + toggle reordenar) ── */
+.ep-m-canvas-toolbar {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E5F0;
+}
+.ep-m-canvas-count { font: 500 11px Inter, sans-serif; color: #9EA3BE; }
+.ep-m-reorder-toggle {
+  font: 600 12px Inter, sans-serif; color: #5B4EE8;
+  background: rgba(91,78,232,0.08); border: 1px solid rgba(91,78,232,0.25);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.ep-m-reorder-toggle.activo { background: #D0111B; border-color: #D0111B; color: #fff; }
+
+/* ── Lista de bloques (única zona que scrollea) ── */
+.ep-m-canvas-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ep-m-empty { flex-shrink: 0; text-align: center; color: #9EA3BE; font: 500 13px Inter, sans-serif; padding: 40px 20px; }
+
+.ep-m-card {
+  position: relative;
+  flex-shrink: 0;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 12px;
+  overflow: hidden;
+}
+.ep-m-card-header { border-color: #C8CCDE; }
+.ep-m-card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px; border-bottom: 1px solid #F0F1F8;
+}
+.ep-m-grip { color: #9EA3BE; flex-shrink: 0; }
+.ep-m-card-nombre { font: 600 12.5px Inter, sans-serif; color: #0D0F20; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-m-card-nombre-alto { color: #D0111B; font-weight: 700; margin-left: 4px; }
+.ep-m-badge-cat {
+  font: 600 10px Inter, sans-serif; color: #5B4EE8;
+  background: rgba(91,78,232,0.08); border: 1px solid rgba(91,78,232,0.2);
+  border-radius: 999px; padding: 2px 8px; flex-shrink: 0;
+  width: 80px; box-sizing: border-box; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ep-m-badge-fijo {
+  display: flex; align-items: center; gap: 3px;
+  font: 700 10px Inter, sans-serif; color: #5A5F7A;
+  background: #F0F1F8; border-radius: 999px; padding: 2px 8px; flex-shrink: 0;
+}
+.ep-m-card-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.ep-m-card-actions button {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: #5A5F7A; background: transparent; border: none; cursor: pointer;
+}
+.ep-m-card-actions button:active { background: #F0F1F8; color: #D0111B; }
+.ep-m-preview-tapzone { padding: 10px; }
+.ep-m-preview-tapzone-clickeable { cursor: pointer; }
+.ep-m-preview-frame { display: block; width: 100%; border: none; }
+
+.ep-m-reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.ep-m-reorder-btns button {
+  width: 24px; height: 20px; border-radius: 5px;
+  border: 1px solid #E2E5F0; background: #FFFFFF; color: #0D0F20;
+  font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.ep-m-reorder-btns button:disabled { opacity: 0.3; }
+
+/* ── FAB ── */
+.ep-m-fab {
+  position: fixed; right: 18px; bottom: 24px; z-index: 20;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: #D0111B; color: #fff; border: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(208,17,27,0.4); cursor: pointer;
+}
+
+/* ── Bottom-sheet genérico ── */
+.ep-m-sheet-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(13,15,32,0.45);
+  display: flex; align-items: flex-end;
+  animation: ep-m-fade 0.15s ease-out;
+}
+.ep-m-sheet {
+  width: 100%; max-height: 78vh;
+  background: #FFFFFF;
+  border-radius: 18px 18px 0 0;
+  display: flex; flex-direction: column;
+  animation: ep-m-slideup 0.2s ease-out;
+  overflow: hidden;
+}
+.ep-m-sheet-tall { max-height: 88vh; }
+.ep-m-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: #C8CCDE; margin: 10px auto 4px; flex-shrink: 0; }
+.ep-m-sheet-header {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 16px 12px; font: 700 15px 'DM Sans', sans-serif; color: #0D0F20;
+  border-bottom: 1px solid #E2E5F0; background: #FFFFFF;
+}
+.ep-m-sheet-header button { color: #0D0F20; background: none; border: none; cursor: pointer; }
+.ep-m-sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; background: #F4F5FA; }
+.ep-m-sheet-footer {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-top: 1px solid #E2E5F0; background: #FFFFFF;
+}
+.ep-m-btn-listo { background: #D0111B; color: #fff; font: 600 13px Inter, sans-serif; padding: 9px 20px; border: none; border-radius: 9px; cursor: pointer; }
+
+@keyframes ep-m-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ep-m-slideup { from { transform: translateY(24px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── Biblioteca (agregar bloque) ── */
+.ep-m-search {
+  margin: 10px 16px 0; width: calc(100% - 32px);
+  border: 1px solid #E2E5F0; border-radius: 10px;
+  padding: 9px 12px; font: 500 13px Inter, sans-serif; color: #0D0F20; outline: none;
+}
+.ep-m-categoria { display: flex; flex-direction: column; gap: 8px; }
+.ep-m-categoria-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: none; border: none; padding: 4px 0; cursor: pointer;
+  font: 700 12px Inter, sans-serif; color: #5A5F7A; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ep-m-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ep-m-bloque-card {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 10px;
+  padding: 8px; cursor: pointer; text-align: left;
+}
+.ep-m-bloque-thumb { width: 100%; height: 52px; object-fit: contain; border-radius: 6px; background: #F4F5FA; }
+.ep-m-bloque-nombre { display: flex; align-items: center; gap: 4px; font: 600 11px Inter, sans-serif; color: #0D0F20; }
+.ep-m-check { color: #10B981; flex-shrink: 0; }
+.ep-m-bloque-codigo {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #FFFFFF; border: 1px dashed #C8CCDE; border-radius: 10px;
+  padding: 12px; color: #5B4EE8; font: 600 12px Inter, sans-serif; cursor: pointer;
+}
+
+/* ── Editar bloque ── */
+.ep-m-context-mini { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ep-m-context-mini img { width: 100px; height: 50px; object-fit: contain; border-radius: 7px; background: #F4F5FA; flex-shrink: 0; }
+.ep-m-context-mini .ep-m-badge-cat { margin-top: 5px; }
+.ep-m-panel-editor-wrap { padding: 0; }
+
+/* ── Pantallas completas (editar header / piezas fijas / import) ── */
+.ep-m-screen {
+  position: fixed; inset: 0; z-index: 380;
+  background: #F4F5FA; display: flex; flex-direction: column;
+  animation: ep-m-fade 0.15s ease-out;
+}
+.ep-m-screen-header {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; background: #FFFFFF; border-bottom: 1px solid #E2E5F0;
+  font: 700 15px 'DM Sans', sans-serif; color: #0D0F20;
+}
+.ep-m-screen-header button { color: #0D0F20; background: none; border: none; cursor: pointer; display: flex; }
+.ep-m-screen-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.ep-m-muted { color: #5A5F7A; font: 400 13px Inter, sans-serif; line-height: 1.5; }
+.ep-m-muted-sm { color: #9EA3BE; font: 400 11px Inter, sans-serif; margin-top: 2px; }
+
+.ep-m-seccion-titulo { font: 700 13px 'DM Sans', sans-serif; color: #0D0F20; margin-top: 4px; }
+.ep-m-red-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 10px; padding: 10px 12px;
+}
+.ep-m-red-nombre { flex: 1; font: 600 12.5px Inter, sans-serif; color: #0D0F20; }
+
+/* ── Switch on/off genérico ── */
+.ep-m-switch {
+  width: 38px; height: 22px; border-radius: 11px; background: #E2E5F0;
+  border: none; position: relative; cursor: pointer; flex-shrink: 0; padding: 0;
+}
+.ep-m-switch.on { background: #D0111B; }
+.ep-m-switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  transition: left 150ms ease;
+}
+.ep-m-switch.on .ep-m-switch-knob { left: 18px; }
+
+/* ── Menú (⋯) ── */
+.ep-m-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 13px 16px; background: none; border: none; text-align: left;
+  font: 600 13px Inter, sans-serif; color: #0D0F20; cursor: pointer;
+}
+.ep-m-menu-item:active { background: #F0F1F8; }
+
+/* ── Vista previa ── */
+.ep-m-preview-full { position: fixed; inset: 0; z-index: 390; background: #0D0F20; display: flex; flex-direction: column; }
+.ep-m-preview-topbar {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: rgba(255,255,255,0.06);
+}
+.ep-m-preview-topbar button:first-child { color: #fff; background: none; border: none; cursor: pointer; }
+.ep-m-preview-switch { display: flex; gap: 4px; background: rgba(255,255,255,0.08); border-radius: 999px; padding: 3px; }
+.ep-m-preview-switch button {
+  font: 600 11px Inter, sans-serif; color: #9EA3BE; background: none; border: none;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+.ep-m-preview-switch button.activo { background: #fff; color: #0D0F20; }
+.ep-m-preview-frame-wrap { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; }
+.ep-m-preview-frame-wrap.mobile { max-width: 380px; margin: 0 auto; }
+.ep-m-preview-frame-wrap.desktop {
+  /* Ancho real de escritorio (640px, mismo valor que ya usaba el
+     iframe acá) — antes el iframe tenía width:100% + max-width:640px,
+     pero como el contenedor nunca mide más que el viewport del
+     celular, el 100% siempre quedaba por debajo de esos 640px: el
+     "modo Desktop" nunca llegaba a medir 640px de verdad, así que el
+     HTML interno recalculaba su layout angosto igual que en mobile.
+     Ahora el iframe mide 640px fijos, MÁS ANCHO que el viewport del
+     celular, así que justify-content pasa a flex-start (con center,
+     el excedente queda "atrapado" de los dos lados y el scroll no
+     llega a mostrar el borde izquierdo real) para que el scroll
+     horizontal arranque del principio, como una página de escritorio
+     de verdad. */
+  justify-content: flex-start;
+  overflow-x: auto;
+}
+.ep-m-preview-iframe { width: 100%; height: 1400px; border: none; background: #fff; border-radius: 8px; }
+.ep-m-preview-frame-wrap.desktop .ep-m-preview-iframe { width: 640px; flex-shrink: 0; }
+
+/* ── Inputs genéricos ── */
+.ep-m-input, .ep-m-textarea {
+  border: 1px solid #E2E5F0; border-radius: 9px; padding: 10px 12px;
+  font: 500 13px Inter, sans-serif; color: #0D0F20; background: #FFFFFF; outline: none; width: 100%;
+}
+.ep-m-textarea { min-height: 140px; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
+.ep-m-btn-primary {
+  background: #D0111B; color: #fff; font: 600 13px Inter, sans-serif;
+  padding: 11px; border: none; border-radius: 9px; cursor: pointer;
+}
+.ep-m-btn-primary:disabled { opacity: 0.5; }
+
+/* ── Toggle row genérico (activo/inactivo de secciones) ── */
+.ep-m-toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 10px; padding: 12px 14px;
+  font: 600 13px Inter, sans-serif; color: #0D0F20;
+}
+.ep-m-img-preview { width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; background: #E2E5F0; }
+
+/* ── Piezas fijas: menú ── */
+.ep-m-pf-menu { gap: 8px; }
+.ep-m-pf-menu button {
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 10px;
+  padding: 14px; text-align: left; font: 600 13px Inter, sans-serif; color: #0D0F20; cursor: pointer;
+}
+
+/* ── FCI ── */
+.ep-m-fci-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ── Legales adicionales ── */
+.ep-m-legal-item { display: flex; flex-direction: column; gap: 6px; }
+.ep-m-legal-item-head { display: flex; align-items: center; justify-content: space-between; font: 600 12px Inter, sans-serif; color: #5A5F7A; }
+.ep-m-legal-item-head button { color: #9EA3BE; background: none; border: none; cursor: pointer; }
+.ep-m-btn-agregar {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px dashed #C8CCDE; border-radius: 10px; padding: 12px;
+  background: none; color: #5B4EE8; font: 600 12px Inter, sans-serif; cursor: pointer;
+}
+
+/* ── Indicadores financieros ── */
+.ep-m-indicador-row {
+  display: flex; align-items: center; gap: 6px;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 10px; padding: 10px;
+}
+.ep-m-indicador-row .ep-m-input { flex: 1; padding: 8px; }
+.ep-m-input-ref { flex: none !important; width: 48px; text-align: center; }
+.ep-m-indicador-row button { color: #9EA3BE; background: none; border: none; cursor: pointer; flex-shrink: 0; }
+
+/* ── Legal genérico (solo lectura) ── */
+.ep-m-legal-locked {
+  display: flex; gap: 10px; background: #F0F1F8; border: 1px solid #E2E5F0;
+  border-radius: 10px; padding: 14px; color: #9EA3BE;
+}
+.ep-m-legal-locked-tag { font: 600 11px Inter, sans-serif; color: #5A5F7A; margin-bottom: 6px; }
+.ep-m-legal-locked-text { font: 400 13px Inter, sans-serif; color: #5A5F7A; line-height: 1.6; }
+
+/* ── Zonas fijas (imagen principal/footer, legales, FCI, indicadores,
+     legal genérico) — SIEMPRE presentes en el canvas, en su posición
+     fija, nunca ocultas en un menú ni reordenables junto a los
+     bloques. Mismo criterio que ep-zona-fija en desktop. Solo se
+     puede expandir/colapsar el contenido, no mover ni quitar la
+     sección en sí. ── */
+.ep-m-zona-fija { border-style: dashed; border-color: #C8CCDE; }
+.ep-m-zona-fija-head {
+  width: 100%; background: none; border: none; cursor: pointer;
+  text-align: left; font: inherit;
+}
+.ep-m-zona-fija-body {
+  padding: 12px 12px 14px;
+  border-top: 1px solid #F0F1F8;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.ep-m-estado-pill {
+  font: 600 10px Inter, sans-serif; color: #9EA3BE;
+  background: #F0F1F8; border-radius: 999px; padding: 2px 8px; flex-shrink: 0;
+}
+.ep-m-estado-pill.on { color: #D0111B; background: rgba(208,17,27,0.08); }
+
+/* ── Nombre de la pieza editable (topbar) ── */
+.ep-m-nombre-btn {
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+  background: none; border: none; padding: 0; cursor: pointer; color: #9EA3BE;
+}
+.ep-m-nombre-btn .ep-m-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-m-nombre-input {
+  font: 700 14px 'DM Sans', sans-serif; color: #0D0F20;
+  border: 1px solid #5B4EE8; border-radius: 6px; padding: 2px 6px;
+  outline: none; background: #fff; max-width: 180px;
+}
+/* El selector de tema mobile reusa .ep-tema-selector tal cual
+   (mismo borde, fondo y tamaños que desktop) — el único ajuste real
+   es align-self, porque .ep-m-topbar-title es una columna flex sin
+   align-items propio (stretch por default), y sin esto el botón se
+   estiraría a lo ancho de toda la columna en vez de quedar compacto
+   como en desktop. */
+.ep-m-tema-selector { align-self: flex-start; margin-top: 3px; padding: 0.1rem 0.625rem; }
+
+/* ── Importar pieza (mobile) — mismo motor que desktop, layout propio
+   de una sola columna. Paleta y semántica de colores idénticas a
+   .ep-importar-* de escritorio para que "alta/media/baja confianza"
+   se lea igual en los dos árboles. ── */
+.ep-m-import-tabs {
+  display: inline-flex; padding: 4px; background: #F0F1F8; border-radius: 8px; align-self: flex-start;
+}
+.ep-m-import-tabs button {
+  padding: 5px 14px; border-radius: 6px; border: none; background: none;
+  font: 600 12px Inter, sans-serif; color: #5A5F7A; cursor: pointer;
+}
+.ep-m-import-tabs button.activo { background: #D0111B; color: #fff; }
+
+.ep-m-import-error {
+  display: flex; align-items: flex-start; gap: 8px;
+  font: 500 12.5px Inter, sans-serif; color: #D0111B;
+  background: rgba(208,17,27,0.06); border: 1px solid rgba(208,17,27,0.2);
+  border-radius: 9px; padding: 10px 12px;
+}
+
+.ep-m-import-processing {
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 12px; padding: 16px;
+}
+.ep-m-import-processing-top {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font: 600 13px Inter, sans-serif; color: #0D0F20; margin-bottom: 8px;
+}
+.ep-m-import-progress-track { height: 8px; background: #F0F1F8; border-radius: 99px; overflow: hidden; }
+.ep-m-import-progress-fill { height: 100%; border-radius: 99px; background: #D0111B; transition: width 120ms linear; }
+
+.ep-m-import-badge {
+  display: flex; align-items: center; gap: 10px;
+  border-radius: 10px; padding: 10px 12px; border: 1px solid;
+}
+.ep-m-import-confianza-alta { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); color: #10B981; }
+.ep-m-import-confianza-media, .ep-m-import-confianza-baja { background: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.25); color: #F97316; }
+.ep-m-import-badge-titulo { font: 700 12.5px Inter, sans-serif; color: #0D0F20; }
+.ep-m-import-badge-sub { font: 400 11px Inter, sans-serif; color: #5A5F7A; margin-top: 1px; }
+
+.ep-m-import-metricas { display: flex; gap: 8px; }
+.ep-m-import-metrica {
+  flex: 1; text-align: center; background: #F4F5FA; border-radius: 8px; padding: 8px 4px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ep-m-import-metrica span:first-child { font: 700 15px 'DM Sans', sans-serif; color: #0D0F20; }
+.ep-m-import-metrica span:last-child { font: 600 9px Inter, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #9EA3BE; }
+
+.ep-m-import-avisos { display: flex; flex-direction: column; gap: 6px; }
+.ep-m-import-aviso {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: #FFFFFF; border: 1px solid #E2E5F0; border-radius: 9px; padding: 8px 10px;
+}
+.ep-m-import-aviso-icono {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: #9EA3BE;
+}
+.ep-m-import-aviso-titulo { font: 600 12px Inter, sans-serif; color: #0D0F20; }
+
+.ep-m-import-preview-wrap { flex-shrink: 0; border: 1px solid #E2E5F0; border-radius: 10px; overflow: hidden; }
+
+.ep-m-import-footer { display: flex; gap: 8px; }
+.ep-m-import-footer button { flex: 1; }
+.ep-m-btn-ghost {
+  background: #FFFFFF; color: #5A5F7A; font: 600 13px Inter, sans-serif;
+  padding: 11px; border: 1px solid #E2E5F0; border-radius: 9px; cursor: pointer;
+}
+.ep-m-btn-ghost:disabled { opacity: 0.5; }
+
+/* ── Fila fija de Espaciador en la biblioteca (mobile) — mismo
+   criterio que .ep-spacer-row de escritorio: siempre visible, nunca
+   un tile de grid con miniatura vacía. ── */
+.ep-m-spacer-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 4px; }
+.ep-m-spacer-row-label { font: 500 11px Inter, sans-serif; color: #9EA3BE; }
+.ep-m-spacer-row-opciones { display: flex; gap: 6px; }
+.ep-m-spacer-chip {
+  flex: 1; border: none; border-radius: 8px; padding: 8px 0; cursor: pointer;
+  font: 600 12px Inter, sans-serif; color: #fff; background: #D0111B;
+}
+.ep-m-spacer-chip:active { background: #A80E16; }
+
+/* ── Ítem de menú "peligroso" (reiniciar pieza) — mismo rojo que el
+   botón de reiniciar de escritorio (.ep-btn-reiniciar), separado del
+   resto de las acciones del menú con un borde arriba. ── */
+.ep-m-menu-item-danger { color: #D0111B; border-top: 1px solid #F0F1F8; margin-top: 4px; }
+.ep-m-menu-item-danger:active { background: rgba(208,17,27,0.06); }

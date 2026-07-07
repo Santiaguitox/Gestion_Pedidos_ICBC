@@ -18,6 +18,19 @@ import { extraerTdsConBalance, limpiarHtmlEditor, validarUrl } from '@/lib/edito
 import { actualizarCampoEnHtml, detectarCampos } from '@/lib/editor/campos.js'
 import { detectarRedesSociales, reordenarRedesSociales } from '@/lib/editor/redesSociales.js'
 import { generarExport, wrapPreview } from '@/lib/editor/exportar.js'
+
+// Detección de mobile por viewport — mismo breakpoint (768px) que ya
+// usa EditorPiezas.css para ocultar los paneles laterales en desktop.
+// No toca ningún camino de desktop: solo decide qué árbol renderizar.
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint)
+  useEffect(() => {
+    function onResize() { setIsMobile(window.innerWidth <= breakpoint) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+  return isMobile
+}
 import { generarThumbSVG } from '@/lib/editor/thumbs.js'
 import {
   importarDesdeHtml,
@@ -1179,6 +1192,7 @@ function headerDesdeSlag(slug) {
 
 export default function EditorPiezas() {
   useDocumentTitle('Editor de Piezas')
+  const isMobile = useIsMobile()
 
   const { showSuccess } = useNotificaciones()
   const [busqueda, setBusqueda] = useState('')
@@ -1401,6 +1415,24 @@ export default function EditorPiezas() {
       const idx = prev.findIndex(b => b.instanceId === instanceId)
       const arr = [...prev]
       arr.splice(idx + 1, 0, inst)
+      return arr
+    })
+  }
+
+  // Reordenar sin drag-and-drop — swap con el vecino inmediato. Usada
+  // únicamente por el modo "Reordenar" de EditorMobile (en desktop el
+  // reordenamiento sigue siendo por drag, vía onDropBloque más abajo;
+  // esta función no reemplaza esa lógica, es una alternativa aparte
+  // para touch, donde el drag-and-drop nativo no funciona).
+  function moverBloque(instanceId, dir) {
+    setCanvas(prev => {
+      const idx = prev.findIndex(b => b.instanceId === instanceId)
+      const destino = idx + dir
+      if (idx === -1 || destino < 0 || destino >= prev.length) return prev
+      const arr = [...prev]
+      const tmp = arr[idx]
+      arr[idx] = arr[destino]
+      arr[destino] = tmp
       return arr
     })
   }
@@ -1906,6 +1938,50 @@ export default function EditorPiezas() {
   const previewSrcdoc = showPreview
     ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:99px}</style></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })}</body></html>`
     : ''
+
+  // ── Mobile: árbol completamente aparte, no toca nada del return de
+  //    abajo (desktop). Ver EditorMobile más abajo en este archivo. ──
+  if (isMobile) {
+    return (
+      <EditorMobile
+        nombre={nombre} setNombre={setNombre}
+        tema={tema} setTema={setTema}
+        importarModo={importarModo} setImportarModo={setImportarModo}
+        importarHtmlInput={importarHtmlInput} setImportarHtmlInput={setImportarHtmlInput}
+        importarUrlInput={importarUrlInput} setImportarUrlInput={setImportarUrlInput}
+        importarError={importarError} setImportarError={setImportarError}
+        importarCargando={importarCargando} importarProgreso={importarProgreso} importarEtapa={importarEtapa}
+        importarResultado={importarResultado} setImportarResultado={setImportarResultado}
+        analizarImportacion={analizarImportacion} confirmarImportacion={confirmarImportacion}
+        cerrarModalImportar={cerrarModalImportar}
+        bandaHeader={bandaHeader} setBandaHeader={setBandaHeader}
+        redesOrden={redesOrden} setRedesOrden={setRedesOrden} redesDetectadas={redesDetectadas}
+        toggleRedActiva={toggleRedActiva} reordenarPillRed={reordenarPillRed}
+        canvas={canvas} selectedId={selectedId} setSelectedId={setSelectedId}
+        selectedBloque={selectedBloque}
+        nuevaPieza={nuevaPieza}
+        agregarAlCanvas={agregarAlCanvas} agregarEspaciadorDespues={agregarEspaciadorDespues}
+        htmlEspaciadorConAlto={htmlEspaciadorConAlto}
+        agregarCodigo={agregarCodigo} eliminarBloque={eliminarBloque}
+        actualizarBloque={actualizarBloque} actualizarEstilosBloque={actualizarEstilosBloque}
+        swapBloque={swapBloque} moverBloque={moverBloque}
+        showPreview={showPreview} setShowPreview={setShowPreview}
+        previewModo={previewModo} setPreviewModo={setPreviewModo}
+        previewSrcdoc={previewSrcdoc}
+        copiar={copiar} copiado={copiado} exportar={exportar}
+        imgPrincipal={imgPrincipal} setImgPrincipal={setImgPrincipal}
+        imgFooter={imgFooter} setImgFooter={setImgFooter}
+        legalesAdicionales={legalesAdicionales} agregarLegalAdicional={agregarLegalAdicional}
+        actualizarLegalAdicional={actualizarLegalAdicional} eliminarLegalAdicional={eliminarLegalAdicional}
+        legalesSeparados={legalesSeparados} setLegalesSeparados={setLegalesSeparados}
+        firmaInstitucional={firmaInstitucional} toggleFirmaInstitucional={toggleFirmaInstitucional}
+        actualizarFirmaInstitucional={actualizarFirmaInstitucional}
+        indicadores={indicadores} agregarIndicador={agregarIndicador}
+        actualizarIndicador={actualizarIndicador} eliminarIndicador={eliminarIndicador}
+        legalFijoHtml={LEGAL_FIJO_HTML}
+      />
+    )
+  }
 
   return (
     <div className="ep-root">
@@ -2738,3 +2814,755 @@ export default function EditorPiezas() {
     </div>
   )
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   EDITOR MOBILE — árbol completamente aparte del desktop de arriba.
+   No reimplementa nada de negocio: reusa el mismo estado y las mismas
+   funciones (pasadas por props desde EditorPiezas), y reusa tal cual
+   los componentes RichEditor / CampoImagen / PanelEditor / AutoIframe
+   ya definidos en este archivo. Lo único nuevo de verdad es la
+   navegación por pantallas/bottom-sheets y el modo "Reordenar" (con
+   flechas, reemplazo del drag-and-drop que no funciona en touch).
+   ════════════════════════════════════════════════════════════════════════ */
+function EditorMobile(props) {
+  const {
+    nombre, setNombre,
+    tema, setTema,
+    importarModo, setImportarModo,
+    importarHtmlInput, setImportarHtmlInput,
+    importarUrlInput, setImportarUrlInput,
+    importarError, setImportarError,
+    importarCargando, importarProgreso, importarEtapa,
+    importarResultado, setImportarResultado,
+    analizarImportacion, confirmarImportacion, cerrarModalImportar,
+    bandaHeader,
+    redesOrden, redesDetectadas, toggleRedActiva, reordenarPillRed,
+    canvas, selectedId, setSelectedId, selectedBloque,
+    nuevaPieza,
+    agregarAlCanvas, agregarEspaciadorDespues, agregarCodigo, eliminarBloque,
+    htmlEspaciadorConAlto,
+    actualizarBloque, actualizarEstilosBloque, swapBloque, moverBloque,
+    showPreview, setShowPreview, previewModo, setPreviewModo, previewSrcdoc,
+    copiar, copiado, exportar,
+    imgPrincipal, setImgPrincipal, imgFooter, setImgFooter,
+    legalesAdicionales, agregarLegalAdicional, actualizarLegalAdicional, eliminarLegalAdicional,
+    legalesSeparados, setLegalesSeparados,
+    firmaInstitucional, toggleFirmaInstitucional, actualizarFirmaInstitucional,
+    indicadores, agregarIndicador, actualizarIndicador, eliminarIndicador,
+    legalFijoHtml,
+  } = props
+
+  // 'canvas' | 'library' | 'editBlock' | 'editHeader' | 'menu' | 'preview'
+  // | 'import' | 'piezasFijas' | 'pf-imgPrincipal' | 'pf-imgFooter'
+  // | 'pf-legales' | 'pf-fci' | 'pf-indicadores' | 'pf-legalGenerico'
+  const [screen, setScreen] = useState('canvas')
+  const [reorderMode, setReorderMode] = useState(false)
+  const [busquedaLib, setBusquedaLib] = useState('')
+  const [catAbierta, setCatAbierta] = useState({ Header: false, Contenido: false, Botones: false })
+  // Edición del nombre de la pieza — mismo patrón que ep-nombre-pieza-*
+  // de escritorio (editandoNombre/inputNombreRef), pero con su propio
+  // estado y ref locales: son DOM nodes distintos (nunca coexisten,
+  // isMobile decide cuál de los dos árboles se monta) así que no tiene
+  // sentido compartir el ref con desktop.
+  const [editandoNombreM, setEditandoNombreM] = useState(false)
+  const inputNombreMRef = useRef(null)
+  useEffect(() => { if (editandoNombreM) inputNombreMRef.current?.focus() }, [editandoNombreM])
+  const [showConfirmReinicioM, setShowConfirmReinicioM] = useState(false)
+  // Qué "zona fija" está expandida — igual criterio que las categorías
+  // de la biblioteca (acordeón). Estas 6 zonas (imagen principal,
+  // imagen footer, legales, FCI, indicadores, legal genérico) NUNCA
+  // se ocultan del canvas ni se pueden mover — solo se puede
+  // expandir/colapsar su contenido, igual que en desktop donde viven
+  // siempre en su posición fija (ep-zona-fija), nunca en un menú
+  // aparte ni mezcladas con los bloques reordenables.
+  const [zonasAbiertas, setZonasAbiertas] = useState({})
+  function toggleZona(key) { setZonasAbiertas(p => ({ ...p, [key]: !p[key] })) }
+
+  function abrirEditBlock(instanceId) {
+    setSelectedId(instanceId)
+    setScreen('editBlock')
+  }
+  function cerrarEditBlock() {
+    setSelectedId(null)
+    setScreen('canvas')
+  }
+  function seleccionarHeaderDesdeLibreria(headerBloque) {
+    // Mismo efecto que onDropZona en desktop cuando se suelta un header
+    // sobre la banda: reemplaza bandaHeader y resetea el orden de redes
+    // (se recalculan solas al detectar las redes del header nuevo).
+    props.setBandaHeader(headerBloque)
+    props.setRedesOrden(null)
+    setScreen('canvas')
+  }
+  function agregarBloqueDesdeLibreria(bloque) {
+    agregarAlCanvas(bloque)
+    setSelectedId(null) // agregar no abre edición automática, igual que soltar en desktop
+    setScreen('canvas')
+  }
+  // Importar: cierra el análisis en curso (si lo hubiera) y navega al
+  // canvas. La confirmación real (aplicar el resultado al estado del
+  // editor) la hace confirmarImportacion, compartida con desktop.
+  function volverAlCanvasImportado() {
+    cerrarModalImportar()
+    setScreen('canvas')
+  }
+  function confirmarImportacionMobile() {
+    confirmarImportacion()
+    setScreen('canvas')
+  }
+
+  function patch(setter, campo, valor) {
+    setter(p => ({ ...p, [campo]: valor }))
+  }
+
+  const bloquesFiltrados = q => (lista) => !q ? lista : lista.filter(b => b.nombre.toLowerCase().includes(q.toLowerCase()))
+  const filtro = bloquesFiltrados(busquedaLib)
+
+  return (
+    <div className="ep-m-root">
+
+      {/* ═══════════ Pantalla: CANVAS ═══════════ */}
+      <div className="ep-m-topbar">
+        <div className="ep-m-topbar-title">
+          {editandoNombreM ? (
+            <input
+              ref={inputNombreMRef}
+              className="ep-m-nombre-input"
+              autoComplete="off"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
+              onBlur={() => { if (!nombre.trim()) setNombre('Nueva pieza'); setEditandoNombreM(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') { if (!nombre.trim()) setNombre('Nueva pieza'); setEditandoNombreM(false) } }}
+            />
+          ) : (
+            <button className="ep-m-nombre-btn" onClick={() => setEditandoNombreM(true)} title="Editar nombre">
+              <span className="ep-m-nombre">{nombre}</span>
+              <Pencil size={11} />
+            </button>
+          )}
+          <MenuDesplegable alinear="izquierda" popoverClassName="ep-menu-popover-tema" trigger={(toggle) => (
+            <button className="ep-tema-selector ep-m-tema-selector" onClick={toggle}>
+              <span className="ep-tema-selector-label">Tema</span>
+              <span className="ep-tema-selector-swatch" style={{ background: TEMAS[tema].colorSwatch }} />
+              <span className="ep-tema-selector-nombre">{TEMAS[tema].label}</span>
+              <ChevronDown size={11} />
+            </button>
+          )}>
+            {(cerrar) => (
+              <>
+                <div className="ep-menu-titulo">Tema visual</div>
+                {Object.entries(TEMAS).map(([key, t]) => (
+                  <button key={key} className="ep-menu-item" onClick={() => { setTema(key); cerrar() }}>
+                    <span className="ep-tema-selector-swatch" style={{ background: t.colorSwatch }} />
+                    <span style={{ flex: 1 }}>{t.label}</span>
+                    {tema === key && <Check size={14} className="ep-tema-check" />}
+                  </button>
+                ))}
+              </>
+            )}
+          </MenuDesplegable>
+        </div>
+        <div className="ep-m-topbar-actions">
+          <button className="ep-m-icon-btn" onClick={() => setShowPreview(true)}><Eye size={18} /></button>
+          <button className="ep-m-icon-btn" onClick={() => setScreen('menu')}>⋯</button>
+        </div>
+      </div>
+
+      <div className="ep-m-canvas-toolbar">
+        <span className="ep-m-canvas-count">{canvas.length} bloque{canvas.length === 1 ? '' : 's'}</span>
+        <button
+          className={`ep-m-reorder-toggle ${reorderMode ? 'activo' : ''}`}
+          onClick={() => setReorderMode(v => !v)}
+        >
+          {reorderMode ? 'Listo' : 'Reordenar'}
+        </button>
+      </div>
+
+      <div className="ep-m-canvas-scroll">
+        {bandaHeader && (
+          <div className="ep-m-card ep-m-card-header" onClick={() => setScreen('editHeader')}>
+            <div className="ep-m-card-head">
+              <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+              <span className="ep-m-card-nombre">{bandaHeader.nombre}</span>
+            </div>
+            <AutoIframe srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="header" className="ep-m-preview-frame" />
+          </div>
+        )}
+
+        {/* ── Imagen principal — zona fija, siempre presente, no se mueve ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('imgPrincipal')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+            <span className="ep-m-card-nombre">Imagen principal</span>
+            <span className={`ep-m-estado-pill ${imgPrincipal.activo ? 'on' : ''}`}>{imgPrincipal.activo ? 'Incluida' : 'No incluida'}</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.imgPrincipal ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.imgPrincipal && (
+            <div className="ep-m-zona-fija-body">
+              <div className="ep-m-toggle-row">
+                <span>Activa</span>
+                <button className={`ep-m-switch ${imgPrincipal.activo ? 'on' : ''}`} onClick={() => patch(setImgPrincipal, 'activo', !imgPrincipal.activo)}>
+                  <span className="ep-m-switch-knob" />
+                </button>
+              </div>
+              {imgPrincipal.activo && (
+                <>
+                  {imgPrincipal.src && <img src={imgPrincipal.src} alt="" className="ep-m-img-preview" />}
+                  <input className="ep-m-input" placeholder="URL de la imagen" value={imgPrincipal.src} onChange={e => patch(setImgPrincipal, 'src', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Alt" value={imgPrincipal.alt} onChange={e => patch(setImgPrincipal, 'alt', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Title" value={imgPrincipal.title} onChange={e => patch(setImgPrincipal, 'title', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Link (opcional)" value={imgPrincipal.link} onChange={e => patch(setImgPrincipal, 'link', e.target.value)} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {canvas.map((bloque, i) => (
+          <div key={bloque.instanceId} className="ep-m-card">
+            <div className="ep-m-card-head">
+              {reorderMode ? (
+                <div className="ep-m-reorder-btns">
+                  <button disabled={i === 0} onClick={() => moverBloque(bloque.instanceId, -1)}>▲</button>
+                  <button disabled={i === canvas.length - 1} onClick={() => moverBloque(bloque.instanceId, 1)}>▼</button>
+                </div>
+              ) : (
+                <GripVertical size={16} className="ep-m-grip" />
+              )}
+              <span className="ep-m-card-nombre" onClick={() => !reorderMode && abrirEditBlock(bloque.instanceId)}>
+                {bloque.nombre}
+                {bloque.slug === 'Espaciador' && (() => {
+                  const altMatch = (bloque.htmlEditado ?? bloque.html).match(/height:\s*(\d+)px/)
+                  return <span className="ep-m-card-nombre-alto">{altMatch ? altMatch[1] : 14}px</span>
+                })()}
+              </span>
+              <span className="ep-m-badge-cat">{bloque.categoria === 'Personalizado' ? 'Código' : bloque.categoria}</span>
+              {!reorderMode && (
+                <div className="ep-m-card-actions">
+                  <button onClick={() => agregarEspaciadorDespues(bloque.instanceId)} title="Agregar espaciador"><Plus size={15} /></button>
+                  <button onClick={() => eliminarBloque(bloque.instanceId)} title="Eliminar"><Trash2 size={15} /></button>
+                </div>
+              )}
+            </div>
+            {/* bloque.tipo nunca vale 'espaciador' — ese campo no existe
+                en el catálogo (BLOQUES) ni en los bloques reconstruidos
+                por import, solo se usa 'tipo: codigo' para código
+                personalizado. La condición anterior por tipo era un
+                no-op: nunca ocultaba nada, así que el espaciador
+                siempre terminaba mostrando su preview (con el piso de
+                40px que aplica AutoIframe cuando mide una altura muy
+                chica) en vez de solo el título de la tarjeta. Se
+                identifica por slug, igual que ya hace PanelEditor
+                (esEspaciador = bloque.slug === 'Espaciador') más
+                arriba en este archivo. */}
+            {bloque.slug !== 'Espaciador' && (
+              <div
+                className={`ep-m-preview-tapzone${reorderMode ? '' : ' ep-m-preview-tapzone-clickeable'}`}
+                onClick={() => !reorderMode && abrirEditBlock(bloque.instanceId)}
+              >
+                <AutoIframe
+                  srcDoc={wrapPreview(bloque.htmlEditado ?? bloque.html, false)}
+                  title={bloque.nombre}
+                  className="ep-m-preview-frame"
+                />
+              </div>
+            )}
+          </div>
+        ))}
+
+        {canvas.length === 0 && (
+          <div className="ep-m-empty">Todavía no agregaste ningún bloque. Tocá el botón + para empezar.</div>
+        )}
+
+        {/* ── Imagen de footer — zona fija ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('imgFooter')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+            <span className="ep-m-card-nombre">Imagen de footer</span>
+            <span className={`ep-m-estado-pill ${imgFooter.activo ? 'on' : ''}`}>{imgFooter.activo ? 'Incluida' : 'No incluida'}</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.imgFooter ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.imgFooter && (
+            <div className="ep-m-zona-fija-body">
+              <div className="ep-m-toggle-row">
+                <span>Activa</span>
+                <button className={`ep-m-switch ${imgFooter.activo ? 'on' : ''}`} onClick={() => patch(setImgFooter, 'activo', !imgFooter.activo)}>
+                  <span className="ep-m-switch-knob" />
+                </button>
+              </div>
+              {imgFooter.activo && (
+                <>
+                  {imgFooter.src && <img src={imgFooter.src} alt="" className="ep-m-img-preview" />}
+                  <input className="ep-m-input" placeholder="URL de la imagen" value={imgFooter.src} onChange={e => patch(setImgFooter, 'src', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Alt" value={imgFooter.alt} onChange={e => patch(setImgFooter, 'alt', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Title" value={imgFooter.title} onChange={e => patch(setImgFooter, 'title', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Link (opcional)" value={imgFooter.link} onChange={e => patch(setImgFooter, 'link', e.target.value)} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Legales adicionales — zona fija ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('legales')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+            <span className="ep-m-card-nombre">Legales adicionales</span>
+            <span className={`ep-m-estado-pill ${legalesAdicionales.length ? 'on' : ''}`}>{legalesAdicionales.length || 'Ninguno'}</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.legales ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.legales && (
+            <div className="ep-m-zona-fija-body">
+              <div className="ep-m-toggle-row">
+                <div>
+                  <div>Separar cada legal en su propia sección</div>
+                  <div className="ep-m-muted-sm">Por defecto van como texto corrido</div>
+                </div>
+                <button className={`ep-m-switch ${legalesSeparados ? 'on' : ''}`} onClick={() => setLegalesSeparados(v => !v)}>
+                  <span className="ep-m-switch-knob" />
+                </button>
+              </div>
+              {legalesAdicionales.map((l, i) => (
+                <div key={l.id} className="ep-m-legal-item">
+                  <div className="ep-m-legal-item-head">
+                    <span>Legal {i + 1}</span>
+                    <button onClick={() => eliminarLegalAdicional(l.id)}><Trash2 size={15} /></button>
+                  </div>
+                  <RichEditor value={l.texto} onChange={txt => actualizarLegalAdicional(l.id, txt)} />
+                </div>
+              ))}
+              <button className="ep-m-btn-agregar" onClick={agregarLegalAdicional}><Plus size={16} /> Agregar legal</button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Legal genérico — zona fija, siempre presente, de solo lectura.
+             Va acá (después de Legales adicionales, antes de FCI) porque
+             así es el orden real en desktop y en el HTML exportado — el
+             legal genérico es, de hecho, la última fila del bloque de
+             legales adicionales en el export (ver generarExport). ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('legalGenerico')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Siempre presente</span>
+            <span className="ep-m-card-nombre">Legal genérico</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.legalGenerico ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.legalGenerico && (
+            <div className="ep-m-zona-fija-body">
+              <div className="ep-m-legal-locked">
+                <Lock size={17} />
+                <div>
+                  <div className="ep-m-legal-locked-tag">Solo lectura — no editable desde el editor</div>
+                  <div className="ep-m-legal-locked-text" dangerouslySetInnerHTML={{ __html: legalFijoHtml }} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Firma institucional (FCI) — zona fija ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('fci')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+            <span className="ep-m-card-nombre">Firma institucional (FCI)</span>
+            <span className={`ep-m-estado-pill ${firmaInstitucional ? 'on' : ''}`}>{firmaInstitucional ? 'Activa' : 'Inactiva'}</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.fci ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.fci && (
+            <div className="ep-m-zona-fija-body">
+              <div className="ep-m-toggle-row">
+                <span>Sección activa</span>
+                <button className={`ep-m-switch ${firmaInstitucional ? 'on' : ''}`} onClick={toggleFirmaInstitucional}>
+                  <span className="ep-m-switch-knob" />
+                </button>
+              </div>
+              {firmaInstitucional && (
+                <div className="ep-m-fci-grid">
+                  <input className="ep-m-input" placeholder="Fila 1 · Izquierda" value={firmaInstitucional.fila1Izq} onChange={e => actualizarFirmaInstitucional('fila1Izq', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Fila 1 · Derecha" value={firmaInstitucional.fila1Der} onChange={e => actualizarFirmaInstitucional('fila1Der', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Fila 2 · Izquierda" value={firmaInstitucional.fila2Izq} onChange={e => actualizarFirmaInstitucional('fila2Izq', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Fila 2 · Derecha" value={firmaInstitucional.fila2Der} onChange={e => actualizarFirmaInstitucional('fila2Der', e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Indicadores financieros — zona fija ── */}
+        <div className="ep-m-card ep-m-zona-fija">
+          <button className="ep-m-card-head ep-m-zona-fija-head" onClick={() => toggleZona('indicadores')}>
+            <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
+            <span className="ep-m-card-nombre">Indicadores financieros</span>
+            <span className={`ep-m-estado-pill ${indicadores.length ? 'on' : ''}`}>{indicadores.length || 'Ninguno'}</span>
+            <ChevronDown size={16} style={{ transform: zonasAbiertas.indicadores ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {zonasAbiertas.indicadores && (
+            <div className="ep-m-zona-fija-body">
+              {indicadores.map(ind => (
+                <div key={ind.id} className="ep-m-indicador-row">
+                  <input className="ep-m-input ep-m-input-ref" placeholder="(*)" value={ind.ref} onChange={e => actualizarIndicador(ind.id, 'ref', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Sigla" value={ind.sigla} onChange={e => actualizarIndicador(ind.id, 'sigla', e.target.value)} />
+                  <input className="ep-m-input" placeholder="Valor" value={ind.valor} onChange={e => actualizarIndicador(ind.id, 'valor', e.target.value)} />
+                  <button onClick={() => eliminarIndicador(ind.id)}><Trash2 size={15} /></button>
+                </div>
+              ))}
+              <button className="ep-m-btn-agregar" onClick={agregarIndicador}><Plus size={16} /> Agregar indicador</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!reorderMode && (
+        <button className="ep-m-fab" onClick={() => setScreen('library')}>
+          <Plus size={24} />
+        </button>
+      )}
+
+      {/* ═══════════ Bottom-sheet: AGREGAR BLOQUE ═══════════ */}
+      {screen === 'library' && (
+        <div className="ep-m-sheet-overlay" onClick={() => setScreen('canvas')}>
+          <div className="ep-m-sheet" onClick={e => e.stopPropagation()}>
+            <div className="ep-m-sheet-handle" />
+            <div className="ep-m-sheet-header">
+              <span>Agregar bloque</span>
+              <button onClick={() => setScreen('canvas')}><X size={18} /></button>
+            </div>
+            <input
+              className="ep-m-search"
+              placeholder="Buscar bloque…"
+              value={busquedaLib}
+              onChange={e => setBusquedaLib(e.target.value)}
+            />
+            {/* Espaciador — fila fija siempre visible, nunca un tile del
+                grid con thumbnail vacío (el bloque no tiene nada visual
+                que mostrar en miniatura, mostrarlo "abierto" ahí solo
+                ocupa lugar sin aportar nada). Mismo criterio que
+                .ep-spacer-row de escritorio: queda a mano con sus 3
+                anchos fijos, y en vez de excluirlo del catálogo entero
+                simplemente no participa del grid con miniatura. */}
+            {BLOQUE_ESPACIADOR && (
+              <div className="ep-m-spacer-row">
+                <span className="ep-m-spacer-row-label">Espaciador</span>
+                <div className="ep-m-spacer-row-opciones">
+                  {[7, 14, 28].map(px => (
+                    <button
+                      key={px}
+                      className="ep-m-spacer-chip"
+                      onClick={() => { agregarAlCanvas(BLOQUE_ESPACIADOR, null, 'abajo', htmlEspaciadorConAlto(px)); setSelectedId(null); setScreen('canvas') }}
+                    >
+                      {px}px
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="ep-m-sheet-body">
+              {[
+                { key: 'Header', label: 'Header', lista: BLOQUES_HEADER, esHeader: true },
+                { key: 'Contenido', label: 'Contenido', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Contenido' && b.slug !== 'Espaciador') },
+                { key: 'Botones', label: 'Botones', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Botones') },
+              ].map(cat => (
+                <div key={cat.key} className="ep-m-categoria">
+                  <button className="ep-m-categoria-header" onClick={() => setCatAbierta(p => ({ ...p, [cat.key]: !p[cat.key] }))}>
+                    <span>{cat.label}</span>
+                    <ChevronDown size={16} style={{ transform: catAbierta[cat.key] ? 'rotate(180deg)' : 'none' }} />
+                  </button>
+                  {catAbierta[cat.key] && (
+                    <div className="ep-m-grid">
+                      {filtro(cat.lista).map(b => (
+                        <button
+                          key={b.id}
+                          className="ep-m-bloque-card"
+                          onClick={() => cat.esHeader ? seleccionarHeaderDesdeLibreria(b) : agregarBloqueDesdeLibreria(b)}
+                        >
+                          <img src={generarThumbSVG(b)} alt="" className="ep-m-bloque-thumb" />
+                          <span className="ep-m-bloque-nombre">
+                            {b.nombre}
+                            {cat.esHeader && bandaHeader?.slug === b.slug && <Check size={13} className="ep-m-check" />}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button className="ep-m-bloque-codigo" onClick={() => { agregarCodigo(); setScreen('editBlock') }}>
+                <Code size={16} /> Código HTML personalizado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Bottom-sheet: EDITAR BLOQUE ═══════════ */}
+      {screen === 'editBlock' && selectedBloque && (
+        <div className="ep-m-sheet-overlay" onClick={cerrarEditBlock}>
+          <div className="ep-m-sheet ep-m-sheet-tall" onClick={e => e.stopPropagation()}>
+            <div className="ep-m-sheet-handle" />
+            <div className="ep-m-sheet-header">
+              <div className="ep-m-context-mini">
+                <img src={generarThumbSVG(selectedBloque)} alt="" />
+                <div>
+                  <div className="ep-m-card-nombre">{selectedBloque.nombre}</div>
+                  <div className="ep-m-badge-cat">{selectedBloque.categoria === 'Personalizado' ? 'Código' : selectedBloque.categoria}</div>
+                </div>
+              </div>
+              <button onClick={cerrarEditBlock}><X size={18} /></button>
+            </div>
+            <div className="ep-m-sheet-body ep-m-panel-editor-wrap">
+              <PanelEditor
+                key={`${selectedBloque.instanceId}-${selectedBloque.slug}`}
+                bloque={selectedBloque}
+                onActualizar={actualizarBloque}
+                onSwap={swapBloque}
+                onActualizarEstilos={actualizarEstilosBloque}
+              />
+            </div>
+            <div className="ep-m-sheet-footer">
+              <span className="ep-m-guardado"><Check size={12} strokeWidth={2.6} /> Guardado automáticamente</span>
+              <button className="ep-m-btn-listo" onClick={cerrarEditBlock}>Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Pantalla: EDITAR HEADER ═══════════ */}
+      {screen === 'editHeader' && bandaHeader && (
+        <div className="ep-m-screen">
+          <div className="ep-m-screen-header">
+            <button onClick={() => setScreen('canvas')}><ChevronDown size={20} style={{ transform: 'rotate(90deg)' }} /></button>
+            <span>Editar header</span>
+          </div>
+          <div className="ep-m-screen-body">
+            <AutoIframe srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="header" className="ep-m-preview-frame" />
+            <div className="ep-m-seccion-titulo">Redes sociales</div>
+            {redesDetectadas.length === 0 && <p className="ep-m-muted">Este header no tiene redes sociales.</p>}
+            {(redesOrden ?? []).map((r, idx) => {
+              const info = REDES_SOCIALES.find(rs => rs.key === r.key)
+              return (
+                <div key={r.key} className="ep-m-red-row">
+                  <span className="ep-m-red-nombre">{info?.label ?? r.key}</span>
+                  <div className="ep-m-reorder-btns">
+                    <button disabled={idx === 0} onClick={() => reordenarPillRed(r.key, idx - 1)}>▲</button>
+                    <button disabled={idx === redesOrden.length - 1} onClick={() => reordenarPillRed(r.key, idx + 1)}>▼</button>
+                  </div>
+                  <button className={`ep-m-switch ${r.activa ? 'on' : ''}`} onClick={() => toggleRedActiva(r.key)}>
+                    <span className="ep-m-switch-knob" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <div className="ep-m-sheet-footer">
+            <span className="ep-m-guardado"><Check size={12} strokeWidth={2.6} /> Guardado automáticamente</span>
+            <button className="ep-m-btn-listo" onClick={() => setScreen('canvas')}>Listo</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Bottom-sheet: MENÚ ═══════════ */}
+      {screen === 'menu' && (
+        <div className="ep-m-sheet-overlay" onClick={() => setScreen('canvas')}>
+          <div className="ep-m-sheet" onClick={e => e.stopPropagation()}>
+            <div className="ep-m-sheet-handle" />
+            <button className="ep-m-menu-item" onClick={() => { setShowPreview(true); setScreen('canvas') }}><Eye size={17} /> Vista previa</button>
+            <button className="ep-m-menu-item" onClick={() => { copiar(); }}>
+              {copiado ? <ClipboardCheck size={17} /> : <Copy size={17} />} {copiado ? '¡Copiado!' : 'Copiar HTML'}
+            </button>
+            <button className="ep-m-menu-item" onClick={exportar}><Download size={17} /> Descargar HTML</button>
+            <button className="ep-m-menu-item" onClick={() => setScreen('import')}><FileText size={17} /> Importar pieza</button>
+            <button className="ep-m-menu-item ep-m-menu-item-danger" onClick={() => { setScreen('canvas'); setShowConfirmReinicioM(true) }}><RotateCcw size={17} /> Reiniciar pieza</button>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        open={showConfirmReinicioM}
+        variant="warning"
+        title="¿Reiniciar la pieza?"
+        message="Se van a eliminar todos los bloques, imágenes, legales e indicadores que cargaste. El borrador guardado también se va a borrar. Esta acción no se puede deshacer."
+        confirmLabel="Sí, reiniciar"
+        cancelLabel="Cancelar"
+        onConfirm={() => { nuevaPieza(); setShowConfirmReinicioM(false) }}
+        onCancel={() => setShowConfirmReinicioM(false)}
+      />
+
+      {/* ═══════════ Pantalla: VISTA PREVIA ═══════════ */}
+      {showPreview && (
+        <div className="ep-m-preview-full">
+          <div className="ep-m-preview-topbar">
+            <button onClick={() => setShowPreview(false)}><X size={20} /></button>
+            <div className="ep-m-preview-switch">
+              <button className={previewModo === 'desktop' ? 'activo' : ''} onClick={() => setPreviewModo('desktop')}>Desktop</button>
+              <button className={previewModo === 'mobile' ? 'activo' : ''} onClick={() => setPreviewModo('mobile')}>Mobile</button>
+            </div>
+          </div>
+          <div className={`ep-m-preview-frame-wrap ${previewModo}`}>
+            <iframe title="preview" srcDoc={previewSrcdoc} className="ep-m-preview-iframe" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ Pantalla: IMPORTAR ═══════════
+          Mismo motor que desktop (analizarImportacion/confirmarImportacion,
+          pasados por props): detecta bloques por marcadores del propio
+          editor o, si no los encuentra, por heurística, y reconstruye
+          cada sección del canvas — nada de volcar todo el HTML en un
+          único bloque de código. */}
+      {screen === 'import' && (
+        <div className="ep-m-screen">
+          <div className="ep-m-screen-header">
+            <button onClick={volverAlCanvasImportado}><ChevronDown size={20} style={{ transform: 'rotate(90deg)' }} /></button>
+            <span>Importar pieza</span>
+          </div>
+          <div className="ep-m-screen-body">
+
+            {/* Paso 1: entrada — tabs HTML/URL */}
+            {!importarResultado && !importarCargando && (
+              <>
+                <div className="ep-m-import-tabs">
+                  <button className={importarModo === 'html' ? 'activo' : ''} onClick={() => { setImportarModo('html'); setImportarError('') }}>HTML</button>
+                  <button className={importarModo === 'url' ? 'activo' : ''} onClick={() => { setImportarModo('url'); setImportarError('') }}>URL</button>
+                </div>
+
+                {importarModo === 'html' ? (
+                  <textarea
+                    className="ep-m-textarea"
+                    autoComplete="off"
+                    placeholder="Pegá acá el HTML completo de la pieza…"
+                    value={importarHtmlInput}
+                    onChange={e => setImportarHtmlInput(e.target.value)}
+                  />
+                ) : (
+                  <input
+                    className="ep-m-input"
+                    autoComplete="off"
+                    placeholder="https://icbc-info.icommarketing.com/…"
+                    value={importarUrlInput}
+                    onChange={e => setImportarUrlInput(e.target.value)}
+                  />
+                )}
+
+                {importarError && <div className="ep-m-import-error">{importarError}</div>}
+
+                <button className="ep-m-btn-primary" onClick={analizarImportacion}>Analizar</button>
+              </>
+            )}
+
+            {/* Paso 2: analizando */}
+            {importarCargando && !importarResultado && (
+              <div className="ep-m-import-processing">
+                <div className="ep-m-import-processing-top">
+                  <span>Analizando la pieza…</span>
+                  <span>{Math.round(importarProgreso)}%</span>
+                </div>
+                <div className="ep-m-import-progress-track"><div className="ep-m-import-progress-fill" style={{ width: `${importarProgreso}%` }} /></div>
+                <p className="ep-m-muted-sm">
+                  {importarEtapa === 'marcadores'
+                    ? 'Buscando marcadores de bloque del editor…'
+                    : 'No se encontraron marcadores — analizando la estructura por heurística…'}
+                </p>
+              </div>
+            )}
+
+            {/* Paso 3: resumen del resultado ya analizado */}
+            {importarResultado && (
+              !importarResultado.resultado ? (
+                <div className="ep-m-import-error">
+                  <AlertCircle size={15} />
+                  <span>{importarResultado.avisos?.[0]?.texto || 'No se pudo reconocer la estructura de esta pieza.'}</span>
+                </div>
+              ) : (
+                <>
+                  <div className={`ep-m-import-badge ep-m-import-confianza-${importarResultado.confianza}`}>
+                    {importarResultado.viaMarcadores || importarResultado.confianza === 'alta' ? <Check size={16} /> : <AlertCircle size={16} />}
+                    <div>
+                      <div className="ep-m-import-badge-titulo">
+                        {importarResultado.viaMarcadores
+                          ? 'Pieza reconocida por marcadores'
+                          : importarResultado.confianza === 'alta' ? 'Confianza alta'
+                            : importarResultado.confianza === 'media' ? 'Confianza media'
+                              : 'Confianza baja'}
+                      </div>
+                      <div className="ep-m-import-badge-sub">
+                        {importarResultado.viaMarcadores
+                          ? 'Exportada por este mismo editor'
+                          : importarResultado.confianza === 'alta' ? 'Reconstruida por heurística, alta certeza'
+                            : importarResultado.confianza === 'media' ? 'Reconstruida por heurística — revisá el resultado'
+                              : 'No se pudo reconocer con seguridad'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ep-m-import-metricas">
+                    <div className="ep-m-import-metrica">
+                      <span>{importarResultado.resultado.canvas.length}</span>
+                      <span>Bloques</span>
+                    </div>
+                    <div className="ep-m-import-metrica">
+                      <span>{importarResultado.avisos?.length ?? 0}</span>
+                      <span>Avisos</span>
+                    </div>
+                    <div className="ep-m-import-metrica">
+                      <span>{TEMAS[importarResultado.resultado.tema]?.label ?? 'ICBC'}</span>
+                      <span>Tema</span>
+                    </div>
+                  </div>
+
+                  {importarResultado.avisos?.length > 0 && (
+                    <>
+                      <div className="ep-m-seccion-titulo">Avisos del análisis</div>
+                      <div className="ep-m-import-avisos">
+                        {importarResultado.avisos.map((a, i) => {
+                          const { titulo, detalle } = tituloYDetalleDeAviso(a)
+                          const { Icono, color } = AVISO_ICONO_POR_TIPO[a.tipo] ?? AVISO_ICONO_POR_TIPO.general
+                          return (
+                            <div key={i} className="ep-m-import-aviso">
+                              <span className="ep-m-import-aviso-icono" style={color ? { background: color, color: '#fff' } : undefined}>
+                                <Icono size={14} />
+                              </span>
+                              <div>
+                                <div className="ep-m-import-aviso-titulo">{titulo}</div>
+                                {detalle && <div className="ep-m-muted-sm">{detalle}</div>}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Preview del resultado — mismo srcDoc que desktop,
+                      con el redesOrden real que se aplicaría al confirmar. */}
+                  <div className="ep-m-import-preview-wrap">
+                    <AutoIframe
+                      title="Preview de la pieza importada"
+                      className="ep-m-preview-frame"
+                      srcDoc={`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`}
+                    />
+                  </div>
+                </>
+              )
+            )}
+
+            {importarResultado && (
+              <div className="ep-m-import-footer">
+                <button className="ep-m-btn-ghost" onClick={() => setImportarResultado(null)}>Volver</button>
+                <button
+                  className={importarResultado.confianza === 'baja' || !importarResultado.resultado ? 'ep-m-btn-ghost' : 'ep-m-btn-primary'}
+                  onClick={confirmarImportacionMobile}
+                  disabled={!importarResultado.resultado}
+                >
+                  {importarResultado.confianza === 'baja' ? 'Cargar igual (no recomendado)' : 'Cargar en el editor'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
