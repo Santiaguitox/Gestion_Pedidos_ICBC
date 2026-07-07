@@ -5052,6 +5052,22 @@ select:focus {
    @media nuevo en otra parte del archivo).
    ════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 640px) {
+  /* h-screen de Tailwind = 100vh. En mobile, 100vh históricamente mide
+     el alto "sin la barra del navegador", no el espacio visible real
+     mientras esa barra está mostrada — el documento queda más alto de
+     lo que entra en pantalla, eso genera un scroll fantasma a nivel
+     de toda la app, y ESE scroll fantasma es lo que Chrome interpreta
+     como gesto para esconder su propia barra (y cuesta que vuelva a
+     aparecer). dvh sí se recalcula en vivo según el espacio visible
+     real, con o sin la barra puesta. Acotado a mobile porque en
+     desktop no existe esa barra dinámica, h-screen ya anda bien ahí.
+     Fallback: si el navegador no soporta dvh, se queda con el
+     h-screen (100vh) de Tailwind ya aplicado arriba — no hay pantalla
+     en blanco ni layout roto en navegadores viejos. */
+  .app-shell {
+    height: 100dvh;
+  }
+
   .page-header {
     flex-wrap: wrap;
   }

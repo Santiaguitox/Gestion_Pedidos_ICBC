@@ -233,7 +233,7 @@ export default function AppLayout() {
   // forma real de navegar sin pasar por esos clicks.
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="app-shell flex h-screen overflow-hidden">
 
       {/* Sidebar desktop */}
       <aside
