@@ -26,7 +26,11 @@ self.addEventListener('push', (event) => {
   const opciones = {
     body: payload.body || '',
     icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    // Badge dedicado: Android lo tiñe de blanco usando solo el canal
+    // alfa, así que necesita ser el glifo del abanico con las aspas
+    // separadas por transparencia (icon-192 entero se veía como una
+    // mancha blanca — las aspas se tocan y la silueta las fusiona).
+    badge: '/badge-96.png',
     data: { url: payload.url || '/notificaciones' },
   }
   if (payload.tag) {
