@@ -5018,6 +5018,29 @@ select:focus {
   color: var(--icbc-red);
 }
 
+/* Lista de día/horario con repeticiones (envío único o dentro de un
+   grupo) — cada fila es una repetición: mismos datos, otro día/hora. */
+.sheet-horarios-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sheet-horario-fila {
+  align-items: flex-start;
+}
+.sheet-horario-hora-row {
+  flex: 1;
+}
+.sheet-horario-hora-input {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.sheet-horario-hora-input input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ─── Calendario — label sección finalizados ──────────────────────────────── */
 .cal-section-label {
   font-size: 0.6875rem;
