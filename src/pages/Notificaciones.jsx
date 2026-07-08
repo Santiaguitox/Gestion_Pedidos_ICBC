@@ -2,11 +2,12 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificaciones } from '@/context/NotificacionesContext'
+import { agruparNotificaciones } from '@/lib/notificaciones'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   Bell, CheckCheck, Trash2, MailOpen, Mail, ExternalLink,
-  ChevronLeft, ChevronRight, MoreHorizontal, X,
+  ChevronLeft, ChevronRight, ChevronDown, MoreHorizontal, X,
 } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -33,15 +34,15 @@ function bucketDe(createdAt, ahora) {
 }
 const ORDEN_GRUPOS = ['Hoy', 'Ayer', 'Esta semana', 'Anteriores']
 
-// Agrupa una lista ya paginada en los 4 baldes de arriba, preservando
-// el orden relativo dentro de cada balde y devolviendo solo los baldes
-// que tienen al menos un ítem (mismo criterio que el rediseño: si no
-// hay nada "Hoy", ese header de grupo no se muestra).
-function agruparPorFecha(items, ahora) {
+// Agrupa una lista de ENTRADAS ya paginada en los 4 baldes de arriba
+// (por la fecha de su evento más reciente), preservando el orden
+// relativo dentro de cada balde y devolviendo solo los baldes que
+// tienen al menos un ítem.
+function agruparPorFecha(entradas, ahora) {
   const mapa = {}
-  items.forEach(n => {
-    const b = bucketDe(n.created_at, ahora)
-    ;(mapa[b] = mapa[b] || []).push(n)
+  entradas.forEach(e => {
+    const b = bucketDe(e.principal.created_at, ahora)
+    ;(mapa[b] = mapa[b] || []).push(e)
   })
   return ORDEN_GRUPOS.filter(b => mapa[b]).map(b => ({ label: b, items: mapa[b] }))
 }
@@ -51,8 +52,9 @@ export default function Notificaciones() {
 
   const navigate = useNavigate()
   const {
-    notificaciones,
+    notificaciones, unreadCount,
     marcarLeida, marcarNoLeida,
+    marcarVariasLeidas, marcarVariasNoLeidas,
     marcarTodasLeidas, marcarTodasNoLeidas,
     eliminar, eliminarVarias, eliminarTodas,
   } = useNotificaciones()
@@ -62,6 +64,8 @@ export default function Notificaciones() {
   const [pagina, setPagina] = useState(0)
   const [pageSize, setPageSize] = useLocalStorage('notif:pageSize', 10)
   const [confirmEliminarTodas, setConfirmEliminarTodas] = useState(false)
+  // grupo_keys de las entradas agrupadas actualmente expandidas
+  const [expandidos, setExpandidos] = useState(new Set())
   // Menú "⋮" del header (marcar todas no leídas / eliminar todas) y el
   // de cada ítem individual — uno solo abierto a la vez, igual patrón
   // que ya usa EstadoPopover.jsx: un ref que apunta al menú actualmente
@@ -81,42 +85,64 @@ export default function Notificaciones() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const noLeidas = notificaciones.filter(n => !n.leida).length
+  // unreadCount cuenta GRUPOS pendientes (misma semántica que el badge
+  // de la campanita); haLeidas sigue siendo sobre filas reales.
+  const noLeidas = unreadCount
   const haLeidas = notificaciones.some(n => n.leida)
 
-  const lista = notificaciones.filter(n => {
+  const filtradas = notificaciones.filter(n => {
     if (filtro === 'nuevas') return !n.leida
     if (filtro === 'leidas') return n.leida
     return true
   })
 
-  const totalPaginas = Math.max(1, Math.ceil(lista.length / pageSize))
+  // Colapso por grupo_key: las no leídas de un mismo pedido y tipo se
+  // muestran como UNA entrada (con su ráfaga expandible); las leídas
+  // quedan individuales como historial. Ver src/lib/notificaciones.js.
+  const entradas = agruparNotificaciones(filtradas)
+
+  const totalPaginas = Math.max(1, Math.ceil(entradas.length / pageSize))
   const paginaActual = Math.min(pagina, totalPaginas - 1)
-  const listaVisible = lista.slice(paginaActual * pageSize, (paginaActual + 1) * pageSize)
+  const entradasVisibles = entradas.slice(paginaActual * pageSize, (paginaActual + 1) * pageSize)
   const haySeleccion = seleccionadas.size > 0
-  const todasSeleccionadas = seleccionadas.size === listaVisible.length && listaVisible.length > 0
+
+  const entradaSeleccionada = e => e.items.every(i => seleccionadas.has(i.id))
+  const todasSeleccionadas = entradasVisibles.length > 0 && entradasVisibles.every(entradaSeleccionada)
 
   // Agrupación por fecha — sobre la página actual, mismo criterio que
-  // el rediseño original (no sobre el total filtrado): es más barato y
-  // en la práctica, al estar ordenado por fecha descendente, un mismo
-  // grupo no debería partirse entre dos páginas salvo casos de borde
-  // con pocos ítems por página.
-  const grupos = agruparPorFecha(listaVisible, new Date())
+  // el rediseño original (no sobre el total filtrado).
+  const gruposFecha = agruparPorFecha(entradasVisibles, new Date())
 
   const selItems = notificaciones.filter(n => seleccionadas.has(n.id))
   const selTodasLeidas = selItems.length > 0 && selItems.every(n => n.leida)
   const selTodasNoLeidas = selItems.length > 0 && selItems.every(n => !n.leida)
 
-  function toggleSeleccion(id) {
+  function toggleSeleccion(entrada) {
     setSeleccionadas(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (entradaSeleccionada(entrada)) {
+        entrada.items.forEach(i => next.delete(i.id))
+      } else {
+        entrada.items.forEach(i => next.add(i.id))
+      }
       return next
     })
   }
 
   function toggleTodas() {
-    setSeleccionadas(todasSeleccionadas ? new Set() : new Set(listaVisible.map(n => n.id)))
+    if (todasSeleccionadas) {
+      setSeleccionadas(new Set())
+    } else {
+      setSeleccionadas(new Set(entradasVisibles.flatMap(e => e.items.map(i => i.id))))
+    }
+  }
+
+  function toggleExpandido(grupoKey) {
+    setExpandidos(prev => {
+      const next = new Set(prev)
+      next.has(grupoKey) ? next.delete(grupoKey) : next.add(grupoKey)
+      return next
+    })
   }
 
   async function handleEliminarSeleccionadas() {
@@ -125,18 +151,12 @@ export default function Notificaciones() {
   }
 
   async function handleMarcarSeleccionadasLeidas() {
-    for (const id of seleccionadas) {
-      const n = notificaciones.find(x => x.id === id)
-      if (n && !n.leida) await marcarLeida(id)
-    }
+    await marcarVariasLeidas(selItems.filter(n => !n.leida).map(n => n.id))
     setSeleccionadas(new Set())
   }
 
   async function handleMarcarSeleccionadasNoLeidas() {
-    for (const id of seleccionadas) {
-      const n = notificaciones.find(x => x.id === id)
-      if (n && n.leida) await marcarNoLeida(id)
-    }
+    await marcarVariasNoLeidas(selItems.filter(n => n.leida).map(n => n.id))
     setSeleccionadas(new Set())
   }
 
@@ -148,9 +168,10 @@ export default function Notificaciones() {
     setPageSize(n); setPagina(0); setSeleccionadas(new Set())
   }
 
-  function handleClick(n) {
-    if (!n.leida) marcarLeida(n.id)
-    if (n.pedido_id) navigate(`/pedidos/${n.pedido_id}`, { state: { from: '/notificaciones' } })
+  function handleClick(entrada) {
+    const sinLeer = entrada.items.filter(i => !i.leida).map(i => i.id)
+    if (sinLeer.length) marcarVariasLeidas(sinLeer)
+    if (entrada.pedido_id) navigate(`/pedidos/${entrada.pedido_id}`, { state: { from: '/notificaciones' } })
   }
 
   return (
@@ -165,12 +186,9 @@ export default function Notificaciones() {
         </div>
       </div>
 
-      {/* Tabs + acciones — reemplaza al panel "Filtros y acciones"
-          colapsable: los 3 filtros ahora son pestañas siempre visibles
-          (no hay nada que esconder ahí), y las acciones masivas viven
-          en un botón de acceso directo ("Marcar todas como leídas",
-          solo si hay alguna sin leer) + un menú "⋮" para las acciones
-          menos frecuentes (marcar todas no leídas, eliminar todas). */}
+      {/* Tabs + acciones — los 3 filtros como pestañas siempre visibles,
+          acciones masivas en un acceso directo ("Marcar todas como
+          leídas") + menú "⋮" para las menos frecuentes. */}
       <div className="notif-toolbar">
         <div className="notif-tabs">
           {TABS.map(t => (
@@ -214,7 +232,7 @@ export default function Notificaciones() {
       </div>
 
       {/* Empty */}
-      {lista.length === 0 && (
+      {entradas.length === 0 && (
         <div className="notif-empty">
           <Bell size={40} />
           <p className="notif-empty-title">
@@ -229,13 +247,13 @@ export default function Notificaciones() {
       )}
 
       {/* Toolbar + Lista */}
-      {lista.length > 0 && (
+      {entradas.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
 
           {/* Toolbar */}
           <div className="notif-meta-row">
             <span className="text-muted-sm">
-              Mostrando {paginaActual * pageSize + 1}–{Math.min((paginaActual + 1) * pageSize, lista.length)} de {lista.length}
+              Mostrando {paginaActual * pageSize + 1}–{Math.min((paginaActual + 1) * pageSize, entradas.length)} de {entradas.length}
             </span>
             <label className="notif-pagesize-label">
               Por página
@@ -280,75 +298,113 @@ export default function Notificaciones() {
                   <input type="checkbox" checked={false} onChange={toggleTodas} />
                   <span className="text-muted-sm">Seleccionar todo</span>
                 </label>
-                <span className="text-muted-sm">{lista.length} notificacion{lista.length !== 1 ? 'es' : ''}</span>
+                <span className="text-muted-sm">
+                  {filtradas.length} notificacion{filtradas.length !== 1 ? 'es' : ''}
+                  {entradas.length !== filtradas.length ? ` en ${entradas.length} grupos` : ''}
+                </span>
               </div>
             )}
 
             {/* Items — agrupados por antigüedad (Hoy/Ayer/Esta semana/
-                Anteriores), un header de sección antes de cada grupo
-                que tenga al menos un ítem. */}
-            {grupos.map(grupo => (
+                Anteriores). Cada ítem es una ENTRADA: una notificación
+                individual, o una ráfaga colapsada del mismo grupo_key
+                (chip ×N + expandible). */}
+            {gruposFecha.map(grupo => (
               <div key={grupo.label}>
                 <div className="notif-group-label">{grupo.label}</div>
-                {grupo.items.map(n => (
-                  <div key={n.id} className="notif-item-v2" style={{ background: seleccionadas.has(n.id) ? 'rgba(208,17,27,0.04)' : undefined }}>
+                {grupo.items.map(entrada => {
+                  const n = entrada.principal
+                  const agrupada = entrada.count > 1
+                  const expandida = expandidos.has(entrada.grupoKey)
+                  const sel = entradaSeleccionada(entrada)
+                  return (
+                    <div key={entrada.id} className="notif-item-v2" style={{ background: sel ? 'rgba(208,17,27,0.04)' : undefined }}>
 
-                    <input type="checkbox"
-                      className={`notif-checkbox ${seleccionadas.has(n.id) ? 'notif-checkbox-visible' : ''}`}
-                      checked={seleccionadas.has(n.id)}
-                      onChange={e => { e.stopPropagation(); toggleSeleccion(n.id) }}
-                      onClick={e => e.stopPropagation()} />
+                      <input type="checkbox"
+                        className={`notif-checkbox ${sel ? 'notif-checkbox-visible' : ''}`}
+                        checked={sel}
+                        onChange={e => { e.stopPropagation(); toggleSeleccion(entrada) }}
+                        onClick={e => e.stopPropagation()} />
 
-                    <span className={`notif-item-dot ${n.leida ? 'notif-item-dot-leida' : ''}`} />
+                      <span className={`notif-item-dot ${entrada.leida ? 'notif-item-dot-leida' : ''}`} />
 
-                    <div className="notif-item-content" onClick={() => handleClick(n)}>
-                      <p className={`notif-item-msg ${n.leida ? 'notif-item-msg-leida' : 'notif-item-msg-nueva'}`}>
-                        {n.mensaje}
-                      </p>
-                      <span className="notif-item-time">
-                        {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: es })}
-                      </span>
-                    </div>
+                      <div className="notif-item-content" onClick={() => handleClick(entrada)}>
+                        <p className={`notif-item-msg ${entrada.leida ? 'notif-item-msg-leida' : 'notif-item-msg-nueva'}`}>
+                          {n.mensaje}
+                          {agrupada && <span className="notif-chip-count">×{entrada.count}</span>}
+                        </p>
+                        <span className="notif-item-time">
+                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: es })}
+                        </span>
 
-                    {/* Un solo botón "⋮" en vez de 3 acciones siempre
-                        visibles — el menú se abre/cierra con el mismo
-                        ref callback en los N ítems + el del header: el
-                        ref solo se "enchufa" al nodo del menú que está
-                        realmente abierto en cada momento (a lo sumo
-                        uno), así un solo mousedown listener alcanza
-                        para cerrar cualquiera de todos ellos. */}
-                    <div
-                      className="notif-item-actions"
-                      ref={menuItemAbierto === n.id ? menuRef : null}
-                      style={menuItemAbierto === n.id ? { opacity: 1 } : undefined}
-                    >
-                      <button
-                        onClick={e => { e.stopPropagation(); setMenuItemAbierto(v => v === n.id ? null : n.id); setMenuHeaderOpen(false) }}
-                        className="notif-btn-icon"
-                        title="Más acciones"
+                        {agrupada && (
+                          <button
+                            className="notif-expand-btn"
+                            onClick={e => { e.stopPropagation(); toggleExpandido(entrada.grupoKey) }}
+                          >
+                            <ChevronDown size={13} style={{ transform: expandida ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
+                            {expandida ? 'Ocultar' : `Ver los ${entrada.count} avisos`}
+                          </button>
+                        )}
+
+                        {agrupada && expandida && (
+                          <div className="notif-subitems" onClick={e => e.stopPropagation()}>
+                            {entrada.items.map(item => (
+                              <div key={item.id} className="notif-subitem">
+                                <span className="notif-subitem-msg">{item.mensaje}</span>
+                                <span className="notif-subitem-time">
+                                  {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: es })}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Un solo botón "⋮" — mismo patrón de ref
+                          compartido que el menú del header. */}
+                      <div
+                        className="notif-item-actions"
+                        ref={menuItemAbierto === entrada.id ? menuRef : null}
+                        style={menuItemAbierto === entrada.id ? { opacity: 1 } : undefined}
                       >
-                        <MoreHorizontal size={15} />
-                      </button>
-                      {menuItemAbierto === n.id && (
-                        <div className="notif-dropdown" onClick={e => e.stopPropagation()}>
-                          {n.pedido_id && (
-                            <button onClick={() => { navigate(`/pedidos/${n.pedido_id}`, { state: { from: '/notificaciones' } }); setMenuItemAbierto(null) }}>
-                              <ExternalLink size={15} />Ir al pedido
+                        <button
+                          onClick={e => { e.stopPropagation(); setMenuItemAbierto(v => v === entrada.id ? null : entrada.id); setMenuHeaderOpen(false) }}
+                          className="notif-btn-icon"
+                          title="Más acciones"
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                        {menuItemAbierto === entrada.id && (
+                          <div className="notif-dropdown" onClick={e => e.stopPropagation()}>
+                            {entrada.pedido_id && (
+                              <button onClick={() => { navigate(`/pedidos/${entrada.pedido_id}`, { state: { from: '/notificaciones' } }); setMenuItemAbierto(null) }}>
+                                <ExternalLink size={15} />Ir al pedido
+                              </button>
+                            )}
+                            {agrupada ? (
+                              <button onClick={() => { marcarVariasLeidas(entrada.items.map(i => i.id)); setMenuItemAbierto(null) }}>
+                                <MailOpen size={15} />Marcar {entrada.count} como leídas
+                              </button>
+                            ) : (
+                              <button onClick={() => { entrada.leida ? marcarNoLeida(entrada.id) : marcarLeida(entrada.id); setMenuItemAbierto(null) }}>
+                                {entrada.leida ? <Mail size={15} /> : <MailOpen size={15} />}
+                                {entrada.leida ? 'Marcar como no leída' : 'Marcar como leída'}
+                              </button>
+                            )}
+                            <div className="notif-dropdown-sep" />
+                            <button
+                              onClick={() => { agrupada ? eliminarVarias(entrada.items.map(i => i.id)) : eliminar(entrada.id); setMenuItemAbierto(null) }}
+                              className="notif-dropdown-danger"
+                            >
+                              <Trash2 size={15} />{agrupada ? `Eliminar las ${entrada.count}` : 'Eliminar'}
                             </button>
-                          )}
-                          <button onClick={() => { n.leida ? marcarNoLeida(n.id) : marcarLeida(n.id); setMenuItemAbierto(null) }}>
-                            {n.leida ? <Mail size={15} /> : <MailOpen size={15} />}
-                            {n.leida ? 'Marcar como no leída' : 'Marcar como leída'}
-                          </button>
-                          <div className="notif-dropdown-sep" />
-                          <button onClick={() => { eliminar(n.id); setMenuItemAbierto(null) }} className="notif-dropdown-danger">
-                            <Trash2 size={15} />Eliminar
-                          </button>
-                        </div>
-                      )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ))}
 

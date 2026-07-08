@@ -6000,3 +6000,66 @@ select:focus {
 
 
 
+
+/* ─── Notificaciones agrupadas (Fase 1) ──────────────────────────────────── */
+/* Chip ×N en la entrada colapsada de una ráfaga del mismo grupo_key */
+.notif-chip-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--icbc-red);
+  background: #D0111B14;
+  border: 1px solid #D0111B2E;
+  border-radius: 999px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.notif-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.notif-expand-btn:hover { color: var(--text-primary); }
+
+/* Sub-lista de eventos individuales al expandir una entrada agrupada */
+.notif-subitems {
+  margin-top: 0.45rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  cursor: default;
+}
+
+.notif-subitem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.notif-subitem-msg {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.notif-subitem-time {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}

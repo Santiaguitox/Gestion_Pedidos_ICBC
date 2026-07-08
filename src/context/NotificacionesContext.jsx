@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { contarNoLeidas } from '@/lib/notificaciones'
 
 const NotificacionesContext = createContext(null)
 const LIMITE_NOTIFICACIONES = 50
@@ -25,11 +26,16 @@ function playNotifSound() {
 export function NotificacionesProvider({ children }) {
   const { user } = useAuth()
   const [notificaciones, setNotificaciones] = useState([])
-  const [unreadCount, setUnreadCount] = useState(0)
   const [toast, setToast] = useState(null)
   const [feedback, setFeedback] = useState(null) // { type: 'success'|'error'|'info', message: string }
   const [sonidoActivo, setSonidoActivo] = useState(() => localStorage.getItem('notif:sonido') !== 'false')
   const feedbackTimer = useRef(null)
+
+  // El contador del badge se DERIVA de la lista (una sola fuente de
+  // verdad, sin contadores manuales que puedan desincronizarse) y
+  // cuenta GRUPOS no leídos, no filas: una ráfaga de cambios de estado
+  // del mismo pedido es 1 pendiente. Ver src/lib/notificaciones.js.
+  const unreadCount = useMemo(() => contarNoLeidas(notificaciones), [notificaciones])
 
   // Función pura: trae y depura el exceso de notificaciones (sin tocar
   // estado). Devuelve la lista final (ya recortada a LIMITE_NOTIFICACIONES)
@@ -52,14 +58,8 @@ export function NotificacionesProvider({ children }) {
     return todas
   }, [user])
 
-  function aplicarNotificaciones(visibles) {
-    setNotificaciones(visibles)
-    setUnreadCount(visibles.filter(n => !n.leida).length)
-  }
-
-  // Wrapper con setState, usado por handleNueva (callback del realtime).
   async function fetchNotificaciones() {
-    aplicarNotificaciones(await queryNotificaciones())
+    setNotificaciones(await queryNotificaciones())
   }
 
   function handleNueva(payload) {
@@ -73,7 +73,7 @@ export function NotificacionesProvider({ children }) {
 
   useEffect(() => {
     if (!user) return
-    queryNotificaciones().then(aplicarNotificaciones)
+    queryNotificaciones().then(setNotificaciones)
     const chName = 'notif-' + user.id + '-' + Date.now()
     const ch = supabase
       .channel(chName)
@@ -99,52 +99,62 @@ export function NotificacionesProvider({ children }) {
   }, [])
 
   // ─── Notificaciones ───────────────────────────────────────────────────────
+  // Todas las mutaciones actualizan SOLO la lista; el contador se deriva.
+  // Las variantes "Varias" son un único request batcheado (.in), no un
+  // request por id — las usan las acciones de grupo y las masivas.
 
   async function marcarLeida(id) {
     await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
     setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n))
-    setUnreadCount(c => Math.max(0, c - 1))
   }
 
   async function marcarNoLeida(id) {
     await supabase.from('notificaciones').update({ leida: false }).eq('id', id)
     setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: false } : n))
-    setUnreadCount(c => c + 1)
+  }
+
+  async function marcarVariasLeidas(ids) {
+    if (!ids.length) return
+    await supabase.from('notificaciones').update({ leida: true }).in('id', ids)
+    const set = new Set(ids)
+    setNotificaciones(prev => prev.map(n => set.has(n.id) ? { ...n, leida: true } : n))
+  }
+
+  async function marcarVariasNoLeidas(ids) {
+    if (!ids.length) return
+    await supabase.from('notificaciones').update({ leida: false }).in('id', ids)
+    const set = new Set(ids)
+    setNotificaciones(prev => prev.map(n => set.has(n.id) ? { ...n, leida: false } : n))
   }
 
   async function marcarTodasLeidas() {
     if (!user) return
     await supabase.from('notificaciones').update({ leida: true }).eq('user_id', user.id).eq('leida', false)
     setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })))
-    setUnreadCount(0)
   }
 
   async function marcarTodasNoLeidas() {
     if (!user) return
     await supabase.from('notificaciones').update({ leida: false }).eq('user_id', user.id).eq('leida', true)
     setNotificaciones(prev => prev.map(n => ({ ...n, leida: false })))
-    setUnreadCount(notificaciones.length)
   }
 
   async function eliminar(id) {
     await supabase.from('notificaciones').delete().eq('id', id)
-    const eliminada = notificaciones.find(n => n.id === id)
     setNotificaciones(prev => prev.filter(n => n.id !== id))
-    if (eliminada && !eliminada.leida) setUnreadCount(c => Math.max(0, c - 1))
   }
 
   async function eliminarVarias(ids) {
+    if (!ids.length) return
     await supabase.from('notificaciones').delete().in('id', ids)
-    const noLeidas = notificaciones.filter(n => ids.includes(n.id) && !n.leida).length
-    setNotificaciones(prev => prev.filter(n => !ids.includes(n.id)))
-    setUnreadCount(c => Math.max(0, c - noLeidas))
+    const set = new Set(ids)
+    setNotificaciones(prev => prev.filter(n => !set.has(n.id)))
   }
 
   async function eliminarTodas() {
     if (!user) return
     await supabase.from('notificaciones').delete().eq('user_id', user.id)
     setNotificaciones([])
-    setUnreadCount(0)
   }
 
   function toggleSonido() {
@@ -159,6 +169,7 @@ export function NotificacionesProvider({ children }) {
       notificaciones, unreadCount, toast,
       dismissToast: () => setToast(null),
       marcarLeida, marcarNoLeida,
+      marcarVariasLeidas, marcarVariasNoLeidas,
       marcarTodasLeidas, marcarTodasNoLeidas,
       eliminar, eliminarVarias, eliminarTodas,
       toggleSonido, sonidoActivo,
