@@ -6,9 +6,10 @@ import { agruparNotificaciones } from '@/lib/notificaciones'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
-  Bell, CheckCheck, Trash2, MailOpen, Mail, ExternalLink,
+  Bell, BellRing, BellOff, CheckCheck, Trash2, MailOpen, Mail, ExternalLink,
   ChevronLeft, ChevronRight, ChevronDown, MoreHorizontal, X,
 } from 'lucide-react'
+import { usePush } from '@/hooks/usePush'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
@@ -57,7 +58,28 @@ export default function Notificaciones() {
     marcarVariasLeidas, marcarVariasNoLeidas,
     marcarTodasLeidas, marcarTodasNoLeidas,
     eliminar, eliminarVarias, eliminarTodas,
+    showInfo, showError,
   } = useNotificaciones()
+
+  // Web Push de este dispositivo (Fase 2) — el toggle vive en la
+  // toolbar de esta página. En navegadores sin soporte (o Safari de
+  // iOS sin instalar la PWA) el botón directamente no se muestra.
+  const { estado: estadoPush, ocupado: pushOcupado, activar: activarPush, desactivar: desactivarPush } = usePush()
+
+  async function handleTogglePush() {
+    try {
+      if (estadoPush === 'activo') {
+        await desactivarPush()
+        showInfo('Avisos desactivados en este dispositivo')
+      } else {
+        const resultado = await activarPush()
+        if (resultado === 'activo') showInfo('Avisos activados en este dispositivo')
+        if (resultado === 'denegado') showError('Las notificaciones están bloqueadas para este sitio — habilitalas desde la configuración del navegador')
+      }
+    } catch (err) {
+      showError(err.message)
+    }
+  }
 
   const [filtro, setFiltro] = useLocalStorage('notif:filtro', 'todas')
   const [seleccionadas, setSeleccionadas] = useState(new Set())
@@ -203,6 +225,21 @@ export default function Notificaciones() {
         </div>
 
         <div className="notif-toolbar-actions" ref={menuHeaderOpen ? menuRef : null}>
+          {estadoPush !== 'no-soportado' && estadoPush !== 'cargando' && (
+            <button
+              onClick={handleTogglePush}
+              className="notif-btn-outline"
+              disabled={pushOcupado || estadoPush === 'denegado'}
+              title={estadoPush === 'denegado'
+                ? 'Las notificaciones están bloqueadas en el navegador'
+                : estadoPush === 'activo'
+                  ? 'Dejar de recibir avisos del sistema en este dispositivo'
+                  : 'Recibir avisos del sistema en este dispositivo'}
+            >
+              {estadoPush === 'activo' ? <BellOff size={15} /> : <BellRing size={15} />}
+              {estadoPush === 'activo' ? 'Silenciar dispositivo' : 'Avisos en este dispositivo'}
+            </button>
+          )}
           {noLeidas > 0 && (
             <button onClick={marcarTodasLeidas} className="notif-btn-outline">
               <CheckCheck size={15} />Marcar todas como leídas
