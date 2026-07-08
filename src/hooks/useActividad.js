@@ -35,7 +35,7 @@ export function labelActividad(item) {
     case TIPO_ACTIVIDAD.DESCARGA_PIEZA: {
       const { tipo_descarga, piezas = [] } = item.detalle ?? {}
       if (tipo_descarga === 'zip') {
-        return `${nombre} descargó el ZIP con ${piezas.length} pieza${piezas.length === 1 ? '' : 's'}`
+        return `${nombre} descargó el ZIP con ${piezas.length} pieza${piezas.length === 1 ? '' : 's'} (${piezas.join(', ')})`
       }
       return `${nombre} descargó el HTML de "${piezas[0] ?? 'una pieza'}"`
     }
