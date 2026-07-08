@@ -28,6 +28,17 @@ export function labelActividad(item) {
     case TIPO_ACTIVIDAD.ELIMINACION:   return `${nombre} eliminó el pedido`
     case TIPO_ACTIVIDAD.RESTAURACION:  return `${nombre} restauró el pedido`
     case TIPO_ACTIVIDAD.EDICION:       return `${nombre} editó el pedido`
+    // Este tipo lo inserta notificar_descarga_pieza() directo en la
+    // base (ver 20260708130000/20260708140000) — no pasa por
+    // registrarActividad() de este archivo, pero labelActividad sigue
+    // siendo el lugar único donde se decide cómo mostrar cada tipo.
+    case TIPO_ACTIVIDAD.DESCARGA_PIEZA: {
+      const { tipo_descarga, piezas = [] } = item.detalle ?? {}
+      if (tipo_descarga === 'zip') {
+        return `${nombre} descargó el ZIP con ${piezas.length} pieza${piezas.length === 1 ? '' : 's'}`
+      }
+      return `${nombre} descargó el HTML de "${piezas[0] ?? 'una pieza'}"`
+    }
     default:                           return `${nombre} realizó una acción`
   }
 }

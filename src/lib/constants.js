@@ -27,6 +27,7 @@ export const TIPO_ACTIVIDAD = {
   ELIMINACION:      'eliminacion',
   RESTAURACION:     'restauracion',
   EDICION:          'edicion',
+  DESCARGA_PIEZA:   'descarga_pieza',
 }
 
 // ESTADOS y TIPOS se gestionan desde Supabase — usar useEstados() y useTipos()
