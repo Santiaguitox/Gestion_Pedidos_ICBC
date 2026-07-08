@@ -355,6 +355,21 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
     })
   }
 
+  // Avisa a los admin/super_admin asignados a este pedido que un viewer
+  // descargó material — best-effort: nunca bloquea ni le muestra nada
+  // al viewer si falla, la descarga ya se completó igual. Ver función
+  // notificar_descarga_pieza (20260708130000_notificar_descarga_pieza.sql).
+  function notificarDescargaViewer(piezas, tipoDescarga) {
+    if (canWrite) return
+    supabase.rpc('notificar_descarga_pieza', {
+      p_pedido_id: pedidoId,
+      p_piezas: piezas,
+      p_tipo_descarga: tipoDescarga,
+    }).then(({ error }) => {
+      if (error) console.error('No se pudo notificar la descarga:', error)
+    })
+  }
+
   async function handleDescargaIndividual(pieza) {
     try {
       // A un viewer no se le muestra este modal — es la misma
@@ -376,6 +391,8 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
             descargarPiezaIndividual(pieza, { continuar: true })
           }
         })
+      } else {
+        notificarDescargaViewer([pieza.nombre_pieza || pieza.link_online], 'individual')
       }
     } catch (e) {
       // error de red/proxy — ignorar silenciosamente en local
@@ -394,11 +411,14 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
             descargarTodasLasPiezas(entregables, nombrePedido, { continuar: true })
           }
         })
+      } else {
+        notificarDescargaViewer(piezasConLink.map(p => p.nombre_pieza || p.link_online), 'zip')
       }
     } catch (e) {
       // error de red/proxy — ignorar silenciosamente en local
     }
   }
+
 
   const piezasConLink = entregables.filter(e => e.link_online)
 

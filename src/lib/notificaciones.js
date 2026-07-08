@@ -14,6 +14,7 @@ export const TIPO_NOTIFICACION = {
   APROBACION:    'aprobacion',
   VENCIMIENTO:   'vencimiento',
   SISTEMA:       'sistema',
+  DESCARGA:      'descarga',
 }
 
 // Tipos cuyos eventos no leídos se colapsan por grupo_key. 'sistema'
@@ -24,6 +25,7 @@ const TIPOS_AGRUPABLES = new Set([
   TIPO_NOTIFICACION.ASIGNACION,
   TIPO_NOTIFICACION.APROBACION,
   TIPO_NOTIFICACION.VENCIMIENTO,
+  TIPO_NOTIFICACION.DESCARGA,
 ])
 
 // Clave de agrupamiento — espejo exacto de la columna generada
