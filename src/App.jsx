@@ -1,8 +1,9 @@
-import { lazy } from 'react'
+import { lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { NotificacionesProvider } from '@/context/NotificacionesContext'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
@@ -39,11 +40,20 @@ const Configuracion = lazy(() => import('@/pages/Configuracion'))
 
 
 export default function App() {
+  // Si esta carga arrancó bien (llegamos a renderizar App), la bandera
+  // de "ya intenté un reload automático" ya cumplió su función para
+  // esta sesión de pestaña — la limpiamos para que un deploy nuevo
+  // más adelante, en la misma pestaña, pueda volver a auto-recuperarse.
+  useEffect(() => {
+    sessionStorage.removeItem('twh-chunk-reload-intentado')
+  }, [])
+
   return (
     <ThemeProvider>
       <AuthProvider>
         <NotificacionesProvider>
           <BrowserRouter>
+            <ErrorBoundary>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -100,6 +110,7 @@ export default function App() {
               <Route path="/set-password" element={<SetPassword />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </ErrorBoundary>
           </BrowserRouter>
         </NotificacionesProvider>
         

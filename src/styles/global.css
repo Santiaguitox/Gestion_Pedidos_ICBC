@@ -299,21 +299,27 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
   background: var(--wm-grad);
 }
 
 .btn-primary.btn-primary-brand .btn-arrow {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  margin-left: 0;
   opacity: 0;
+  overflow: hidden;
   transform: translateX(-6px);
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition: opacity 220ms ease, transform 220ms ease, width 220ms ease, margin-left 220ms ease;
 }
 
 .btn-primary.btn-primary-brand:hover .btn-arrow,
 .btn-primary.btn-primary-brand:focus-visible .btn-arrow {
   opacity: 1;
   transform: translateX(0);
+  width: 1.5rem;
+  margin-left: 0.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -328,6 +334,56 @@ select:focus {
   border: 1px solid rgba(208,17,27,0.2);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-sm);
+}
+
+/* ─── ErrorPage (calcado del diseño de marca "404" ya aprobado) ─────────────── */
+.errpage-wrap {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.errpage-iso {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 0.3rem;
+}
+
+.errpage-code {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: clamp(3.2rem, 11vw, 6.5rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  background: var(--wm-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.errpage-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+}
+
+.errpage-sub {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 380px;
+}
+
+.errpage-btn {
+  width: 100%;
+  max-width: 200px;
+  margin: 0.8rem auto 0;
 }
 
 /* ─── Decorative blobs ────────────────────────────────────────────────────── */
