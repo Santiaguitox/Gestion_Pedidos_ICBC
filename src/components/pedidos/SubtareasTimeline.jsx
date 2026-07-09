@@ -53,7 +53,11 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error ?? 'Error al registrar')
-      await supabase.from('subtareas').update({ registrado_sheet: true, registrado_sheet_at: new Date().toISOString() }).eq('id', subtarea.id)
+      const { error: errorSubtarea } = await supabase.from('subtareas').update({ registrado_sheet: true, registrado_sheet_at: new Date().toISOString() }).eq('id', subtarea.id)
+      // El Sheet ya se escribió: si esto falla el registro externo es
+      // válido, pero la pieza quedaría sin la marca y el botón activo —
+      // se avisa para que no lo re-registren pensando que falló todo.
+      if (errorSubtarea) throw new Error('Se registró en el Sheet, pero no se pudo marcar la subtarea como registrada — no vuelvas a registrarla')
       setSheetDiseno(null)
       setSuccessMsg('La tarea de diseño fue registrada en Google Sheets.')
     } catch (err) {

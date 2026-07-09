@@ -109,7 +109,8 @@ export default function Usuarios() {
 
   async function cambiarRol(id, newRole) {
     if (newRole === ROLES.SUPER_ADMIN && myRole !== ROLES.SUPER_ADMIN) return
-    await supabase.from('profiles').update({ role: newRole }).eq('id', id)
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id)
+    if (error) { showError(error.message || 'No se pudo actualizar el rol'); return }
     setUsuarios(u => u.map(x => x.id === id ? { ...x, role: newRole } : x))
   }
 

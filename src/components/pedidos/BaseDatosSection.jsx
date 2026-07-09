@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { leerMuestraDeArchivo, compararCampos, validateCsvHeaders } from '@/lib/revision-envios/comparar'
 import { filtrarSoloUltimaVersion } from '@/lib/revision-envios/versionesPieza'
 import { animarProgreso } from '@/lib/revision-envios/animarProgreso'
@@ -272,6 +273,7 @@ function BaseItem({ base, entregables, canWrite, onEliminar, onAsignar, onVerifi
 }
 
 export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, bases }) {
+  const { showError } = useNotificaciones()
   const [dragging, setDragging] = useState(false)
   const [cargando, setCargando] = useState(false)
   const [progresoSubida, setProgresoSubida] = useState(0)
@@ -332,12 +334,15 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
     const huboError = porPieza.some(r => r.tipo === 'error_proxy')
     const missTotal = porPieza.flatMap(r => r.miss)
 
-    await supabase.from('pedido_base').update({
+    const { error: errorPersist } = await supabase.from('pedido_base').update({
       resultado_tipo: huboError ? 'error_proxy' : (missTotal.length === 0 ? 'ok' : 'miss'),
       resultado_miss_count: missTotal.length,
       resultado_detalle: porPieza,
       verificado_at: verificadoAt,
     }).eq('id', base.id)
+    // El resultado se muestra igual (ya está calculado en memoria), pero
+    // se avisa que no quedó guardado — al recargar habría que re-verificar.
+    if (errorPersist) showError('La verificación corrió, pero el resultado no se pudo guardar')
 
     setVerificaciones(prev => ({
       ...prev,
@@ -367,14 +372,18 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
     ])
 
     if (headerLine) {
-      const { data } = await supabase.from('pedido_base').insert({
+      const { data, error: errorInsert } = await supabase.from('pedido_base').insert({
         pedido_id: pedidoId,
         nombre_archivo: file.name,
         header_line: headerLine,
         entregable_id: null,
       }).select().single()
-      insertedBase = data
-      onUpdate()
+      if (errorInsert) {
+        setError('No se pudo guardar la base en el pedido. Probá de nuevo.')
+      } else {
+        insertedBase = data
+        onUpdate()
+      }
     }
 
     setCargando(false)
@@ -389,13 +398,22 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
   }
 
   async function eliminarBase(baseId) {
-    await supabase.from('pedido_base').delete().eq('id', baseId)
+    const { data, error } = await supabase.from('pedido_base').delete().eq('id', baseId).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo eliminar la base')
+      return
+    }
     setVerificaciones(prev => { const n = { ...prev }; delete n[baseId]; return n })
     onUpdate()
   }
 
   async function asignarPieza(baseId, entregableId) {
-    await supabase.from('pedido_base').update({ entregable_id: entregableId }).eq('id', baseId)
+    const { data, error } = await supabase.from('pedido_base')
+      .update({ entregable_id: entregableId }).eq('id', baseId).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo asignar la pieza a la base')
+      return
+    }
     onUpdate()
 
     // Al asignar una pieza específica, correr la verificación automáticamente

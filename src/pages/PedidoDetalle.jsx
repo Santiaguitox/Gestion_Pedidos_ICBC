@@ -98,27 +98,49 @@ export default function PedidoDetalle() {
   }
 
   async function agregarSubtarea(descripcion, asignadoA) {
-    await supabase.from('subtareas').insert({ pedido_id: id, descripcion, asignado_a: asignadoA })
+    const { error } = await supabase.from('subtareas')
+      .insert({ pedido_id: id, descripcion, asignado_a: asignadoA })
+    if (error) {
+      showError('No se pudo crear la subtarea')
+      return
+    }
     if (asignadoA && asignadoA !== user?.id) {
-      await supabase.from('notificaciones').insert({
+      // Best-effort: la subtarea ya existe; si el aviso falla no se
+      // bloquea el flujo. tipo/data van explícitos para que esta
+      // notificación agrupe y pushee igual que las del resto del
+      // sistema (sin tipo caía en el fallback 'sistema', que no agrupa
+      // — ver src/lib/notificaciones.js).
+      const { error: errorNotif } = await supabase.from('notificaciones').insert({
         user_id: asignadoA, pedido_id: id,
         mensaje: `Te asignaron una subtarea en "${pedido.asunto}": ${descripcion}`,
+        tipo: 'asignacion',
+        data: { asunto: pedido.asunto, subtarea: descripcion },
         leida: false
       })
+      if (errorNotif) console.warn('[subtareas] No se pudo notificar la asignación:', errorNotif.message)
     }
     fetchPedido()
   }
 
   async function toggleSubtarea(subId, completada) {
-    await supabase.from('subtareas').update({
+    const { data, error } = await supabase.from('subtareas').update({
       completada: !completada,
       completada_at: !completada ? new Date().toISOString() : null
-    }).eq('id', subId)
+    }).eq('id', subId).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo actualizar la subtarea')
+      return
+    }
     fetchPedido()
   }
 
   async function eliminarSubtarea(subId) {
-    await supabase.from('subtareas').delete().eq('id', subId)
+    const { data, error } = await supabase.from('subtareas')
+      .delete().eq('id', subId).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo eliminar la subtarea')
+      return
+    }
     fetchPedido()
   }
 

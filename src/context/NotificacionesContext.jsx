@@ -52,7 +52,10 @@ export function NotificacionesProvider({ children }) {
     const todas = data ?? []
     if (todas.length > LIMITE_NOTIFICACIONES) {
       const aEliminar = todas.slice(LIMITE_NOTIFICACIONES)
-      await supabase.from('notificaciones').delete().in('id', aEliminar.map(n => n.id))
+      // Best-effort: si el prune falla no hay nada útil que mostrarle
+      // al usuario — se reintenta solo en la próxima carga.
+      const { error } = await supabase.from('notificaciones').delete().in('id', aEliminar.map(n => n.id))
+      if (error) console.warn('[notificaciones] No se pudo depurar el excedente:', error.message)
       return todas.slice(0, LIMITE_NOTIFICACIONES)
     }
     return todas
@@ -102,58 +105,119 @@ export function NotificacionesProvider({ children }) {
   // Todas las mutaciones actualizan SOLO la lista; el contador se deriva.
   // Las variantes "Varias" son un único request batcheado (.in), no un
   // request por id — las usan las acciones de grupo y las masivas.
+  //
+  // Manejo de errores en dos capas (supabase-js NUNCA lanza: siempre
+  // resuelve { data, error }):
+  //   Capa A — el server rechazó (constraint, red, permiso): viene en
+  //   `error`.
+  //   Capa B — RLS filtró en silencio (como el bug histórico de la
+  //   policy DELETE faltante): NO viene error, la operación "funciona"
+  //   sobre 0 filas. Se detecta pidiendo las filas afectadas con
+  //   .select('id') y verificando que haya alguna.
+  // En ambos casos: toast de error y SIN update optimista — la UI no
+  // debe mostrar éxito sobre algo que no ocurrió. En las variantes
+  // "Todas" afectar 0 filas puede ser legítimo (no había nada para
+  // tocar), así que la Capa B solo cuenta si localmente sí había filas.
 
   async function marcarLeida(id) {
-    await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: true }).eq('id', id).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo marcar la notificación como leída')
+      return
+    }
     setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n))
   }
 
   async function marcarNoLeida(id) {
-    await supabase.from('notificaciones').update({ leida: false }).eq('id', id)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: false }).eq('id', id).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo marcar la notificación como no leída')
+      return
+    }
     setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: false } : n))
   }
 
   async function marcarVariasLeidas(ids) {
     if (!ids.length) return
-    await supabase.from('notificaciones').update({ leida: true }).in('id', ids)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: true }).in('id', ids).select('id')
+    if (error || !data?.length) {
+      showError('No se pudieron marcar las notificaciones como leídas')
+      return
+    }
     const set = new Set(ids)
     setNotificaciones(prev => prev.map(n => set.has(n.id) ? { ...n, leida: true } : n))
   }
 
   async function marcarVariasNoLeidas(ids) {
     if (!ids.length) return
-    await supabase.from('notificaciones').update({ leida: false }).in('id', ids)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: false }).in('id', ids).select('id')
+    if (error || !data?.length) {
+      showError('No se pudieron marcar las notificaciones como no leídas')
+      return
+    }
     const set = new Set(ids)
     setNotificaciones(prev => prev.map(n => set.has(n.id) ? { ...n, leida: false } : n))
   }
 
   async function marcarTodasLeidas() {
     if (!user) return
-    await supabase.from('notificaciones').update({ leida: true }).eq('user_id', user.id).eq('leida', false)
+    const habiaNoLeidas = notificaciones.some(n => !n.leida)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: true }).eq('user_id', user.id).eq('leida', false).select('id')
+    if (error || (habiaNoLeidas && !data?.length)) {
+      showError('No se pudieron marcar las notificaciones como leídas')
+      return
+    }
     setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })))
   }
 
   async function marcarTodasNoLeidas() {
     if (!user) return
-    await supabase.from('notificaciones').update({ leida: false }).eq('user_id', user.id).eq('leida', true)
+    const habiaLeidas = notificaciones.some(n => n.leida)
+    const { data, error } = await supabase.from('notificaciones')
+      .update({ leida: false }).eq('user_id', user.id).eq('leida', true).select('id')
+    if (error || (habiaLeidas && !data?.length)) {
+      showError('No se pudieron marcar las notificaciones como no leídas')
+      return
+    }
     setNotificaciones(prev => prev.map(n => ({ ...n, leida: false })))
   }
 
   async function eliminar(id) {
-    await supabase.from('notificaciones').delete().eq('id', id)
+    const { data, error } = await supabase.from('notificaciones')
+      .delete().eq('id', id).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo eliminar la notificación')
+      return
+    }
     setNotificaciones(prev => prev.filter(n => n.id !== id))
   }
 
   async function eliminarVarias(ids) {
     if (!ids.length) return
-    await supabase.from('notificaciones').delete().in('id', ids)
+    const { data, error } = await supabase.from('notificaciones')
+      .delete().in('id', ids).select('id')
+    if (error || !data?.length) {
+      showError('No se pudieron eliminar las notificaciones')
+      return
+    }
     const set = new Set(ids)
     setNotificaciones(prev => prev.filter(n => !set.has(n.id)))
   }
 
   async function eliminarTodas() {
     if (!user) return
-    await supabase.from('notificaciones').delete().eq('user_id', user.id)
+    const habiaFilas = notificaciones.length > 0
+    const { data, error } = await supabase.from('notificaciones')
+      .delete().eq('user_id', user.id).select('id')
+    if (error || (habiaFilas && !data?.length)) {
+      showError('No se pudieron eliminar las notificaciones')
+      return
+    }
     setNotificaciones([])
   }
 

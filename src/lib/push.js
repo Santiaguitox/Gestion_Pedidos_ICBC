@@ -103,6 +103,10 @@ export async function desuscribirsePush() {
 
   const endpoint = sub.endpoint
   await sub.unsubscribe().catch(() => {})
-  await supabase.from('push_suscripciones').delete().eq('endpoint', endpoint)
+  // Best-effort: si la fila no se pudo borrar queda huérfana, pero se
+  // depura sola — el próximo push a este endpoint devuelve 404/410 y
+  // enviar-push la elimina.
+  const { error } = await supabase.from('push_suscripciones').delete().eq('endpoint', endpoint)
+  if (error) console.warn('[push] No se pudo borrar la suscripción del server:', error.message)
   return 'inactivo'
 }

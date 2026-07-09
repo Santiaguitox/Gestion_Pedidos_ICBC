@@ -224,7 +224,10 @@ export function usePedidos(filters = {}) {
       // trg_notif_asignacion en la base (excluye automáticamente a quien
       // hizo la asignación). No insertar notificación manual aquí para
       // evitar duplicados.
-      await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: nuevo.id, user_id: uid })))
+      const { error: errorAsignados } = await supabase.from('pedido_asignados').insert(asignados.map(uid => ({ pedido_id: nuevo.id, user_id: uid })))
+      // El pedido ya existe: reintentar la creación entera lo duplicaría,
+      // así que el mensaje orienta a completar la asignación editando.
+      if (errorAsignados) throw new Error('El pedido se creó, pero no se pudieron guardar los asignados — abrilo y asignalos desde la edición')
     }
     await logActividad(nuevo.id, user?.id, TIPO_ACTIVIDAD.CREACION)
     // No se llama a fetchPedidos() aquí: el realtime ya recibe el INSERT.
@@ -258,10 +261,12 @@ export function usePedidos(filters = {}) {
       // todo) para que el trigger trg_notif_asignacion no le mande
       // "te asignaron al pedido" de nuevo a alguien que ya estaba asignado.
       if (removidos.length) {
-        await supabase.from('pedido_asignados').delete().eq('pedido_id', id).in('user_id', removidos)
+        const { error: errorQuitar } = await supabase.from('pedido_asignados').delete().eq('pedido_id', id).in('user_id', removidos)
+        if (errorQuitar) throw errorQuitar
       }
       if (agregados.length) {
-        await supabase.from('pedido_asignados').insert(agregados.map(uid => ({ pedido_id: id, user_id: uid })))
+        const { error: errorAgregar } = await supabase.from('pedido_asignados').insert(agregados.map(uid => ({ pedido_id: id, user_id: uid })))
+        if (errorAgregar) throw errorAgregar
       }
       if (agregados.length || removidos.length) {
         const { data: perfiles } = await supabase.from('profiles').select('id, full_name').in('id', [...agregados, ...removidos])

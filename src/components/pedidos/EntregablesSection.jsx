@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
 import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2, Download } from 'lucide-react'
 import { format } from 'date-fns'
@@ -26,6 +27,7 @@ function CopyAllBtn({ entregables }) {
 }
 
 function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otrosEntregables, setConfirm, revisionEnCurso, onVerDetalle, dispararRevision, onDescargaIndividual }) {
+  const { showError } = useNotificaciones()
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
   const [editando, setEditando] = useState(false)
@@ -91,10 +93,14 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
   }
 
   async function toggleAprobado() {
-    await supabase.from('entregable').update({
+    const { data, error } = await supabase.from('entregable').update({
       aprobado: !ent.aprobado,
       aprobado_at: !ent.aprobado ? new Date().toISOString() : null
-    }).eq('id', ent.id)
+    }).eq('id', ent.id).select('id')
+    if (error || !data?.length) {
+      showError('No se pudo actualizar la aprobación de la pieza')
+      return
+    }
     onUpdate()
   }
 
@@ -205,6 +211,7 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
 }
 
 export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdmin, onUpdate, setConfirm, nombrePedido }) {
+  const { showError } = useNotificaciones()
   const navigate = useNavigate()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nombre_pieza: '', link_online: '' })
@@ -266,13 +273,16 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
       // y esa es la que debe quedar guardada, no la mía (que ya está
       // desactualizada respecto al link actual).
       if (tokensRevision.current[entregableId] === miToken) {
-        await supabase.from('entregable').update({
+        const { error: errorPersist } = await supabase.from('entregable').update({
           revision_pruebas_ok: resumen.ok,
           revision_pruebas_total: resumen.total,
           revision_severidad: resumen.severidad,
           revision_link: identificadorPieza(link),
           revision_at: new Date().toISOString(),
         }).eq('id', entregableId)
+        // Mismo criterio que el catch de abajo: la revisión no bloquea
+        // nada — pero el fallo queda en consola en vez de invisible.
+        if (errorPersist) console.warn('[revision] No se pudo guardar el resultado:', errorPersist.message)
       }
     } catch {
       // Si falla (proxy caído, HTML inaccesible, etc.) se deja la
@@ -351,7 +361,15 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
     setConfirm({
       title: 'Eliminar pieza',
       message: '¿Querés eliminar esta pieza? Esta acción no se puede deshacer.',
-      onConfirm: async () => { setConfirm(null); await supabase.from('entregable').delete().eq('id', id); onUpdate() }
+      onConfirm: async () => {
+        setConfirm(null)
+        const { data, error } = await supabase.from('entregable').delete().eq('id', id).select('id')
+        if (error || !data?.length) {
+          showError('No se pudo eliminar la pieza')
+          return
+        }
+        onUpdate()
+      }
     })
   }
 

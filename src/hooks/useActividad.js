@@ -2,7 +2,10 @@ import { supabase } from '@/lib/supabase'
 import { TIPO_ACTIVIDAD } from '@/lib/constants'
 
 export async function registrarActividad(pedidoId, userId, tipo, detalle = {}) {
-  await supabase.from('actividad').insert({ pedido_id: pedidoId, user_id: userId, tipo, detalle })
+  // Best-effort por diseño: el historial nunca debe romper ni frenar la
+  // operación principal que lo origina — un log perdido se tolera.
+  const { error } = await supabase.from('actividad').insert({ pedido_id: pedidoId, user_id: userId, tipo, detalle })
+  if (error) console.warn('[actividad] No se pudo registrar:', error.message)
 }
 
 export function labelActividad(item) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 import { registrarActividad } from '@/hooks/useActividad'
 import { ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
 
@@ -12,6 +13,7 @@ import { ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
 const DEBOUNCE_MS = 800
 
 export function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }) {
+  const { showError } = useNotificaciones()
   const [open, setOpen] = useState(false)
   // Cambios locales todavía no commiteados (null = sin cambios pendientes)
   const [pendientes, setPendientes] = useState(null)
@@ -41,7 +43,15 @@ export function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }
       return
     }
 
-    await supabase.from('pedidos').update({ estados: nuevos }).eq('id', id)
+    const { data, error } = await supabase.from('pedidos')
+      .update({ estados: nuevos }).eq('id', id).select('id')
+    if (error || !data?.length) {
+      // La base no cambió: se revierte el estado visual local para que
+      // la UI no mienta, y no se registra actividad de algo que no pasó.
+      setPendientes(null)
+      showError('No se pudo actualizar el estado del pedido')
+      return
+    }
     await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos })
     setPendientes(null)
     onUpdate()

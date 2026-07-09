@@ -117,13 +117,16 @@ export default function RevisionEmail() {
       // no se guarda nada (sería actualizar la pieza equivocada).
       if (entregableId && modoRef.current === 'url' && urlRef.current.trim() === urlInicial.trim()) {
         const resumen = resumirResultados(resultadosObtenidos)
-        await supabase.from('entregable').update({
+        const { error: errorPersist } = await supabase.from('entregable').update({
           revision_pruebas_ok: resumen.ok,
           revision_pruebas_total: resumen.total,
           revision_severidad: resumen.severidad,
           revision_link: identificadorPieza(urlRef.current),
           revision_at: new Date().toISOString(),
         }).eq('id', entregableId)
+        // El análisis en pantalla es válido igual; solo falló el volcado
+        // del resumen a la pieza — queda en consola en vez de invisible.
+        if (errorPersist) console.warn('[revision] No se pudo guardar el resumen en la pieza:', errorPersist.message)
       }
     } catch {
       // El error ya se comunica con el estado vacío (sin resultados) —
