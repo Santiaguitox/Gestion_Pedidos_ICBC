@@ -19,6 +19,16 @@ import net from 'net'
 //    destino en cada salto — evita que alguien use una URL pública
 //    válida que redirija a una IP interna para esquivar el chequeo del
 //    paso 3 sobre la URL original.
+//
+// Riesgo residual conocido (aceptado): entre la resolución DNS del
+// paso 3 y el fetch real hay una ventana de tiempo — un atacante que
+// CONTROLE el DNS de un dominio permitido podría responder una IP
+// pública al chequeo y una privada al fetch (DNS rebinding / TOCTOU).
+// Hoy es teórico: la allowlist solo contiene dominios de icomm y el
+// CDN propio, cuyos DNS no controla ningún tercero. ⚠️ Si algún día se
+// agrega a ALLOWED_HOST_SUFFIXES un dominio operado por un tercero,
+// este riesgo pasa a ser real y hay que mitigarlo (p. ej. fetch con
+// lookup fijado a la IP ya validada vía un Agent de undici).
 // ============================================================================
 
 // Dominio de la plataforma de icomm donde se previsualizan las piezas de

@@ -61,13 +61,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    // Fuente de verdad: la fila real. Si el id no existe, no hay nada
-    // que despachar (y no se filtra información de por qué).
+    // Fuente de verdad: la fila real — y además CLAIM atómico de
+    // idempotencia (ver migración 20260709000000_push_idempotente.sql).
+    // El UPDATE condicionado por push_despachado_at IS NULL garantiza
+    // que cada notificación se despacha UNA sola vez: si el id no
+    // existe, o ya fue despachado (re-disparo con la anon key pública),
+    // no vuelve fila y se responde { enviadas: 0 } sin enviar nada ni
+    // filtrar el motivo. Dos requests simultáneos por el mismo id
+    // tampoco pueden despachar los dos: el UPDATE es atómico, uno gana
+    // la fila y el otro recibe 0 filas.
     const { data: notif, error: notifError } = await supabaseAdmin
       .from('notificaciones')
-      .select('id, user_id, pedido_id, mensaje, tipo, grupo_key')
+      .update({ push_despachado_at: new Date().toISOString() })
       .eq('id', notificacion_id)
-      .single()
+      .is('push_despachado_at', null)
+      .select('id, user_id, pedido_id, mensaje, tipo, grupo_key')
+      .maybeSingle()
 
     if (notifError || !notif) {
       return new Response(JSON.stringify({ enviadas: 0 }), {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const AuthContext = createContext(null)
@@ -9,7 +9,17 @@ export function AuthProvider({ children }) {
     profile: null,
   })
 
+  // onAuthStateChange puede disparar varias veces en ráfaga (SIGNED_IN,
+  // TOKEN_REFRESHED, sign out + sign in rápido...) y loadProfile es
+  // async: sin este contador, la llamada que RESUELVE última pisa el
+  // estado aunque haya sido la que ARRANCÓ primero (carrera clásica de
+  // requests fuera de orden). Cada llamada toma un número de secuencia
+  // al arrancar y solo aplica su setState si sigue siendo la vigente.
+  const seqRef = useRef(0)
+
   async function loadProfile(session) {
+    const seq = ++seqRef.current
+
     if (!session) {
       setAuthState({ session: null, profile: null })
       return
@@ -20,6 +30,10 @@ export function AuthProvider({ children }) {
       .select('id, role, full_name, email, area_equipo')
       .eq('id', session.user.id)
       .single()
+
+    // Si mientras esperábamos la respuesta arrancó otra carga (nuevo
+    // evento de auth), este resultado ya está viejo: no tocar nada.
+    if (seq !== seqRef.current) return
 
     setAuthState({ session, profile })
   }

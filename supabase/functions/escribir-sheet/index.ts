@@ -2,6 +2,11 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders, requireUser, errorResponse } from '../_shared/auth.ts'
 
 const SHEET_ID = '1d487ncbJ1y-gP2cS2LtH8kbzT5lQTGKl1F4zcMEfkJk'
+
+// Mismo criterio que delete-user/invite-user: la lista vive en la
+// función (no viene del cliente). Se excluye 'viewer' — rol de solo
+// lectura en toda la app.
+const ROLES_PERMITIDOS = ['super_admin', 'admin', 'colaborador']
 const HOJA_PEDIDOS = 'Pedidos 2026'
 const HOJA_DISENO = 'Diseño piezas 2026'
 
@@ -164,8 +169,12 @@ serve(async (req) => {
   }
 
   try {
-    // Cualquier usuario logueado con perfil válido puede registrar en el Sheet.
-    await requireUser(req)
+    // Registrar en el Sheet es una escritura con efecto externo real
+    // (queda en la planilla oficial): pueden hacerlo los roles que
+    // operan pedidos, pero NO 'viewer' (rol de solo lectura). La UI ya
+    // no le muestra el botón al viewer, pero el enforcement real tiene
+    // que estar acá — el endpoint es alcanzable con cualquier JWT válido.
+    await requireUser(req, ROLES_PERMITIDOS)
 
     const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT')
     if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT secret no configurado')
@@ -181,6 +190,16 @@ serve(async (req) => {
     // data para Hoja 2 (Diseño):
     // [nombre_campana, fecha_pedido, hora_pedido, descripcion,
     //  fecha_entrega, hora_entrega, aclaraciones]
+
+    // 'hoja' se valida estricta: antes cualquier valor distinto de
+    // 'diseno' (incluido undefined o basura) caía silenciosamente en
+    // la hoja de Pedidos — mejor rechazar el request malformado que
+    // escribir una fila en la hoja equivocada.
+    if (hoja !== 'pedidos' && hoja !== 'diseno') {
+      return new Response(JSON.stringify({ error: "'hoja' debe ser 'pedidos' o 'diseno'" }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     const esDiseno = hoja === 'diseno'
     const hojaTarget = esDiseno ? HOJA_DISENO : HOJA_PEDIDOS

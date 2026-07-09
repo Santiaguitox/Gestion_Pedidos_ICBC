@@ -123,6 +123,22 @@ export function usePedidos(filters = {}) {
       .finally(() => setLoading(false))
   }, [filtrosKey, queryPedidos])
 
+  // Set con los ids actualmente visibles, mantenido en un ref para que
+  // el callback del realtime (que vive fuera del ciclo de render) pueda
+  // consultarlo SIN meterse dentro de un updater de setPedidos. Antes
+  // esta decisión se tomaba adentro de setPedidos(actuales => ...), con
+  // dos problemas reales: (a) los updaters deben ser puros — React los
+  // puede invocar más de una vez (StrictMode en dev los duplica
+  // adrede), así que el RPC puntual se disparaba dos veces por evento;
+  // (b) llamar setHayNuevos() dentro de otro updater es un setState
+  // durante la fase de render de esa actualización. Con el ref, la
+  // decisión y los efectos quedan fuera del updater y el updater que
+  // queda (aplicar el resultado del RPC) es puro.
+  const idsVisiblesRef = useRef(new Set())
+  useEffect(() => {
+    idsVisiblesRef.current = new Set(pedidos.map(p => p.id))
+  }, [pedidos])
+
   // Realtime: nunca refetchea toda la lista. Dos casos:
   // 1) El pedido que cambió YA está en la página visible actual -> se
   //    vuelve a pedir ESE pedido puntual (con sus relaciones) y se
@@ -139,30 +155,27 @@ export function usePedidos(filters = {}) {
         const id = payload.new?.id ?? payload.old?.id
         if (!id) return
 
-        setPedidos(actuales => {
-          const yaEstaba = actuales.some(p => p.id === id)
-          if (!yaEstaba) {
-            // Caso 2: pedido nuevo (o uno que paso a matchear pero no
-            // estaba visible) — no se inserta, solo se avisa.
-            setHayNuevos(true)
-            return actuales
-          }
-          // Caso 1: actualizar/quitar en memoria, pidiendo solo esa fila
-          // con los filtros actuales (reusa la lógica de la función SQL).
-          // pagina=0 explícito: con p_solo_id seteado, el resultado tiene
-          // como máximo 1 fila, así que cualquier offset mayor a 0
-          // devolvería vacío — siempre hay que pedir la página 0 acá.
-          rpcListarPedidos(filters, 0, id).then(({ pedidos: encontrados }) => {
-            setPedidos(prev => {
-              if (encontrados.length === 0) {
-                // Ya no matchea los filtros actuales (ej: se finalizó)
-                return prev.filter(p => p.id !== id)
-              }
-              return prev.map(p => (p.id === id ? encontrados[0] : p))
-            })
-          }).catch(err => console.warn('[realtime pedidos]', err))
-          return actuales
-        })
+        if (!idsVisiblesRef.current.has(id)) {
+          // Caso 2: pedido nuevo (o uno que pasó a matchear pero no
+          // estaba visible) — no se inserta, solo se avisa.
+          setHayNuevos(true)
+          return
+        }
+
+        // Caso 1: actualizar/quitar en memoria, pidiendo solo esa fila
+        // con los filtros actuales (reusa la lógica de la función SQL).
+        // pagina=0 explícito: con p_solo_id seteado, el resultado tiene
+        // como máximo 1 fila, así que cualquier offset mayor a 0
+        // devolvería vacío — siempre hay que pedir la página 0 acá.
+        rpcListarPedidos(filters, 0, id).then(({ pedidos: encontrados }) => {
+          setPedidos(prev => {
+            if (encontrados.length === 0) {
+              // Ya no matchea los filtros actuales (ej: se finalizó)
+              return prev.filter(p => p.id !== id)
+            }
+            return prev.map(p => (p.id === id ? encontrados[0] : p))
+          })
+        }).catch(err => console.warn('[realtime pedidos]', err))
       })
       .subscribe()
     return () => supabase.removeChannel(ch)

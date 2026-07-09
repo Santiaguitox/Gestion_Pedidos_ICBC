@@ -31,6 +31,15 @@ export function NotificacionesProvider({ children }) {
   const [sonidoActivo, setSonidoActivo] = useState(() => localStorage.getItem('notif:sonido') !== 'false')
   const feedbackTimer = useRef(null)
 
+  // La suscripción realtime se crea UNA vez por usuario (efecto con
+  // deps [user?.id, ...]), así que su callback captura el valor de
+  // sonidoActivo del render en que se montó — si el usuario apaga el
+  // sonido después, el closure viejo seguiría sonando. El ref siempre
+  // refleja el valor actual sin obligar a re-suscribir el canal cada
+  // vez que cambia la preferencia.
+  const sonidoRef = useRef(sonidoActivo)
+  useEffect(() => { sonidoRef.current = sonidoActivo }, [sonidoActivo])
+
   // El contador del badge se DERIVA de la lista (una sola fuente de
   // verdad, sin contadores manuales que puedan desincronizarse) y
   // cuenta GRUPOS no leídos, no filas: una ráfaga de cambios de estado
@@ -71,7 +80,7 @@ export function NotificacionesProvider({ children }) {
     if (!n) return
     setToast(n)
     setTimeout(() => setToast(null), 10000)
-    if (document.hidden && sonidoActivo) playNotifSound()
+    if (document.hidden && sonidoRef.current) playNotifSound()
   }
 
   useEffect(() => {

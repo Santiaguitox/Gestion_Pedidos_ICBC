@@ -19,17 +19,30 @@ import { actualizarCampoEnHtml, detectarCampos } from '@/lib/editor/campos.js'
 import { detectarRedesSociales, reordenarRedesSociales } from '@/lib/editor/redesSociales.js'
 import { generarExport, wrapPreview } from '@/lib/editor/exportar.js'
 
+import { generarThumbSVG } from '@/lib/editor/thumbs.js'
+import {
+  importarDesdeHtml,
+  importarHeuristico,
+  marcarBloquesNoReconocidosParaPreview,
+  marcarEstructurasObsoletasParaPreview,
+  tituloYDetalleDeAviso,
+} from '@/lib/editor/importar.js'
+
 // Detección de mobile por viewport — mismo breakpoint (768px) que ya
 // usa EditorPiezas.css para ocultar los paneles laterales en desktop.
 // No toca ningún camino de desktop: solo decide qué árbol renderizar.
-// Se usa el lado más chico del viewport (no innerWidth solo) para que
-// no cambie al rotar el dispositivo: el ancho de un celular grande en
-// horizontal (ej. iPhone Pro Max ~926px) supera fácil los 768px y
-// haría que, al rotarlo, se muestre de golpe el editor de escritorio
-// completo en vez del mobile. El lado corto de un celular no cambia
-// entre portrait y landscape, así que basarse en el mínimo mantiene
-// la misma versión del editor sin importar la orientación.
-function useIsMobile(breakpoint = 768) {
+//
+// OJO: NO es el mismo hook que src/hooks/useIsMobile.js (que mide solo
+// innerWidth con breakpoint 640) — por eso el nombre distinto, para que
+// nadie los confunda ni "unifique" sin querer. Acá se usa el lado más
+// chico del viewport (no innerWidth solo) para que no cambie al rotar
+// el dispositivo: el ancho de un celular grande en horizontal (ej.
+// iPhone Pro Max ~926px) supera fácil los 768px y haría que, al
+// rotarlo, se muestre de golpe el editor de escritorio completo en vez
+// del mobile. El lado corto de un celular no cambia entre portrait y
+// landscape, así que basarse en el mínimo mantiene la misma versión
+// del editor sin importar la orientación.
+function useIsMobileLadoCorto(breakpoint = 768) {
   const medir = () => Math.min(window.innerWidth, window.innerHeight) <= breakpoint
   const [isMobile, setIsMobile] = useState(medir)
   useEffect(() => {
@@ -39,14 +52,6 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint])
   return isMobile
 }
-import { generarThumbSVG } from '@/lib/editor/thumbs.js'
-import {
-  importarDesdeHtml,
-  importarHeuristico,
-  marcarBloquesNoReconocidosParaPreview,
-  marcarEstructurasObsoletasParaPreview,
-  tituloYDetalleDeAviso,
-} from '@/lib/editor/importar.js'
 
 // Ícono + color por tipo de aviso real ('no-reconocido', 'fuera-de-
 // rango', 'obsoleto', 'general') — mismos colores que ya usa el resto
@@ -1222,7 +1227,7 @@ function headerDesdeSlag(slug) {
 
 export default function EditorPiezas() {
   useDocumentTitle('Editor de Piezas')
-  const isMobile = useIsMobile()
+  const isMobile = useIsMobileLadoCorto()
 
   const { showSuccess } = useNotificaciones()
   const [busqueda, setBusqueda] = useState('')

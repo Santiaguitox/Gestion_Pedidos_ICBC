@@ -51,7 +51,12 @@ export function createCachedResource({ table, select = '*', orderBy, ascending =
       try {
         let query = supabase.from(table).select(select)
         if (orderBy) query = query.order(orderBy, { ascending })
-        const { data: rows } = await query
+        const { data: rows, error } = await query
+        // Un error acá NO debe cachearse como "lista vacía": la UI
+        // mostraría "no hay estados/tipos" (mentira) y el cache
+        // impediría cualquier reintento posterior. Se propaga: cache
+        // queda en null, así el próximo mount o refetch reintenta.
+        if (error) throw new Error(error.message || `No se pudo cargar ${table}`)
         const result = rows ?? []
         notify(result)
         return result
@@ -65,12 +70,16 @@ export function createCachedResource({ table, select = '*', orderBy, ascending =
   return function useCachedResource() {
     const [data, setData] = useState(cache ?? [])
     const [loading, setLoading] = useState(!cache)
+    const [error, setError] = useState(null)
 
     useEffect(() => {
       listeners.push(setData)
       if (!cache) {
         setLoading(true)
-        loadData().finally(() => setLoading(false))
+        loadData()
+          .then(() => setError(null))
+          .catch(err => setError(err.message))
+          .finally(() => setLoading(false))
       }
       return () => { listeners = listeners.filter(fn => fn !== setData) }
     }, [])
@@ -81,11 +90,16 @@ export function createCachedResource({ table, select = '*', orderBy, ascending =
       setLoading(true)
       try {
         await loadData()
+        setError(null)
+      } catch (err) {
+        setError(err.message)
       } finally {
         setLoading(false)
       }
     }
 
-    return { [key]: data, loading, refetch }
+    // `error` es aditivo: ningún call site existente lo desestructura,
+    // así que nadie se rompe — los que quieran mostrarlo, lo toman.
+    return { [key]: data, loading, error, refetch }
   }
 }
