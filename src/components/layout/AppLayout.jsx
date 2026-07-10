@@ -271,7 +271,10 @@ export default function AppLayout() {
         {/* Topbar mobile */}
         <div className="mobile-topbar">
           <div className="mobile-topbar-logo">
-            <LogoRotator variant="mobile" />
+            {/* Variante 'full' a propósito: los isos quedaban muy chicos en
+                el celu. La lógica dark/light del ICBC viene incluida en la
+                variante (LogoRotator hace el swap según el tema). */}
+            <LogoRotator variant="full" />
           </div>
           <div className="mobile-topbar-actions">
             <button onClick={() => setShowBuscador(true)} className="mobile-search-btn" title="Buscar">

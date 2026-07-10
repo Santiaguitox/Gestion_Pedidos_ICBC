@@ -5764,6 +5764,16 @@ select:focus {
     gap: 0.25rem;
   }
 
+  /* Logo completo en la topbar mobile (los isos quedaban muy chicos).
+     Override scoped a este contenedor: el .logo-rotator-full base
+     (100x30) sigue siendo el del sidebar desktop. 32px de alto deja
+     el icomm en ~109px de ancho y el ICBC en ~88px, ambos entran en
+     los 112px del contenedor sin recorte (object-fit: contain). */
+  .mobile-topbar-logo .logo-rotator-full {
+    width: 112px;
+    height: 32px;
+  }
+
   .mobile-topbar-actions {
     display: flex;
     align-items: center;

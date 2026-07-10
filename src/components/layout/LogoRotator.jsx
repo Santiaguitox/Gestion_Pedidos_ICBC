@@ -13,9 +13,12 @@ import icbcLogoMobile from '@/assets/ICBC_Logo_Mobile.png'
 const DELAY_MS = 10000
 
 // variant 'full' = logo completo (isotipo + nombre), usado en el
-// sidebar expandido. variant 'mobile' = solo el isotipo (cuadrado),
-// usado en el sidebar colapsado de desktop Y en la topbar de mobile
-// real — ambos casos comparten el mismo par de imágenes reducidas.
+// sidebar expandido Y en la topbar de mobile real (los isos quedaban
+// muy chicos en el celu — el sizing de cada contexto vive en CSS:
+// .logo-rotator-full para el sidebar, y un override scoped a
+// .mobile-topbar-logo para la topbar). variant 'mobile' = solo el
+// isotipo (cuadrado), usado únicamente en el sidebar colapsado de
+// desktop.
 //
 // El ICBC "full" tiene una franja en negro que no se lee bien sobre
 // el fondo oscuro del sidebar — 'fullDark' es la misma pieza con esa
