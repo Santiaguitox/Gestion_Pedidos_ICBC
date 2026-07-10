@@ -103,7 +103,7 @@ function sanitizarNombreZip(nombre) {
 function nombreArchivo(pieza) {
   const base = (pieza.nombre_pieza || pieza.link_online || 'pieza')
     .replace(/https?:\/\/[^/]+\/?/, '')
-    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
     .slice(0, 80)

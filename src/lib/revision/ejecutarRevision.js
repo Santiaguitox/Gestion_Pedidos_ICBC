@@ -39,7 +39,7 @@ export function identificadorPieza(url) {
 // principales, y devuelve el mismo objeto 'resultados' que ya consume
 // ResultadoPanel.jsx — sin cambiar su forma, para no romper esa pantalla.
 export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
-  let htmlAAnalizar = ''
+  let htmlAAnalizar
 
   if (modo === 'html') {
     htmlAAnalizar = html
@@ -75,7 +75,10 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     try {
       const response = await fetch(`${REVISION_CONFIG.PROXY_URL}?modo=imagen&url=${encodeURIComponent(src)}`)
       if (response.ok) cacheDatos[src] = await response.json()
-    } catch {}
+    } catch {
+      // Imagen que no se pudo medir: queda sin datos en el cache y el
+      // validador la reporta como no verificable — no corta la revisión.
+    }
     completadas++
     const porcentaje = srcList.length > 0 ? 10 + Math.round((completadas / srcList.length) * 80) : 50
     onProgreso?.(`Verificando imagen ${completadas} de ${srcList.length}...`, porcentaje)

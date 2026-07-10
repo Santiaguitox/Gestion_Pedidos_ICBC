@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { X } from 'lucide-react'
 import { format } from 'date-fns'

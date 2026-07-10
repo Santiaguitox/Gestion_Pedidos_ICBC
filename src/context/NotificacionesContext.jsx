@@ -20,7 +20,11 @@ function playNotifSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.35)
-  } catch {}
+  } catch {
+    // El beep es cosmético: si AudioContext no está disponible o el
+    // navegador lo bloquea (autoplay policy), la notificación sigue
+    // llegando igual — no hay nada que recuperar acá.
+  }
 }
 
 export function NotificacionesProvider({ children }) {

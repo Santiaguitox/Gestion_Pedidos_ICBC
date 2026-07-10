@@ -1,4 +1,4 @@
-import { decodeLatin1, detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
+import { detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
 
 const DISPOSABLE_DOMAINS = new Set([
   'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','yopmail.com',
@@ -86,7 +86,7 @@ function validateRow(row, emailCol, nameCol, seenEmails, rowNum) {
       if (GENERIC_NAMES.has(name.toLowerCase())) {
         issues.push({ type: 'warning', code: 'GENERIC_NAME', msg: `Nombre genérico: "${name}"` });
       }
-      if (/[<>{}\\|\/\d]/.test(name)) {
+      if (/[<>{}\\|/\d]/.test(name)) {
         issues.push({ type: 'warning', code: 'ODD_NAME', msg: 'Nombre con caracteres raros o números' });
       }
       if (name.length < 2) {
@@ -100,9 +100,6 @@ function validateRow(row, emailCol, nameCol, seenEmails, rowNum) {
 
 let storedAllRows = [];
 let storedHeaderLine = '';
-let storedEmailCol = null;
-let storedSep = ';';
-let storedHeaders = [];
 let originalEmailSet = new Set();
 
 self.onmessage = async (e) => {
@@ -230,9 +227,6 @@ async function handleAnalyze({ file }) {
 
     storedAllRows = allRows;
     storedHeaderLine = headerLine;
-    storedEmailCol = emailCol;
-    storedSep = sep;
-    storedHeaders = headers;
 
     self.postMessage({
       type: 'done',

@@ -4,7 +4,7 @@ import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 import { validateCsvHeaders } from '@/lib/revision-envios/comparar'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Database, CheckCircle2, AlertCircle, AlertTriangle, ExternalLink } from 'lucide-react'
+import { CheckCircle2, AlertCircle, AlertTriangle, ExternalLink } from 'lucide-react'
 
 // Una fila por evaluación (base × pieza) — "La base en negrita es/no es
 // compatible con la pieza, por estos campos". Mismo nivel de detalle

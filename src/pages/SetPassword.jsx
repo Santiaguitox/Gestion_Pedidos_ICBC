@@ -15,7 +15,10 @@ export default function SetPassword() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [ready, setReady] = useState(false)
+  // Nadie lee ready hoy (la pantalla no bloquea el form), pero el
+  // listener de PASSWORD_RECOVERY se conserva tal cual: tocar el flujo
+  // de recuperación sin poder probarlo end-to-end no vale un lint.
+  const [, setReady] = useState(false)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {

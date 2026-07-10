@@ -193,7 +193,7 @@ export function ValidarLinks(doc) {
     const esWhatsapp = href.includes('wa.me') || href.includes('api.whatsapp.com')
     const esWeb = href.startsWith('https://') || href.startsWith('http://')
 
-    const textoPareceTelefono = /^[\d\s\+\-\(\)]+$/.test(texto) && texto.replace(/\D/g, '').length >= 7
+    const textoPareceTelefono = /^[\d\s+\-()]+$/.test(texto) && texto.replace(/\D/g, '').length >= 7
     const textoPareceEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto)
     const textoPareceWeb = /^https?:\/\//.test(texto) || /^www\./.test(texto)
 

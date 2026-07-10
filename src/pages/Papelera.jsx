@@ -7,6 +7,7 @@ import { PRIORIDADES } from '@/lib/constants'
 import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
 import { Trash2, RotateCcw } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -16,7 +17,9 @@ export default function Papelera() {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const { tipos } = useTipos()
-  const { restaurarPedido } = usePedidos()
+  const { restaurarPedido, eliminarPedidoDefinitivo } = usePedidos()
+  // Pedido pendiente de confirmación de borrado definitivo (o null).
+  const [confirmDefinitivo, setConfirmDefinitivo] = useState(null)
   const { showSuccess, showError } = useNotificaciones()
 
   async function queryEliminados() {
@@ -45,6 +48,21 @@ export default function Papelera() {
       fetchEliminados()
     } catch (err) {
       showError(err.message || 'No se pudo restaurar el pedido')
+    }
+  }
+
+  // La ruta ya es solo super_admin, pero el permiso REAL vive en la
+  // RPC (security definer): si algún día la ruta se abre a admin, el
+  // botón fallará con el mensaje del server en vez de borrar.
+  async function handleEliminarDefinitivo() {
+    const pedido = confirmDefinitivo
+    setConfirmDefinitivo(null)
+    try {
+      await eliminarPedidoDefinitivo(pedido.id)
+      showSuccess('Pedido eliminado definitivamente')
+      fetchEliminados()
+    } catch (err) {
+      showError(err.message || 'No se pudo eliminar el pedido')
     }
   }
 
@@ -82,13 +100,28 @@ export default function Papelera() {
                   el {format(new Date(p.deleted_at), "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es })}
                 </span>
               </div>
-              <button onClick={() => handleRestaurar(p.id)} className="btn-restaurar">
-                <RotateCcw size={14} />Restaurar
-              </button>
+              <div className="papelera-item-acciones">
+                <button onClick={() => handleRestaurar(p.id)} className="btn-restaurar">
+                  <RotateCcw size={14} />Restaurar
+                </button>
+                <button onClick={() => setConfirmDefinitivo(p)} className="btn-eliminar-definitivo">
+                  <Trash2 size={14} />Eliminar definitivamente
+                </button>
+              </div>
             </div>
           )
         })}
       </div>
+
+      <ConfirmModal
+        open={!!confirmDefinitivo}
+        title="Eliminar definitivamente"
+        message={confirmDefinitivo ? `"${confirmDefinitivo.asunto}" se va a borrar de forma PERMANENTE, junto con sus subtareas, entregables, comentarios y todo su historial. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar para siempre"
+        variant="danger"
+        onConfirm={handleEliminarDefinitivo}
+        onCancel={() => setConfirmDefinitivo(null)}
+      />
 
     </div>
   )

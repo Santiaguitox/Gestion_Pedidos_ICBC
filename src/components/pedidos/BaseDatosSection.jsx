@@ -30,7 +30,7 @@ async function verificarPieza(headerLine, pieza) {
     const html = await traerHtml(pieza.link_online)
     const cmp = compararCampos(headerLine, html)
     return { entregable_id: pieza.id, nombre_pieza: pieza.nombre_pieza || null, tipo: 'ok', miss: cmp.miss }
-  } catch (e) {
+  } catch {
     return { entregable_id: pieza.id, nombre_pieza: pieza.nombre_pieza || null, tipo: 'error_proxy', miss: [] }
   }
 }
@@ -364,7 +364,7 @@ export function BaseDatosSection({ pedidoId, canWrite, onUpdate, entregables, ba
     let headerLine = ''
     let insertedBase = null
 
-    const [leidoResult] = await Promise.all([
+    await Promise.all([
       leerMuestraDeArchivo(file)
         .then(r => { headerLine = r.headerLine; return r })
         .catch(e => { setError(e.message || 'No se pudo leer el archivo.'); return null }),

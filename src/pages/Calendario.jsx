@@ -5,6 +5,7 @@ import { usePedidos } from '@/hooks/usePedidos'
 import { useEstados } from '@/hooks/useEstados'
 import { PRIORIDADES } from '@/lib/constants'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isToday, isPast } from 'date-fns'
+import { esVencido } from '@/lib/fechas'
 import { es } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
@@ -106,7 +107,6 @@ export default function Calendario() {
 
   // Todos los pedidos con fecha, sin importar estado
   const todosConFecha = pedidos.filter(p => p.fecha_limite)
-  const activosConFecha = todosConFecha.filter(p => !p.estados?.includes('finalizado'))
 
   const diaRef = selectedDay ?? new Date()
   const pedidosDia = todosConFecha.filter(p => isSameDay(new Date(p.fecha_limite + 'T00:00:00'), diaRef))
@@ -117,7 +117,10 @@ export default function Calendario() {
     const d = new Date(p.fecha_limite + 'T00:00:00')
     return d >= startOfMonth(currentDate) && d <= endOfMonth(currentDate)
   })
-  const vencidosMes = pedidosMes.filter(p => isPast(new Date(p.fecha_limite + 'T00:00:00')) && !p.estados?.includes('finalizado'))
+  // esVencido en vez de isPast(medianoche): con isPast, un pedido que
+  // vence HOY figuraba como vencido desde las 00:01 — mientras el
+  // Dashboard lo mostraba en "Hoy". Criterio único en lib/fechas.js.
+  const vencidosMes = pedidosMes.filter(p => esVencido(p.fecha_limite) && !p.estados?.includes('finalizado'))
 
   // Timeline: agrupar todos (activos + finalizados) por día
   const pedidosPorDia = days.reduce((acc, day) => {

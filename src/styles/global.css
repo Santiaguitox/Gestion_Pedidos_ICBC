@@ -3768,6 +3768,38 @@ select:focus {
   color: #10B981;
 }
 
+/* ── Borrado definitivo (Papelera, solo super_admin) ──
+   Hermano visual de .btn-restaurar pero con hover en el rojo de
+   peligro: misma jerarquía tipográfica, señal opuesta. Las dos
+   acciones conviven apiladas en mobile vía el contenedor. */
+
+.papelera-item-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-eliminar-definitivo {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-eliminar-definitivo:hover {
+  border-color: #D0111B;
+  color: #D0111B;
+}
+
 /* ─── Usuarios ────────────────────────────────────────────────────────────── */
 .usuario-item {
   display: flex;

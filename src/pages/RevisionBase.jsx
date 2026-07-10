@@ -49,7 +49,9 @@ export default function RevisionBase() {
   const [stats, setStats] = useState(null)
   const [issueRowsByCode, setIssueRowsByCode] = useState({})
   const [issueSummary, setIssueSummary] = useState({})
-  const [headers, setHeaders] = useState([])
+  // El getter dejó de usarse cuando la tabla de headers pasó al worker;
+  // el setter sigue recibiendo el dato del parseo por si vuelve a UI.
+  const [, setHeaders] = useState([])
   const [emailCol, setEmailCol] = useState(null)
   const [activeCode, setActiveCode] = useState(null)
   const [detailPage, setDetailPage] = useState(0)

@@ -304,7 +304,7 @@ function RichEditor({ value, onChange }) {
 }
 
 // ─── Campo de imagen con alerta de dimensiones ──────────────────────────────
-function CampoImagen({ campo, onActualizar, onReset }) {
+function CampoImagen({ campo, onActualizar }) {
   const [srcLocal, setSrcLocal] = useState(campo.src)
   const [altLocal, setAltLocal] = useState(campo.alt)
   const [titleLocal, setTitleLocal] = useState(campo.title)
@@ -437,7 +437,7 @@ function CampoImagen({ campo, onActualizar, onReset }) {
 // del array ES el orden final en el export — no hay una zona separada
 // de "disponibles" vs "activas", todo vive en una sola lista, más
 // simple de entender de un vistazo.
-function PanelEditorHeader({ bandaHeader, redesOrden, onToggle, onReordenar }) {
+function PanelEditorHeader({ redesOrden, onToggle, onReordenar }) {
   const [dragKey, setDragKey] = useState(null)
   const redes = redesOrden ?? []
 
@@ -684,24 +684,6 @@ function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
     // solo dentro de commitImagenLibre. Los estados controlled de
     // cada input (ilSrc, ilAlt, etc.) están declarados al nivel del
     // componente para respetar las reglas de hooks.
-    const imgMatch = htmlLocal.match(/<img([^>]*)>/i)
-    const imgAttrs = imgMatch ? imgMatch[1] : ''
-    const getAttr = (name) => {
-      const m = imgAttrs.match(new RegExp(`${name}=["']([^"']*)["']`, 'i'))
-      return m ? m[1] : ''
-    }
-    const getStyleProp = (prop) => {
-      const m = imgAttrs.match(new RegExp(`${prop}:\\s*([\\d.]+)px`, 'i'))
-      return m ? m[1] : ''
-    }
-    const getClass = () => {
-      const m = imgAttrs.match(/class=["']([^"']*)["']/i)
-      return m ? m[1] : ''
-    }
-    // Link: detecta si la imagen está envuelta en un <a href="...">
-    const linkMatch = htmlLocal.match(/<a\s[^>]*href=["']([^"']*)["'][^>]*>\s*<img/i)
-    const linkActual = linkMatch ? linkMatch[1] : ''
-
     // Aplica un cambio puntual sobre htmlLocal y lo propaga al editor
     // inmediatamente (auto-save en blur) — el botón "Aplicar" llama
     // a aplicar() que hace el mismo onActualizar con feedback visual.
@@ -747,15 +729,23 @@ function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
         }
         // link: envolver o actualizar el <a> que rodea la imagen
         if (cambios.link !== undefined) {
+          // Saneado antes de interpolar en el atributo: una URL pegada
+          // con comillas dobles cortaba el href y deformaba el HTML de
+          // la pieza exportada. Además, el reemplazo usa FUNCIÓN en vez
+          // de string template: en un string de replace(), $& / $1 / $$
+          // son secuencias especiales — una URL que las contuviera (los
+          // links de tracking suelen traer $ en los params) se
+          // expandiría a cualquier cosa. La función los toma literales.
           const tieneLink = /<a\s[^>]*href=/i.test(h)
+          const linkSeguro = cambios.link.replaceAll('"', '&quot;')
           if (cambios.link.trim() === '') {
             // Quitar el <a> si existía
             h = h.replace(/<a\s[^>]*>\s*(<img[^>]*>)\s*<\/a>/i, '$1')
           } else if (tieneLink) {
-            h = h.replace(/(<a\s[^>]*)\bhref=["'][^"']*["']/i, `$1href="${cambios.link}"`)
+            h = h.replace(/(<a\s[^>]*)\bhref=["'][^"']*["']/i, (_, antes) => `${antes}href="${linkSeguro}"`)
           } else {
             // Envolver la imagen en un <a> nuevo
-            h = h.replace(/(<img[^>]*>)/i, `<a href="${cambios.link}" target="_blank">$1</a>`)
+            h = h.replace(/(<img[^>]*>)/i, (img) => `<a href="${linkSeguro}" target="_blank">${img}</a>`)
           }
         }
         return h
@@ -1365,7 +1355,6 @@ export default function EditorPiezas() {
   const bloquesFiltradosHeader = BLOQUES_HEADER.filter(b => b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
   const bloquesFiltradosContenido = BLOQUES_CONTENIDO.filter(b =>
     b.slug !== 'Espaciador' && b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-  const categoriasContenido = [...new Set(bloquesFiltradosContenido.map(b => b.categoria))]
 
   // ── Guardado automático en localStorage ────────────────────────────
   // setBorrador viene de useLocalStorage — ya tiene el try/catch
@@ -2872,7 +2861,7 @@ function EditorMobile(props) {
     analizarImportacion, confirmarImportacion, cerrarModalImportar,
     bandaHeader,
     redesOrden, redesDetectadas, toggleRedActiva, reordenarPillRed,
-    canvas, selectedId, setSelectedId, selectedBloque,
+    canvas, setSelectedId, selectedBloque,
     nuevaPieza,
     agregarAlCanvas, agregarEspaciadorDespues, agregarCodigo, eliminarBloque,
     htmlEspaciadorConAlto,

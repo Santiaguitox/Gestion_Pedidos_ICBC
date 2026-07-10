@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { usePedidos } from '@/hooks/usePedidos'

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Upload, Plus, X, Download, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 
 function fmt(n) { return Number(n).toLocaleString('es-AR') }

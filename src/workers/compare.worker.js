@@ -19,7 +19,7 @@
 //    pero el uso de memoria no escala con la cantidad de contactos.
 // ════════════════════════════════════════════════════════════════════════
 
-import { decodeLatin1, detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
+import { detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
 

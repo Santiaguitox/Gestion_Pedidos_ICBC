@@ -312,10 +312,20 @@ export function usePedidos(filters = {}) {
     // según corresponda (ver casos 1 y 2 más arriba).
   }
 
+  // Borrado DEFINITIVO — irreversible, solo super_admin y solo sobre
+  // pedidos ya en la papelera; la RPC valida todo server-side y limpia
+  // los hijos sin cascade en una sola transacción (ver migración
+  // 20260710100000). No se registra actividad: la actividad del pedido
+  // se va con él.
+  async function eliminarPedidoDefinitivo(id) {
+    const { error } = await supabase.rpc('eliminar_pedido_definitivo', { p_pedido_id: id })
+    if (error) throw error
+  }
+
   return {
     pedidos, total, loading, error, hayNuevos, verNuevos,
     cargarMas, cargandoMas, hayMas: pedidos.length < total,
-    crearPedido, actualizarPedido, eliminarPedido, restaurarPedido,
+    crearPedido, actualizarPedido, eliminarPedido, restaurarPedido, eliminarPedidoDefinitivo,
     refetch: fetchPedidos,
   }
 }

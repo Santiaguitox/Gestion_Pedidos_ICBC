@@ -203,11 +203,9 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
 }
 
 export default function AppLayout() {
-  const { theme } = useTheme()
   const { role } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [showCambiarPassword, setShowCambiarPassword] = useState(false)
   const [showPerfil, setShowPerfil] = useState(false)
   const [showBuscador, setShowBuscador] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
@@ -221,12 +219,12 @@ export default function AppLayout() {
     function onKeyDown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        if (!showCambiarPassword && !showPerfil) setShowBuscador(true)
+        if (!showPerfil) setShowBuscador(true)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [showCambiarPassword, showPerfil])
+  }, [showPerfil])
 
   // El drawer se cierra desde el onClick de cada NavLink (onNavClick, ver
   // SidebarContent más abajo) — no hace falta un efecto aparte. Mientras

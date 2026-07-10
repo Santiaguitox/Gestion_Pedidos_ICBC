@@ -632,7 +632,7 @@ export default function RevisionEnvios() {
                         </thead>
                         <tbody>
                           {[...resultado.htmlFields].sort().map(f => {
-                            const inBase = resultado.headersMap.hasOwnProperty(f.toLowerCase())
+                            const inBase = Object.hasOwn(resultado.headersMap, f.toLowerCase())
                             const colName = inBase ? resultado.headersMap[f.toLowerCase()] : null
                             return (
                               <tr key={f}>

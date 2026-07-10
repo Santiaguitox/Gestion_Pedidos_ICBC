@@ -10,9 +10,12 @@ import {
   ChevronDown, ChevronUp, LayoutList, AlignJustify, Filter, Tag, X,
   Calendar, CalendarOff,
 } from 'lucide-react'
-import { startOfWeek, endOfWeek, addWeeks, differenceInDays, format } from 'date-fns'
+import { endOfWeek, addWeeks, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+// calcularGrupo vivía acá y se mudó a lib (lo comparten CargaTrabajoModal
+// y el criterio de vencido del Calendario) — ver src/lib/fechas.js.
+import { calcularGrupo } from '@/lib/fechas'
 import { useTipos } from '@/hooks/useTipos'
 import { useTagsDisponibles } from '@/hooks/useTagsDisponibles'
 import { useUsuarios } from '@/hooks/useUsuarios'
@@ -45,31 +48,6 @@ const GRUPOS_META = [
 // prominentes — en cambio, cuando SÍ hay vencidos, se destaca con su
 // propio acordeón de alerta arriba de todo (ver VencidosAcordeon).
 const STAT_CARDS_KEYS = ['hoy', 'mañana', 'esta_semana', 'proxima_semana', 'sin_fecha']
-
-// Clasifica un pedido (ya activo, sin 'finalizado') en uno de los 7
-// grupos semánticos, según su fecha_limite respecto a hoy. El orden de
-// evaluación es deliberado: Hoy/Mañana siempre "ganan" sobre la semana a
-// la que pertenecen, incluso si caen sábado/domingo (ver discusión del
-// 2026-06-20 en el spec).
-export function calcularGrupo(pedido, hoy) {
-  if (!pedido.fecha_limite) return 'sin_fecha'
-
-  const fecha = new Date(pedido.fecha_limite + 'T00:00:00')
-  const dias = differenceInDays(fecha, hoy)
-
-  if (dias < 0) return 'vencidos'
-  if (dias === 0) return 'hoy'
-  if (dias === 1) return 'mañana'
-
-  const finEstaSemana = endOfWeek(hoy, { weekStartsOn: 1 })
-  if (fecha <= finEstaSemana) return 'esta_semana'
-
-  const inicioProxSemana = startOfWeek(addWeeks(hoy, 1), { weekStartsOn: 1 })
-  const finProxSemana = endOfWeek(addWeeks(hoy, 1), { weekStartsOn: 1 })
-  if (fecha >= inicioProxSemana && fecha <= finProxSemana) return 'proxima_semana'
-
-  return 'mas_adelante'
-}
 
 function GrupoSemantico({ meta, pedidos, vista, onTagClick, filtroTag, tipos, estados, limite, role }) {
   // El Hook va ANTES del early return de abajo — las reglas de Hooks de

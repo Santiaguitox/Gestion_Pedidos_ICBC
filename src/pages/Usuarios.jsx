@@ -6,6 +6,12 @@ import { useNotificaciones } from '@/context/NotificacionesContext'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { ROLES, ROLE_COLORS } from '@/lib/constants'
+// Catálogo compartido de usuarios (cache a nivel de módulo que consumen
+// los selectores de asignación en Dashboard/Pedidos y las @menciones):
+// esta página es la ÚNICA que altera usuarios, así que es la
+// responsable de invalidarlo — sin el refetch, un invitado nuevo (o un
+// rol/color editado) no aparecía en los selectores hasta un F5.
+import { useUsuarios } from '@/hooks/useUsuarios'
 import { Badge } from '@/components/ui/Badge'
 import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus, KeyRound } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -41,11 +47,10 @@ export default function Usuarios() {
   const [showCargaTrabajo, setShowCargaTrabajo] = useState(false)
   const [form, setForm] = useState({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
   const [inviting, setInviting] = useState(false)
+  const { refetch: refetchCatalogoUsuarios } = useUsuarios()
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
-  const [deletingId, setDeletingId] = useState(null)
   const [confirmEliminar, setConfirmEliminar] = useState(null)
-  const [editingUserId, setEditingUserId] = useState(null)
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [editForm, setEditForm] = useState({ role: '', area_equipo: '', avatar_color: '' })
   const [savingEdit, setSavingEdit] = useState(false)
@@ -92,6 +97,9 @@ export default function Usuarios() {
           : u
         )
       )
+      // El catálogo también guarda avatar_color (popup de menciones) y
+      // el rol filtra viewers en PedidoDetalle: la edición lo invalida.
+      refetchCatalogoUsuarios()
       cerrarEditarUsuario()
       showSuccess('Usuario actualizado correctamente')
     } catch (err) {
@@ -105,19 +113,6 @@ export default function Usuarios() {
     supabase.from('profiles').select('*').order('full_name').then(({ data }) => {
       setUsuarios(data ?? []); setLoading(false)
     })
-  }
-
-  async function cambiarRol(id, newRole) {
-    if (newRole === ROLES.SUPER_ADMIN && myRole !== ROLES.SUPER_ADMIN) return
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id)
-    if (error) { showError(error.message || 'No se pudo actualizar el rol'); return }
-    setUsuarios(u => u.map(x => x.id === id ? { ...x, role: newRole } : x))
-  }
-
-  async function cambiarArea(id, area) {
-    const { error } = await supabase.from('profiles').update({ area_equipo: area || null }).eq('id', id)
-    if (error) { showError(error.message || 'No se pudo actualizar el área'); return }
-    setUsuarios(u => u.map(x => x.id === id ? { ...x, area_equipo: area } : x))
   }
 
   function pedirEliminarUsuario(u) { setConfirmEliminar(u) }
@@ -148,7 +143,6 @@ export default function Usuarios() {
 
   async function eliminarUsuario(u) {
     setConfirmEliminar(null)
-    setDeletingId(u.id)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
@@ -159,11 +153,10 @@ export default function Usuarios() {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error ?? 'Error al eliminar usuario')
       setUsuarios(prev => prev.filter(x => x.id !== u.id))
+      refetchCatalogoUsuarios()
       showSuccess(`Usuario ${u.full_name || u.email} eliminado`)
     } catch (err) {
       showError(err.message || 'Error al eliminar usuario')
-    } finally {
-      setDeletingId(null)
     }
   }
 
@@ -185,6 +178,7 @@ export default function Usuarios() {
       setInviteSuccess(`Invitación enviada a ${form.email}`)
       setForm({ email: '', full_name: '', role: 'colaborador', area_equipo: '' })
       fetchUsuarios()
+      refetchCatalogoUsuarios()
       // Cierra el modal solo, dando un instante para que se vea el
       // mensaje de éxito antes de desaparecer — mejor que cerrarlo de
       // golpe sin ninguna confirmación visible.

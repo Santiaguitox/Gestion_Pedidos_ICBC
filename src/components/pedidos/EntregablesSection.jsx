@@ -412,7 +412,7 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
       } else {
         notificarDescargaViewer([pieza.nombre_pieza || pieza.link_online], 'individual')
       }
-    } catch (e) {
+    } catch {
       // error de red/proxy — ignorar silenciosamente en local
     }
   }
@@ -432,7 +432,7 @@ export function EntregablesSection({ pedidoId, entregables, canWrite, isSuperAdm
       } else {
         notificarDescargaViewer(piezasConLink.map(p => p.nombre_pieza || p.link_online), 'zip')
       }
-    } catch (e) {
+    } catch {
       // error de red/proxy — ignorar silenciosamente en local
     }
   }

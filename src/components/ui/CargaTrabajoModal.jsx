@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { calcularGrupo } from '@/pages/Dashboard'
+import { calcularGrupo } from '@/lib/fechas'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 
 // Categorías de urgencia, en el mismo orden que ya usa el Dashboard

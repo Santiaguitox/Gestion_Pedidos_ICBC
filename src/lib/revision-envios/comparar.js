@@ -127,8 +127,8 @@ export function compararCampos(headersRaw, htmlRaw) {
   headers.forEach(h => { headersMap[h.toLowerCase()] = h })
   const htmlFieldsLower = new Set([...htmlFields].map(f => f.toLowerCase()))
 
-  const ok = [...htmlFields].filter(f => headersMap.hasOwnProperty(f.toLowerCase()))
-  const miss = [...htmlFields].filter(f => !headersMap.hasOwnProperty(f.toLowerCase()))
+  const ok = [...htmlFields].filter(f => Object.hasOwn(headersMap, f.toLowerCase()))
+  const miss = [...htmlFields].filter(f => !Object.hasOwn(headersMap, f.toLowerCase()))
   const unused = headers.filter(h => !htmlFieldsLower.has(h.toLowerCase()))
 
   return { headers, htmlFields, headersMap, ok, miss, unused }
@@ -166,7 +166,7 @@ async function leerHeaderXlsx(file) {
     while (offset < zipBuffer.byteLength - 4) {
       const sig = view.getUint32(offset, true)
       if (sig !== 0x04034b50) break // Local file header signature
-      const flags      = view.getUint16(offset + 6, true)
+      // (offset + 6 son los flags del header — no se usan acá)
       const compressed = view.getUint16(offset + 8, true)
       const compSize   = view.getUint32(offset + 18, true)
       const uncompSize = view.getUint32(offset + 22, true)
@@ -244,7 +244,7 @@ async function leerHeaderXlsx(file) {
     const tipo = cell.getAttribute('t')
     const vEl  = cell.querySelector('v')
     if (!vEl) return
-    let valor = ''
+    let valor
     if (tipo === 's') {
       // Shared string — resolver por índice
       valor = sharedStrings[parseInt(vEl.textContent, 10)] ?? ''

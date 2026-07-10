@@ -1,5 +1,3 @@
-import { REVISION_CONFIG } from '@/lib/revision/config.js'
-const DOMINIO_APROBADO = REVISION_CONFIG.DOMINIO_IMAGENES_APROBADO
 
 function parsearMedida(valor) {
   if (!valor) return null
