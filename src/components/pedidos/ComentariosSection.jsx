@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 import {
   EMOJIS_COMPOSER,
   EMOJIS_REACCION,

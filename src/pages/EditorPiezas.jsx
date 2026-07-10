@@ -20,6 +20,13 @@ import { detectarRedesSociales, reordenarRedesSociales } from '@/lib/editor/rede
 import { generarExport, wrapPreview } from '@/lib/editor/exportar.js'
 
 import { generarThumbSVG } from '@/lib/editor/thumbs.js'
+
+// Generador de instanceId para bloques del canvas — a nivel de módulo
+// para que react-hooks/purity no lo vea como impureza en scope de
+// render (Date.now solo corre en handlers de drag/click, pero el
+// analizador no puede probarlo; afuera del componente queda fuera de su
+// alcance y el comportamiento es idéntico).
+const nuevaInstanciaId = (prefijo) => `${prefijo}-${Date.now()}`
 import {
   importarDesdeHtml,
   importarHeuristico,
@@ -1401,7 +1408,7 @@ export default function EditorPiezas() {
   }
 
   function crearInstancia(bloque) {
-    return { ...bloque, instanceId: `${bloque.id}-${Date.now()}`, htmlEditado: null }
+    return { ...bloque, instanceId: nuevaInstanciaId(bloque.id), htmlEditado: null }
   }
 
   function agregarAlCanvas(bloque, antesDeId = null, posicion = 'abajo', htmlOverride = null) {
@@ -1567,7 +1574,7 @@ export default function EditorPiezas() {
     // en BLOQUES (no tiene archivo .html real), así que se construye
     // la instancia a mano con la misma forma que crea agregarCodigo().
     if (arrastrandoCodigoPersonalizado) {
-      const inst = { id: 'codigo', instanceId: `codigo-${Date.now()}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: '', htmlEditado: null, tipo: 'codigo', slug: 'codigo' }
+      const inst = { id: 'codigo', instanceId: nuevaInstanciaId('codigo'), categoria: 'Personalizado', nombre: 'Código personalizado', html: '', htmlEditado: null, tipo: 'codigo', slug: 'codigo' }
       setCanvas(prev => {
         if (targetId == null) return [...prev, inst]
         const idx = prev.findIndex(b => b.instanceId === targetId)

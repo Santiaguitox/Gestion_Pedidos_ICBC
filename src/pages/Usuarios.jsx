@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Users, UserPlus, X, Trash2, Pencil, BarChart2, LayoutGrid, List, Plus, KeyRound } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CargaTrabajoModal } from '@/components/ui/CargaTrabajoModal'
-import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
 // .re-tabs (el switch Grilla/Tabla de acá abajo) está definido en
 // RevisionEmail.css. Sin este import, esos estilos base solo cargaban

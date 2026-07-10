@@ -15,6 +15,23 @@ const TIPOS_ENVIO = [
   { value: 'otro', label: 'Otro' },
 ]
 
+
+// A nivel de MÓDULO a propósito: definido adentro del componente (como
+// estaba), React lo veía como un componente NUEVO en cada render y
+// desmontaba/remontaba cada label — inofensivo acá porque no tiene
+// estado, pero es el anti-patrón que react-hooks/static-components
+// marca, y con razón: el día que un helper así gane un input adentro,
+// pierde el foco en cada tecla. No cierra sobre nada del form: children
+// y done entran por props.
+function FieldLabel({ children, done }) {
+  return (
+    <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+      {children}
+      {done && <Check size={12} style={{ color: '#10B981', strokeWidth: 2.5 }} />}
+    </label>
+  )
+}
+
 export default function PedidoForm({ pedido, onSave, onCancel }) {
   const isEdit = !!pedido
   const { user } = useAuth()
@@ -77,15 +94,6 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   function chipStyle(color, active) {
     if (active) return { color, borderColor: `${color}60`, background: `${color}20` }
     return { color }
-  }
-
-  function FieldLabel({ children, done }) {
-    return (
-      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-        {children}
-        {done && <Check size={12} style={{ color: '#10B981', strokeWidth: 2.5 }} />}
-      </label>
-    )
   }
 
   return (

@@ -37,6 +37,28 @@ const TONE_STYLES = {
   blue: { background: 'var(--badge-bg)', color: 'var(--icomm-blue)' },
 }
 
+
+// A nivel de módulo: no toca estado del componente (recibe todo por
+// parámetro) y así el analizador de react-hooks deja de marcar que se
+// usa "antes de declararse" dentro del callback del worker — como
+// function declaration ya estaba hoisted y funcionaba, pero mejor que
+// ni haga falta el hoisting.
+function downloadBlob(content, originalFileName, suffix) {
+  const ext = originalFileName.split('.').pop()
+  const baseName = originalFileName.replace(/\.[^/.]+$/, '')
+  const blob = new Blob([content], { type: 'text/plain;charset=windows-1252' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${baseName}_${suffix}.${ext}`
+  a.click()
+  // Revocar con un pequeño delay en vez de inmediatamente después del
+  // click — en Firefox específicamente, revocar la URL al toque puede
+  // hacer que la descarga ni siquiera aparezca (el navegador todavía
+  // no terminó de procesarla). Un timeout corto da margen sin
+  // necesitar nada más complejo como escuchar el evento de descarga.
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
 export default function RevisionBase() {
   useDocumentTitle('Revisión BBDD')
 
@@ -146,21 +168,6 @@ export default function RevisionBase() {
     return workerRef.current
   }, [setupWorkerListeners])
 
-  function downloadBlob(content, originalFileName, suffix) {
-    const ext = originalFileName.split('.').pop()
-    const baseName = originalFileName.replace(/\.[^/.]+$/, '')
-    const blob = new Blob([content], { type: 'text/plain;charset=windows-1252' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${baseName}_${suffix}.${ext}`
-    a.click()
-    // Revocar con un pequeño delay en vez de inmediatamente después del
-    // click — en Firefox específicamente, revocar la URL al toque puede
-    // hacer que la descarga ni siquiera aparezca (el navegador todavía
-    // no terminó de procesarla). Un timeout corto da margen sin
-    // necesitar nada más complejo como escuchar el evento de descarga.
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-  }
 
   const processFile = useCallback((file) => {
     if (!file) return

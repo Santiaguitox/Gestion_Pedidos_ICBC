@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/Badge'
-import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 import { validateCsvHeaders } from '@/lib/revision-envios/comparar'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'

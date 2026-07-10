@@ -3,7 +3,7 @@ import { X, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { calcularGrupo } from '@/lib/fechas'
-import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 
 // Categorías de urgencia, en el mismo orden que ya usa el Dashboard
 // (máxima urgencia primero) — se muestran como FILAS de la tabla.

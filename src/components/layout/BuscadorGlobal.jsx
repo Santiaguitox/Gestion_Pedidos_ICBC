@@ -5,7 +5,7 @@ import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
 import { Badge } from '@/components/ui/Badge'
-import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 import {
   Search, CornerDownLeft, ArrowUp, ArrowDown, Tag, Link2, X,
   LayoutGrid, ListTodo, CalendarDays, Bell, Users, Settings, Trash2, FileSearch, Database, MailCheck,

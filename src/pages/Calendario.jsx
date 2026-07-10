@@ -129,7 +129,13 @@ export default function Calendario() {
     return acc
   }, [])
 
-  const Nav = () => (
+  // Elemento JSX, NO componente: como `const Nav = () => (...)`, React
+  // trataba a Nav como un componente distinto en cada render y
+  // desmontaba/remontaba toda la barra (react-hooks/static-components).
+  // Como elemento se crea en el render y se interpola con {nav} — mismo
+  // markup, sin remount, y puede seguir cerrando sobre los estados del
+  // calendario sin pasar ocho props.
+  const nav = (
     <div className="flex items-center gap-3 flex-wrap">
       {!isMobile && (
         <div className="vista-controls">
@@ -174,7 +180,7 @@ export default function Calendario() {
             )}
           </p>
         </div>
-        <Nav />
+        {nav}
       </div>
 
       {mostrarTimeline ? (
