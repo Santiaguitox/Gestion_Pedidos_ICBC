@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { colorAvatar, iniciales } from '@/components/pedidos/PedidoCard'
 import {
@@ -457,12 +458,23 @@ function Reacciones({ comentarioId, reacciones, userId, onToggle }) {
   )
 }
 
-export function ComentariosSection({ comentarios, reacciones, loading, user, role, usuarios, onAgregar, onEditar, onEliminar, onToggleReaccion, setConfirm }) {
+export function ComentariosSection({ pedidoId, comentarios, reacciones, loading, errorCarga, onRecargar, user, role, usuarios, onAgregar, onEditar, onEliminar, onToggleReaccion, setConfirm, resaltarId }) {
   const { showError } = useNotificaciones()
-  const [nuevo, setNuevo] = useState('')
+  // Borrador persistente POR PEDIDO: un comentario a medio escribir
+  // sobrevive a navegar a otra pantalla, cerrar la pestaña o que la PWA
+  // se recargue en background. Se guarda el texto AMIGABLE (el que se
+  // ve en el textarea, con @Nombre sin uuid) — la reconstrucción al
+  // formato persistido pasa recién al enviar, como siempre. La clave se
+  // limpia del storage al publicar para no acumular entradas vacías.
+  const claveBorrador = `coment-borrador:${pedidoId}`
+  const [nuevo, setNuevo] = useLocalStorage(claveBorrador, '')
   const [editandoId, setEditandoId] = useState(null)
   const [textoEdicion, setTextoEdicion] = useState('')
   const listRef = useRef(null)
+  // El resaltado del deep-link se aplica UNA vez (cuando el comentario
+  // destino ya está en la lista cargada); después la sección se
+  // comporta igual que siempre.
+  const resaltadoAplicado = useRef(false)
 
   const esAdmin = role === 'super_admin' || role === 'admin'
   // No tiene sentido ofrecerte a vos mismo en el autocomplete de @: el
@@ -478,10 +490,33 @@ export function ComentariosSection({ comentarios, reacciones, loading, user, rol
   // La lista tiene alto máximo con scroll interno (ver CSS): al montar
   // y con cada comentario nuevo se baja al final, que es donde está lo
   // último de la conversación — patrón chat.
+  //
+  // Excepción: si se llegó por deep-link de una notificación
+  // (?comentario=<id>), la primera pasada con datos scrollea AL
+  // COMENTARIO destino (scrollIntoView sube por todos los ancestros
+  // scrolleables: acomoda la lista interna Y la página hasta dejarlo a
+  // la vista) y le aplica el pulso de resaltado. Consumido el
+  // resaltado, la sección vuelve al comportamiento de siempre.
   useEffect(() => {
     const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [loading, comentarios.length])
+    if (!el) return
+    if (resaltarId && !resaltadoAplicado.current) {
+      const destino = el.querySelector(`[data-coment-id="${resaltarId}"]`)
+      if (destino) {
+        resaltadoAplicado.current = true
+        destino.scrollIntoView({ block: 'center' })
+        destino.classList.add('coment-resaltado')
+        // La clase se saca al terminar la animación para que el DOM no
+        // quede "sucio" (y por si el mismo comentario se re-linkea).
+        setTimeout(() => destino.classList.remove('coment-resaltado'), 2600)
+        return
+      }
+      // Si el destino todavía no está (carga en curso, o el comentario
+      // fue borrado en el ínterin), cae al scroll normal; si aparece en
+      // un render posterior, esta rama lo agarra ahí.
+    }
+    el.scrollTop = el.scrollHeight
+  }, [loading, comentarios.length, resaltarId])
 
   async function enviarNuevo() {
     const amigable = nuevo.trim()
@@ -493,6 +528,11 @@ export function ComentariosSection({ comentarios, reacciones, loading, user, rol
     const { error } = await onAgregar(user.id, contenido, extraerMenciones(contenido))
     if (error) { showError('No se pudo publicar el comentario'); return }
     setNuevo('')
+    // El set('') de arriba ya dejó la UI limpia; esto además borra la
+    // clave del storage para no acumular borradores vacíos por cada
+    // pedido visitado. Mismo criterio defensivo que useLocalStorage:
+    // si localStorage falla, no pasa nada — es limpieza, no estado.
+    try { localStorage.removeItem(claveBorrador) } catch { /* no crítico */ }
   }
 
   async function guardarEdicion(id) {
@@ -524,6 +564,19 @@ export function ComentariosSection({ comentarios, reacciones, loading, user, rol
 
   if (loading) return <p className="text-muted-sm">Cargando comentarios…</p>
 
+  // Falla de la carga inicial: NO mostrar el empty state ("Sin
+  // comentarios todavía") sobre una conversación que quizás sí existe,
+  // ni el composer (publicar a ciegas sin ver el hilo invita a
+  // duplicar). Mensaje honesto + reintento.
+  if (errorCarga) {
+    return (
+      <div className="coment-error">
+        <p className="text-muted-sm">No se pudieron cargar los comentarios. Revisá tu conexión.</p>
+        <button type="button" className="coment-btn-cancelar" onClick={onRecargar}>Reintentar</button>
+      </div>
+    )
+  }
+
   return (
     <div className="coment-section">
       {comentarios.length === 0 && (
@@ -539,7 +592,7 @@ export function ComentariosSection({ comentarios, reacciones, loading, user, rol
           const reaccionesDelComentario = reacciones.filter(r => r.comentario_id === c.id)
 
           return (
-            <div key={c.id} className="coment-item">
+            <div key={c.id} className="coment-item" data-coment-id={c.id}>
               <span
                 className={`coment-avatar-circle${eliminado ? ' eliminado' : ''}`}
                 style={{ background: color }}

@@ -75,7 +75,7 @@ serve(async (req) => {
       .update({ push_despachado_at: new Date().toISOString() })
       .eq('id', notificacion_id)
       .is('push_despachado_at', null)
-      .select('id, user_id, pedido_id, mensaje, tipo, grupo_key')
+      .select('id, user_id, pedido_id, mensaje, tipo, grupo_key, data')
       .maybeSingle()
 
     if (notifError || !notif) {
@@ -95,11 +95,28 @@ serve(async (req) => {
       })
     }
 
+    // Deep-link para menciones y comentarios: la URL de la push lleva
+    // ?comentario=<id> y PedidoDetalle abre el acordeón, scrollea al
+    // comentario y lo resalta. Espejo exacto de rutaDeNotificacion()
+    // en src/lib/notificaciones.js (que resuelve lo mismo para la
+    // campanita in-app). El comentario_id sale de la fila re-consultada
+    // con service role, nunca del body: mismo criterio de no confiar en
+    // la entrada que el resto de la función.
+    const comentarioId =
+      (notif.tipo === 'mencion' || notif.tipo === 'comentario')
+        ? (notif.data as { comentario_id?: string } | null)?.comentario_id
+        : undefined
+    const url = notif.pedido_id
+      ? (comentarioId
+          ? `/pedidos/${notif.pedido_id}?comentario=${comentarioId}`
+          : `/pedidos/${notif.pedido_id}`)
+      : '/notificaciones'
+
     const payload = JSON.stringify({
       title: 'TeamWorkHub',
       body: notif.mensaje,
       tag: notif.grupo_key ?? `${notif.tipo}:${notif.pedido_id ?? 'global'}`,
-      url: notif.pedido_id ? `/pedidos/${notif.pedido_id}` : '/notificaciones',
+      url,
     })
 
     let enviadas = 0

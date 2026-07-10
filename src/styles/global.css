@@ -6164,11 +6164,27 @@ select:focus {
   cursor: default;
 }
 
+/* Ahora es un <button> (cada aviso interno de una entrada agrupada
+   navega por su cuenta al deep-link de SU comentario): se resetea el
+   cromo nativo y se le da affordance de click — hover con el mismo
+   token que el resto de la lista y un respiro de padding que compensa
+   el borde del hover para que el layout no salte respecto al div
+   original. */
 .notif-subitem {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+  padding: 0.25rem 0.45rem;
+  margin-left: -0.45rem;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
+.notif-subitem:hover { background: var(--bg-hover); }
+.notif-subitem:hover .notif-subitem-msg { color: var(--text-primary); }
 
 .notif-subitem-msg {
   font-size: 0.8125rem;
@@ -6473,3 +6489,27 @@ select:focus {
   border-radius: 6px; cursor: pointer;
 }
 .coment-emoji-btn:hover { background: var(--bg-hover); }
+
+/* ── Resaltado del deep-link (?comentario=<id>) ──
+   Pulso ámbar (mismo #F59E0B del ícono del acordeón de Comentarios,
+   con alfa en hex de 8 dígitos) que se desvanece: señala el comentario
+   destino al llegar desde una notificación sin dejar rastro visual.
+   La clase la agrega y quita ComentariosSection — el keyframe hace el
+   fade solo, el remove es limpieza del DOM. */
+
+.coment-item.coment-resaltado { animation: comentResaltado 2.4s ease-out; }
+
+@keyframes comentResaltado {
+  0%   { background: #F59E0B3D; }
+  55%  { background: #F59E0B1F; }
+  100% { background: transparent; }
+}
+
+/* ── Error de carga de comentarios ──
+   Falla de red en la carga inicial: mensaje honesto + Reintentar en
+   vez del falso empty state. El botón reusa .coment-btn-cancelar. */
+
+.coment-error {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  padding: 4px 0;
+}

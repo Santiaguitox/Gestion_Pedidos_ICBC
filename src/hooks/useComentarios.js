@@ -20,27 +20,65 @@ import { supabase } from '@/lib/supabase'
 //     son filas mínimas (emoji + user) y el volumen es chico; la
 //     alternativa (aplicar el delta del payload) obligaría a resolver
 //     el nombre del autor aparte. Simple gana.
+//
+// Resiliencia (revisión de código): el canal actualiza a LOS DEMÁS;
+// quien ejecuta la acción NO depende de él para ver su propio cambio —
+// cada mutación exitosa refetchea su fila directo (mismo criterio que
+// ya tenía toggleReaccion). Si el websocket se cayó (PWA que vuelve de
+// background), publicás y lo ves igual.
 export function useComentarios(pedidoId) {
   const [comentarios, setComentarios] = useState([])
   const [reacciones, setReacciones] = useState([])
-  const [loading, setLoading] = useState(!!pedidoId)
+  // loading y errorCarga viven juntos en un solo estado: cambian
+  // siempre en el mismo momento y así el efecto de carga hace UN solo
+  // setState sincrónico al arrancar (dos separados disparaban la regla
+  // react-hooks/set-state-in-effect de React 19). errorCarga cubre la
+  // falla de la CARGA inicial (red caída, etc.): sin esto, un error de
+  // lectura mostraba el empty state alegre ("Sin comentarios todavía")
+  // sobre una conversación que sí existe — falso vacío. Las mutaciones
+  // ya devolvían { error }; esto cubre el lado de lectura.
+  const [carga, setCarga] = useState({ loading: !!pedidoId, error: false })
+  // Contador para re-disparar la carga a demanda (botón "Reintentar").
+  const [intento, setIntento] = useState(0)
+
+  // Reset por CAMBIO de pedido sin desmontar (navegar de un detalle a
+  // otro con el buscador global): patrón oficial "adjusting state when
+  // props change" — se compara contra el pedidoId del render anterior y
+  // se ajusta DURANTE el render, no en un efecto (la regla
+  // react-hooks/set-state-in-effect de React 19 rechaza el setState
+  // sincrónico dentro del cuerpo del efecto; este patrón es la
+  // alternativa que la propia doc de React recomienda). React re-corre
+  // el render inmediatamente con el estado nuevo, antes de pintar: no
+  // hay flash de la conversación del pedido anterior.
+  const [prevPedidoId, setPrevPedidoId] = useState(pedidoId)
+  if (prevPedidoId !== pedidoId) {
+    setPrevPedidoId(pedidoId)
+    setComentarios([])
+    setReacciones([])
+    setCarga({ loading: !!pedidoId, error: false })
+  }
 
   const fetchReacciones = useCallback(async () => {
     if (!pedidoId) return
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pedido_comentario_reacciones')
       .select('id, comentario_id, user_id, emoji, profiles(full_name)')
       .eq('pedido_id', pedidoId)
+    // Best-effort: si el refetch de reacciones falla se conserva lo que
+    // había en memoria (peor es pisarlo con vacío) y el próximo evento
+    // del canal reintenta solo.
+    if (error) { console.warn('[comentarios] No se pudieron refrescar las reacciones:', error.message); return }
     setReacciones(data ?? [])
   }, [pedidoId])
 
   // Trae UN comentario (con join) y lo inserta/actualiza en memoria.
   const refrescarComentario = useCallback(async (id) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pedido_comentarios')
       .select('*, profiles(id, full_name, avatar_color)')
       .eq('id', id)
       .maybeSingle()
+    if (error) { console.warn('[comentarios] No se pudo refrescar el comentario:', error.message); return }
     if (!data) return
     setComentarios(prev => {
       const existe = prev.some(c => c.id === data.id)
@@ -49,11 +87,17 @@ export function useComentarios(pedidoId) {
     })
   }, [])
 
+  // El reset a "cargando" del retry vive acá (event handler, no efecto)
+  // — el efecto de abajo solo hace el trabajo async.
+  const recargar = useCallback(() => {
+    setCarga({ loading: true, error: false })
+    setIntento(n => n + 1)
+  }, [])
+
   useEffect(() => {
     if (!pedidoId) return
     let cancelado = false
 
-    setLoading(true)
     Promise.all([
       supabase
         .from('pedido_comentarios')
@@ -66,9 +110,18 @@ export function useComentarios(pedidoId) {
         .eq('pedido_id', pedidoId),
     ]).then(([coms, reacs]) => {
       if (cancelado) return
+      // supabase-js nunca lanza: resuelve { data, error }. Si cualquiera
+      // de las dos consultas falló, se marca el error de carga para que
+      // la UI muestre "no se pudo cargar" + Reintentar, en vez de un
+      // falso "Sin comentarios todavía".
+      if (coms.error || reacs.error) {
+        console.warn('[comentarios] Falló la carga inicial:', (coms.error ?? reacs.error).message)
+        setCarga({ loading: false, error: true })
+        return
+      }
       setComentarios(coms.data ?? [])
       setReacciones(reacs.data ?? [])
-      setLoading(false)
+      setCarga({ loading: false, error: false })
     })
 
     const ch = supabase
@@ -88,18 +141,22 @@ export function useComentarios(pedidoId) {
       cancelado = true
       supabase.removeChannel(ch)
     }
-  }, [pedidoId, refrescarComentario, fetchReacciones])
+  }, [pedidoId, intento, refrescarComentario, fetchReacciones])
 
   // ── Acciones ──────────────────────────────────────────────────────
-  // Sin optimistic updates: el propio INSERT vuelve por el canal en
-  // <200ms y hay una sola fuente de verdad (mismo criterio que
-  // usePedidos). Todas devuelven { error } para que el componente
-  // muestre el feedback con showError.
+  // Todas devuelven { error } para que el componente muestre el
+  // feedback con showError. Tras el éxito, cada una refetchea su fila
+  // DIRECTO (sin esperar al canal): la UI de quien actuó responde al
+  // instante y no depende de que el websocket esté vivo. El canal sigue
+  // siendo lo que actualiza a los demás.
 
   async function agregar(userId, contenido, menciones) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('pedido_comentarios')
       .insert({ pedido_id: pedidoId, user_id: userId, contenido, menciones })
+      .select('id')
+      .single()
+    if (!error && data) await refrescarComentario(data.id)
     return { error }
   }
 
@@ -109,8 +166,10 @@ export function useComentarios(pedidoId) {
       .update({ contenido, menciones, edited_at: new Date().toISOString() })
       .eq('id', id)
       .select('id')
-    // RLS silencioso: 0 filas afectadas = sin permiso (no es el autor).
+    // RLS silencioso: 0 filas afectadas = sin permiso (no es el autor,
+    // o el comentario fue moderado mientras se editaba).
     if (!error && !data?.length) return { error: new Error('Sin permiso para editar este comentario') }
+    if (!error) await refrescarComentario(id)
     return { error }
   }
 
@@ -119,6 +178,7 @@ export function useComentarios(pedidoId) {
   // jamás editar el texto de un comentario ajeno).
   async function eliminar(id) {
     const { error } = await supabase.rpc('eliminar_comentario', { p_comentario_id: id })
+    if (!error) await refrescarComentario(id)
     return { error }
   }
 
@@ -156,5 +216,12 @@ export function useComentarios(pedidoId) {
     return { error }
   }
 
-  return { comentarios, reacciones, loading, agregar, editar, eliminar, toggleReaccion }
+  return {
+    comentarios,
+    reacciones,
+    loading: carga.loading,
+    errorCarga: carga.error,
+    recargar,
+    agregar, editar, eliminar, toggleReaccion,
+  }
 }

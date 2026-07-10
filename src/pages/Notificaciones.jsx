@@ -2,7 +2,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { agruparNotificaciones } from '@/lib/notificaciones'
+import { agruparNotificaciones, rutaDeNotificacion } from '@/lib/notificaciones'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
@@ -193,7 +193,9 @@ export default function Notificaciones() {
   function handleClick(entrada) {
     const sinLeer = entrada.items.filter(i => !i.leida).map(i => i.id)
     if (sinLeer.length) marcarVariasLeidas(sinLeer)
-    if (entrada.pedido_id) navigate(`/pedidos/${entrada.pedido_id}`, { state: { from: '/notificaciones' } })
+    // Deep-link: para mención/comentario la ruta lleva ?comentario=<id>
+    // y PedidoDetalle scrollea y resalta el comentario destino.
+    if (entrada.pedido_id) navigate(rutaDeNotificacion(entrada.principal), { state: { from: '/notificaciones' } })
   }
 
   return (
@@ -386,13 +388,31 @@ export default function Notificaciones() {
 
                         {agrupada && expandida && (
                           <div className="notif-subitems" onClick={e => e.stopPropagation()}>
+                            {/* Cada aviso interno navega POR SU CUENTA: en una
+                                ráfaga de comentarios, cada item lleva SU
+                                comentario_id en data, así que el deep-link de
+                                rutaDeNotificacion apunta a ESE comentario — no
+                                al más reciente del grupo como el click de la
+                                entrada. Solo se marca leído el item tocado: el
+                                resto de la ráfaga sigue pendiente (modelo de
+                                eventos individuales). El stopPropagation del
+                                contenedor ya evita que el click burbujee al
+                                handleClick de la entrada. */}
                             {entrada.items.map(item => (
-                              <div key={item.id} className="notif-subitem">
+                              <button
+                                key={item.id}
+                                type="button"
+                                className="notif-subitem"
+                                onClick={() => {
+                                  if (!item.leida) marcarLeida(item.id)
+                                  if (item.pedido_id) navigate(rutaDeNotificacion(item), { state: { from: '/notificaciones' } })
+                                }}
+                              >
                                 <span className="notif-subitem-msg">{item.mensaje}</span>
                                 <span className="notif-subitem-time">
                                   {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: es })}
                                 </span>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -415,7 +435,7 @@ export default function Notificaciones() {
                         {menuItemAbierto === entrada.id && (
                           <div className="notif-dropdown" onClick={e => e.stopPropagation()}>
                             {entrada.pedido_id && (
-                              <button onClick={() => { navigate(`/pedidos/${entrada.pedido_id}`, { state: { from: '/notificaciones' } }); setMenuItemAbierto(null) }}>
+                              <button onClick={() => { navigate(rutaDeNotificacion(entrada.principal), { state: { from: '/notificaciones' } }); setMenuItemAbierto(null) }}>
                                 <ExternalLink size={15} />Ir al pedido
                               </button>
                             )}

@@ -3,6 +3,7 @@ import {
   agruparNotificaciones,
   contarNoLeidas,
   grupoKeyDe,
+  rutaDeNotificacion,
   TIPO_NOTIFICACION,
 } from '@/lib/notificaciones.js'
 
@@ -174,5 +175,39 @@ describe('comentarios y menciones (tipos nuevos)', () => {
       notif({ tipo: TIPO_NOTIFICACION.MENCION }),
     ]
     expect(contarNoLeidas(lista)).toBe(2)
+  })
+})
+
+describe('rutaDeNotificacion', () => {
+  it('mención con comentario_id arma el deep-link', () => {
+    const n = notif({ tipo: TIPO_NOTIFICACION.MENCION, data: { comentario_id: 'com-9' } })
+    expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A?comentario=com-9')
+  })
+
+  it('comentario con comentario_id arma el deep-link', () => {
+    const n = notif({ tipo: TIPO_NOTIFICACION.COMENTARIO, data: { comentario_id: 'com-3' } })
+    expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A?comentario=com-3')
+  })
+
+  it('mención SIN comentario_id en data cae a la ruta del pedido', () => {
+    const n = notif({ tipo: TIPO_NOTIFICACION.MENCION, data: {} })
+    expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A')
+  })
+
+  it('otros tipos van al pedido aunque el data traiga comentario_id', () => {
+    // Un cambio_estado jamás debería traerlo, pero si lo trajera (data
+    // heredada, bug futuro), no corresponde deep-linkear a un comentario.
+    const n = notif({ tipo: TIPO_NOTIFICACION.CAMBIO_ESTADO, data: { comentario_id: 'com-1' } })
+    expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A')
+  })
+
+  it('sin pedido_id va a la bandeja de notificaciones', () => {
+    const n = notif({ tipo: TIPO_NOTIFICACION.SISTEMA, pedido_id: null })
+    expect(rutaDeNotificacion(n)).toBe('/notificaciones')
+  })
+
+  it('tolera data null (filas viejas sin jsonb)', () => {
+    const n = notif({ tipo: TIPO_NOTIFICACION.MENCION, data: null })
+    expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A')
   })
 })

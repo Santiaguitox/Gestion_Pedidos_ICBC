@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { supabase } from '@/lib/supabase'
 import { usePedidos } from '@/hooks/usePedidos'
@@ -35,7 +35,7 @@ export default function PedidoDetalle() {
   const backTo = state?.from ?? '/pedidos'
   const backLabel = backTo === '/' ? 'Dashboard' : backTo === '/calendario' ? 'Calendario' : backTo === '/notificaciones' ? 'Notificaciones' : 'Pedidos'
   const { role, user } = useAuth()
-  const { showSuccess, showError } = useNotificaciones()
+  const { showError } = useNotificaciones()
   const { actualizarPedido, eliminarPedido } = usePedidos()
   const isMobile = useIsMobile()
   const [pedido, setPedido] = useState(null)
@@ -55,22 +55,47 @@ export default function PedidoDetalle() {
   // devolvería 0 filas, esto solo evita requests inútiles. La sección
   // tampoco se monta para ese rol (ver más abajo).
   const comentariosApi = useComentarios(role === ROLES.VIEWER ? null : id)
+
+  // Deep-link desde una notificación de mención/comentario:
+  // /pedidos/:id?comentario=<uuid>. El id destino se captura UNA vez
+  // con el inicializador perezoso de useState (queda fijo aunque el
+  // param desaparezca de la URL) y el parámetro se limpia con replace
+  // apenas se monta la página — así un refresh o el botón atrás no
+  // re-disparan el resaltado, y la URL queda limpia para compartir. El
+  // efecto es idempotente: corre cuando cambian los params y solo actúa
+  // si el de comentario sigue presente.
+  const [searchParams, setSearchParams] = useSearchParams()
+  // El deep-link queda atado al pedido en que se capturó: si desde acá
+  // se navega a OTRO detalle sin desmontar (buscador global), el
+  // resaltado viejo no se arrastra — ni fuerza el acordeón abierto ni
+  // busca un comentario que no pertenece a ese pedido.
+  const [deepLink] = useState(() => ({ pedidoId: id, comentario: searchParams.get('comentario') }))
+  const resaltarComentario = deepLink.pedidoId === id ? deepLink.comentario : null
+  useEffect(() => {
+    if (searchParams.has('comentario')) {
+      const limpios = new URLSearchParams(searchParams)
+      limpios.delete('comentario')
+      setSearchParams(limpios, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
   // DetalleAcordeon es "no controlado" (defaultOpen solo se lee al
   // montar, como <input defaultValue>): para poder decidir el estado
   // inicial DESPUÉS de que la carga async de comentarios resuelva (al
   // primer render todavía no sabemos si el pedido tiene conversación),
-  // se fuerza un único remount cambiando la `key` del acordeón una vez
-  // que `loading` pasa a false — ahí sí, defaultOpen se lee con el
-  // dato real. Antes de eso (o para el rol viewer, que no carga nada)
-  // arranca cerrado, igual que hoy. Una vez decidido, no se vuelve a
-  // tocar: si el usuario lo cierra a mano después de abrir con datos,
-  // se queda cerrado (no se le pisa la decisión).
-  const [comentariosApertura, setComentariosApertura] = useState(null)
-  useEffect(() => {
-    if (comentariosApertura === null && !comentariosApi.loading) {
-      setComentariosApertura(comentariosApi.comentarios.length > 0 ? 'con-datos' : 'vacio')
-    }
-  }, [comentariosApertura, comentariosApi.loading, comentariosApi.comentarios.length])
+  // la key del acordeón tiene exactamente dos valores — 'pendiente'
+  // mientras carga y 'listo' después. El ÚNICO remount ocurre cuando la
+  // carga resuelve, y en ese render defaultOpen ya se computa con el
+  // dato real (o con el deep-link: si se llegó por ?comentario=, abre
+  // siempre — el destino está adentro). Después la key no cambia más:
+  // publicar el primer comentario NO re-monta (defaultOpen post-mount
+  // se ignora) y si el usuario lo cierra a mano, se queda cerrado — no
+  // se le pisa la decisión. Todo derivado del render: sin estado, sin
+  // efecto, sin refs (las tres variantes anteriores chocaban con las
+  // reglas nuevas de react-hooks en React 19).
+  const comentariosDecidido = !comentariosApi.loading
+  const comentariosApertura = comentariosDecidido &&
+    (!!resaltarComentario || comentariosApi.comentarios.length > 0)
 
   useEffect(() => {
     // Viewer no puede aparecer en el selector de "asignar a" de subtareas
@@ -80,7 +105,11 @@ export default function PedidoDetalle() {
     // usuariosConArea SÍ mantiene la lista completa sin filtrar: resuelve
     // el área (chip de color) de gente YA asignada a subtareas viejas,
     // así que no debe perder a nadie que ya esté asignado de antes.
-    supabase.from('profiles').select('id, full_name, area_equipo, role').order('full_name').then(({ data }) => {
+    // avatar_color: lo consume el popup de @menciones de comentarios —
+    // sin traerlo, el avatar del popup caía siempre al color fallback y
+    // la misma persona se veía con un color en el popup y otro en su
+    // comentario del hilo (donde el join de profiles sí lo trae).
+    supabase.from('profiles').select('id, full_name, area_equipo, role, avatar_color').order('full_name').then(({ data }) => {
       setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER))
       setUsuariosConArea(data ?? [])
     })
@@ -299,7 +328,7 @@ export default function PedidoDetalle() {
 
           {!isViewer && (
             <DetalleAcordeon
-              key={`comentarios-${comentariosApertura ?? 'pendiente'}`}
+              key={`comentarios-${comentariosDecidido ? 'listo' : 'pendiente'}`}
               icon={<MessagesSquare size={18} />} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.12)"
               title="Comentarios"
               badge={(() => {
@@ -307,17 +336,21 @@ export default function PedidoDetalle() {
                 return visibles > 0 ? visibles : null
               })()}
               badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
-              // Si el pedido YA tiene comentarios, arranca abierto (la
-              // conversación existente se ve de una, sin un click
-              // extra); si está vacío, arranca cerrado como el resto de
-              // las secciones secundarias. Ver el efecto de arriba que
-              // arma `comentariosApertura` una sola vez, tras la carga.
-              defaultOpen={comentariosApertura === 'con-datos'}
+              // Si el pedido YA tiene comentarios (o se llegó por
+              // deep-link), arranca abierto — la conversación se ve de
+              // una, sin un click extra; si está vacío, arranca cerrado
+              // como el resto de las secciones secundarias. Ver el
+              // bloque de `comentariosDecidido` arriba: la key remonta
+              // una sola vez, cuando la carga resuelve.
+              defaultOpen={comentariosApertura}
             >
               <ComentariosSection
+                pedidoId={id}
                 comentarios={comentariosApi.comentarios}
                 reacciones={comentariosApi.reacciones}
                 loading={comentariosApi.loading}
+                errorCarga={comentariosApi.errorCarga}
+                onRecargar={comentariosApi.recargar}
                 user={user}
                 role={role}
                 usuarios={usuarios}
@@ -326,6 +359,7 @@ export default function PedidoDetalle() {
                 onEliminar={comentariosApi.eliminar}
                 onToggleReaccion={comentariosApi.toggleReaccion}
                 setConfirm={setConfirm}
+                resaltarId={resaltarComentario}
               />
             </DetalleAcordeon>
           )}

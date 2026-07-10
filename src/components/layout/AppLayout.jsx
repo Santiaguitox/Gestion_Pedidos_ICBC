@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search, MailCheck, PenLine, ScanSearch } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
+import { rutaDeNotificacion } from '@/lib/notificaciones'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
 import BuscadorGlobal from '@/components/layout/BuscadorGlobal'
 import { LogoRotator } from '@/components/layout/LogoRotator'
@@ -30,7 +31,7 @@ function NotifToast({ toast, onDismiss, onNavigate }) {
         <div className="toast-body">
           <p className="toast-mensaje">{toast.mensaje}</p>
           {toast.pedido_id && (
-            <button onClick={() => { onNavigate(toast.pedido_id); onDismiss() }} className="toast-link">
+            <button onClick={() => { onNavigate(toast); onDismiss() }} className="toast-link">
               <ExternalLink size={12} />Ver pedido
             </button>
           )}
@@ -291,7 +292,7 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(pedidoId) => navigate(`/pedidos/${pedidoId}`)} />
+      <NotifToast toast={toast} onDismiss={dismissToast} onNavigate={(n) => navigate(rutaDeNotificacion(n))} />
       <FeedbackToast feedback={feedback} onDismiss={dismissFeedback} />
       {showPerfil && <PerfilUsuario onClose={() => setShowPerfil(false)} />}
       <BuscadorGlobal open={showBuscador} onClose={() => setShowBuscador(false)} role={role} />

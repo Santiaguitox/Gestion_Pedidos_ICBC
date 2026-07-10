@@ -109,6 +109,24 @@ export function agruparNotificaciones(notificaciones) {
   return entradas
 }
 
+// Ruta destino al tocar una notificación (o el evento principal de una
+// entrada agrupada). Para menciones y comentarios, si el data trae el
+// comentario_id se arma el deep-link ?comentario=<id>: PedidoDetalle lo
+// lee, abre el acordeón, scrollea al comentario y lo resalta — el que
+// recibe "te mencionó" aterriza SOBRE la mención, no arriba de todo.
+// En una entrada agrupada el principal es el evento más reciente, así
+// que el deep-link apunta al último comentario de la ráfaga. La misma
+// lógica vive server-side en enviar-push (URL de la push del SO).
+export function rutaDeNotificacion(n) {
+  if (!n?.pedido_id) return '/notificaciones'
+  const esDeComentario =
+    n.tipo === TIPO_NOTIFICACION.MENCION || n.tipo === TIPO_NOTIFICACION.COMENTARIO
+  const comentarioId = esDeComentario ? n.data?.comentario_id : null
+  return comentarioId
+    ? `/pedidos/${n.pedido_id}?comentario=${comentarioId}`
+    : `/pedidos/${n.pedido_id}`
+}
+
 // Cantidad de "pendientes reales" para el badge de la campanita:
 // grupos no leídos — una ráfaga de cambios del mismo pedido cuenta
 // como 1 pendiente, que es lo que el usuario percibe.
