@@ -1265,8 +1265,14 @@
      textarea de "pegar HTML" (12px) dispara el auto-zoom de iOS/Android
      al enfocarlo — y como este editor vive en una pantalla propia
      (ep-m-screen) sin recargar la página, el usuario queda con el zoom
-     pegado hasta que lo ajusta a mano. */
-  .ep-m-textarea { font-size: 16px; }
+     pegado hasta que lo ajusta a mano.
+     El !important es necesario: la regla desktop de `.ep-m-textarea`
+     (font-size: 12px) está más abajo en este archivo que este propio
+     bloque @media — con la misma especificidad, en CSS gana la regla
+     que aparece último en el archivo, así que sin !important la de
+     escritorio le ganaba a esta por orden de aparición, no por
+     especificidad (mismo bug ya encontrado en .coment-input). */
+  .ep-m-textarea { font-size: 16px !important; }
 }
 
 /* ─── Ajustes v2 ─────────────────────────────────────────────────────────── */

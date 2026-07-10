@@ -5715,13 +5715,19 @@ select:focus {
      16px acá el zoom nunca se dispara. Vive DENTRO del @media, así que
      en desktop no cambia nada.
      El !important en `select` es necesario porque su regla base (más
-     arriba en este archivo) también usa !important — sin eso, la
-     cascada normal no alcanza a pisarla. `.coment-input` se resetea
-     aparte porque su tamaño lo fija un shorthand `font:` con mayor
-     especificidad que el `input, textarea` genérico de acá abajo. */
+     arriba en este archivo) también usa !important.
+     El !important en `.coment-input` es por un motivo DISTINTO: su
+     regla de escritorio (`font: 400 14px/1.5 ...`) vive en el bloque
+     de Comentarios, que está pegado al final del archivo — es decir,
+     MÁS ABAJO que este propio bloque @media. Con la misma
+     especificidad, en CSS gana la regla que aparece último en el
+     archivo, así que sin !important la regla de escritorio le ganaba
+     a esta de mobile por orden de aparición, no por especificidad —
+     exactamente el bug reportado: un <input> suelto (sin una regla
+     propia más abajo) sí se arreglaba, pero .coment-input no. */
   input, textarea, select { font-size: 16px; }
   select { font-size: 16px !important; }
-  .coment-input { font-size: 16px; }
+  .coment-input { font-size: 16px !important; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
