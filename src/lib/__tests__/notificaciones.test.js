@@ -143,3 +143,36 @@ describe('contarNoLeidas', () => {
     expect(contarNoLeidas([])).toBe(0)
   })
 })
+
+describe('comentarios y menciones (tipos nuevos)', () => {
+  it('una ráfaga de comentarios del mismo pedido agrupa en 1 entrada', () => {
+    const lista = [
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO, mensaje: 'Ana comentó: dale' }),
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO, mensaje: 'Ana comentó: mirá esto' }),
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO, mensaje: 'Beto comentó: ok' }),
+    ]
+    const entradas = agruparNotificaciones(lista)
+    expect(entradas).toHaveLength(1)
+    expect(entradas[0].count).toBe(3)
+    expect(entradas[0].grupoKey).toBe('comentario:pedido-A')
+  })
+
+  it('mencion y comentario del mismo pedido NO se mezclan entre sí', () => {
+    const lista = [
+      notif({ tipo: TIPO_NOTIFICACION.MENCION, mensaje: 'Ana te mencionó' }),
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO, mensaje: 'Ana comentó' }),
+    ]
+    const entradas = agruparNotificaciones(lista)
+    expect(entradas).toHaveLength(2)
+    expect(entradas.map(e => e.tipo).sort()).toEqual(['comentario', 'mencion'])
+  })
+
+  it('el badge cuenta la ráfaga de comentarios como 1 pendiente', () => {
+    const lista = [
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO }),
+      notif({ tipo: TIPO_NOTIFICACION.COMENTARIO }),
+      notif({ tipo: TIPO_NOTIFICACION.MENCION }),
+    ]
+    expect(contarNoLeidas(lista)).toBe(2)
+  })
+})

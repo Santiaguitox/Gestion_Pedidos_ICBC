@@ -20,9 +20,11 @@ import { SubtareasTimeline } from '@/components/pedidos/SubtareasTimeline'
 import { EntregablesSection } from '@/components/pedidos/EntregablesSection'
 import { BaseDatosSection } from '@/components/pedidos/BaseDatosSection'
 import { PedidoHistorial } from '@/components/pedidos/PedidoHistorial'
+import { ComentariosSection } from '@/components/pedidos/ComentariosSection'
+import { useComentarios } from '@/hooks/useComentarios'
 import { SheetModal } from '@/components/pedidos/SheetModal'
 import { SuccessModal } from '@/components/pedidos/SuccessModal'
-import { ArrowLeft, Edit, Trash2, Clock, FileSpreadsheet, CheckSquare, FileText, Info, Database } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Clock, FileSpreadsheet, CheckSquare, FileText, Info, Database, MessagesSquare } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -47,6 +49,28 @@ export default function PedidoDetalle() {
   const { estados } = useEstados()
   const { tipos } = useTipos()
   const { instancias } = useInstancias()
+  // Antes de los early returns (regla de hooks). Pasar null para el rol
+  // viewer apaga el hook por completo (sin fetch ni suscripción): los
+  // comentarios son conversación interna del equipo — RLS igualmente
+  // devolvería 0 filas, esto solo evita requests inútiles. La sección
+  // tampoco se monta para ese rol (ver más abajo).
+  const comentariosApi = useComentarios(role === ROLES.VIEWER ? null : id)
+  // DetalleAcordeon es "no controlado" (defaultOpen solo se lee al
+  // montar, como <input defaultValue>): para poder decidir el estado
+  // inicial DESPUÉS de que la carga async de comentarios resuelva (al
+  // primer render todavía no sabemos si el pedido tiene conversación),
+  // se fuerza un único remount cambiando la `key` del acordeón una vez
+  // que `loading` pasa a false — ahí sí, defaultOpen se lee con el
+  // dato real. Antes de eso (o para el rol viewer, que no carga nada)
+  // arranca cerrado, igual que hoy. Una vez decidido, no se vuelve a
+  // tocar: si el usuario lo cierra a mano después de abrir con datos,
+  // se queda cerrado (no se le pisa la decisión).
+  const [comentariosApertura, setComentariosApertura] = useState(null)
+  useEffect(() => {
+    if (comentariosApertura === null && !comentariosApi.loading) {
+      setComentariosApertura(comentariosApi.comentarios.length > 0 ? 'con-datos' : 'vacio')
+    }
+  }, [comentariosApertura, comentariosApi.loading, comentariosApi.comentarios.length])
 
   useEffect(() => {
     // Viewer no puede aparecer en el selector de "asignar a" de subtareas
@@ -272,6 +296,39 @@ export default function PedidoDetalle() {
 
       <div className="det-grid">
         <div className="det-tools">
+
+          {!isViewer && (
+            <DetalleAcordeon
+              key={`comentarios-${comentariosApertura ?? 'pendiente'}`}
+              icon={<MessagesSquare size={18} />} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.12)"
+              title="Comentarios"
+              badge={(() => {
+                const visibles = comentariosApi.comentarios.filter(c => !c.deleted_at).length
+                return visibles > 0 ? visibles : null
+              })()}
+              badgeColor="var(--text-secondary)" badgeBg="var(--bg-hover)"
+              // Si el pedido YA tiene comentarios, arranca abierto (la
+              // conversación existente se ve de una, sin un click
+              // extra); si está vacío, arranca cerrado como el resto de
+              // las secciones secundarias. Ver el efecto de arriba que
+              // arma `comentariosApertura` una sola vez, tras la carga.
+              defaultOpen={comentariosApertura === 'con-datos'}
+            >
+              <ComentariosSection
+                comentarios={comentariosApi.comentarios}
+                reacciones={comentariosApi.reacciones}
+                loading={comentariosApi.loading}
+                user={user}
+                role={role}
+                usuarios={usuarios}
+                onAgregar={comentariosApi.agregar}
+                onEditar={comentariosApi.editar}
+                onEliminar={comentariosApi.eliminar}
+                onToggleReaccion={comentariosApi.toggleReaccion}
+                setConfirm={setConfirm}
+              />
+            </DetalleAcordeon>
+          )}
 
           <DetalleAcordeon
             icon={<CheckSquare size={18} />} iconColor="var(--accent-primary)" iconBg="var(--red-bg)"

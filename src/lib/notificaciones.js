@@ -15,17 +15,26 @@ export const TIPO_NOTIFICACION = {
   VENCIMIENTO:   'vencimiento',
   SISTEMA:       'sistema',
   DESCARGA:      'descarga',
+  MENCION:       'mencion',
+  COMENTARIO:    'comentario',
 }
 
 // Tipos cuyos eventos no leídos se colapsan por grupo_key. 'sistema'
 // queda afuera: son mensajes heterogéneos (pruebas, avisos sueltos) y
 // agruparlos mezclaría cosas sin relación entre sí.
+// 'comentario' y 'mencion' SÍ agrupan (cada uno por su lado, porque el
+// grupo_key incluye el tipo): una ráfaga de comentarios en un pedido es
+// UNA entrada en la campanita, y las menciones nunca se diluyen entre
+// los comentarios genéricos — "me nombraron" pesa más que "hay
+// movimiento", tanto in-app como en el push (tag = grupo_key).
 const TIPOS_AGRUPABLES = new Set([
   TIPO_NOTIFICACION.CAMBIO_ESTADO,
   TIPO_NOTIFICACION.ASIGNACION,
   TIPO_NOTIFICACION.APROBACION,
   TIPO_NOTIFICACION.VENCIMIENTO,
   TIPO_NOTIFICACION.DESCARGA,
+  TIPO_NOTIFICACION.MENCION,
+  TIPO_NOTIFICACION.COMENTARIO,
 ])
 
 // Clave de agrupamiento — espejo exacto de la columna generada

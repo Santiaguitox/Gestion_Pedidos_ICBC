@@ -1,0 +1,28 @@
+-- ============================================================================
+-- FIX: quitar una reacción no se reflejaba en la UI
+--
+-- Causa raíz: los eventos DELETE de realtime (postgres_changes) solo
+-- incluyen las columnas de la REPLICA IDENTITY de la tabla — por
+-- default, únicamente la primary key (id). La suscripción del frontend
+-- filtra por `pedido_id=eq.X`, y como el old record del DELETE no traía
+-- pedido_id, el evento NUNCA matcheaba el filtro: el cliente jamás se
+-- enteraba de que la reacción se borró (en la base sí se borraba — al
+-- recargar la página desaparecía).
+--
+-- Fix en dos partes:
+--   1. (acá) replica identity full: el old record del DELETE viaja
+--      completo, el filtro por pedido_id matchea y TODOS los clientes
+--      suscriptos se enteran en vivo.
+--   2. (useComentarios.js) además, quien ejecuta el toggle refetchea
+--      sus reacciones inmediatamente después de la acción, sin esperar
+--      al canal — su propia UI responde al instante aunque el realtime
+--      demore.
+--
+-- Costo de replica identity full: cada DELETE/UPDATE escribe la fila
+-- completa en el WAL. Para esta tabla es irrelevante — filas mínimas
+-- (un emoji, tres uuids) y volumen bajo. No se aplica a
+-- pedido_comentarios porque ahí no hay DELETE físico (soft delete via
+-- UPDATE, cuyo new record ya trae pedido_id y matchea el filtro).
+-- ============================================================================
+
+alter table public.pedido_comentario_reacciones replica identity full;
