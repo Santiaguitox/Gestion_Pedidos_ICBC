@@ -145,7 +145,8 @@ export default function RevisionEmail() {
   // para alimentar esta barra visual de 3 colores).
   //
   // 'detalleMenorN' es un contador EXTRA, aparte de ok/warn/error: cuenta
-  // las advertencias de "Links" (ej: falta target="_blank") que no hacen
+  // las advertencias de "Links" (ej: falta target="_blank") y de
+  // "Dimensiones" (separadores estructurales estirados) que no hacen
   // fallar la prueba en sí (Links puede seguir siendo ok:true con
   // detalles menores) — no afecta el cálculo de pruebas superadas ni a
   // resumirResultados (que sigue intacta, esto es solo informativo en
@@ -158,7 +159,8 @@ export default function RevisionEmail() {
     const okN = todos.filter(b => b.ok).length
     const warnN = todos.filter(b => !b.ok && b.advertencia).length
     const errN = todos.filter(b => !b.ok && !b.advertencia).length
-    const detalleMenorN = resultados.links?.advertencias?.length ?? 0
+    const detalleMenorN = (resultados.links?.advertencias?.length ?? 0)
+      + (resultados.dimensiones?.advertencias?.length ?? 0)
     return { okN, warnN, errN, detalleMenorN, score: okN + warnN, total: todos.length }
   }
   const score = resultados ? calcularScore(resultados) : null

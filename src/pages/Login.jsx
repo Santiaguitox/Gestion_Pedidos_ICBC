@@ -1,7 +1,8 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import icommLogo from '@/assets/Icomm_Logo.png'
 import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
@@ -10,6 +11,26 @@ export default function Login() {
   useDocumentTitle('Iniciar sesión')
 
   const navigate = useNavigate()
+  const { session, profile } = useAuth()
+
+  // NAVEGACIÓN DIRIGIDA POR ESTADO — el fix del "login doble"
+  // intermitente. Antes handleSubmit navegaba a mano apenas terminaba
+  // SU fetch de perfil, pero ProtectedRoute lee el AuthContext, que no
+  // publica la sesión hasta que resuelve SU PROPIO fetch de perfil
+  // (dispara en paralelo con el onAuthStateChange de SIGNED_IN). Dos
+  // fetches idénticos corriendo a la vez: si el del contexto perdía la
+  // carrera, el guard veía session null al llegar a "/" y rebotaba al
+  // login con el form vacío — la segunda vez entraba siempre porque el
+  // contexto ya había publicado. Intermitente porque dependía de qué
+  // fetch ganaba (jitter de red).
+  //
+  // Ahora Login no navega hasta que la MISMA fuente de verdad que usa
+  // el guard (session + profile del contexto) esté lista: la carrera es
+  // imposible por construcción. Bonus: entrar a /login ya autenticado
+  // redirige solo, antes mostraba el form.
+  useEffect(() => {
+    if (session && profile) navigate('/', { replace: true })
+  }, [session, profile, navigate])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -37,12 +58,20 @@ export default function Login() {
       .single()
 
     if (!profile) {
+      // Credenciales válidas pero sin fila en profiles (invitación a
+      // medias): además del mensaje, se cierra la sesión — si quedara
+      // abierta, el guard entraría en "sesión ok, perfil cargando" para
+      // siempre (pantalla en blanco) al navegar a mano, y el efecto de
+      // arriba jamás dispararía. Sesión limpia = estado consistente.
+      await supabase.auth.signOut()
       setError('No se encontró el perfil del usuario.')
       setLoading(false)
       return
     }
 
-    navigate('/', { replace: true })
+    // No se navega acá: lo hace el efecto de arriba cuando el contexto
+    // publica session + profile. El botón queda en "Ingresando…"
+    // (loading true) ese instante — el unmount al navegar lo limpia.
   }
 
   return (

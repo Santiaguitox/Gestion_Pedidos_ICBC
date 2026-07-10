@@ -81,6 +81,10 @@ export default function ResultadoPanel({ resultados }) {
 
       <ResultadoCard resultado={{ ...resultados.dimensiones, numero: '07' }} delay={480}>
         <ItemsList label="Requiere atención" items={resultados.dimensiones?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        {/* Separadores estructurales estirados: mismo patrón que Links —
+            no fallan la prueba, se listan en amarillo por si vale la
+            pena mirarlos. Ver lib/imagenesEstructurales. */}
+        <ItemsList label="Detalle menor" items={resultados.dimensiones?.advertencias} color="var(--yellow-text)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.pesoImagenes, numero: '08' }} delay={560}>

@@ -1,3 +1,4 @@
+import { esImagenEstructural } from '@/lib/imagenesEstructurales'
 
 function parsearMedida(valor) {
   if (!valor) return null
@@ -14,6 +15,7 @@ function extraerMedidaStyle(style, propiedad) {
 export async function ValidarDimensionesImagenes(doc, cacheDatos) {
   const imagenes = [...doc.querySelectorAll('img')]
   const problemas = []
+  const advertencias = []
   const TOLERANCIA = 0.02
 
   for (let idx = 0; idx < imagenes.length; idx++) {
@@ -45,21 +47,41 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
         const diferencia = Math.abs(ratioReal - ratioDec) / ratioReal
 
         if (diferencia > TOLERANCIA) {
-          problemas.push({
-            nombre,
-            detalle: `Proporción incorrecta — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec}`
-          })
+          // Separadores y líneas punteadas (ver lib/imagenesEstructurales):
+          // se estiran a propósito al espacio necesario, la desproporción
+          // no se ve — baja de error a "detalle menor" para revisar a lo
+          // sumo. La inconsistencia atributo vs. style de más arriba
+          // sigue siendo error también para estas imágenes: dos
+          // declaraciones que se contradicen son un defecto del markup,
+          // no una decisión de layout.
+          if (esImagenEstructural(nombre) || esImagenEstructural(src)) {
+            advertencias.push({
+              detalle: `${nombre}: separador estructural estirado — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec} (esperado en separadores)`
+            })
+          } else {
+            problemas.push({
+              nombre,
+              detalle: `Proporción incorrecta — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec}`
+            })
+          }
         }
       }
     }
   }
 
-  if (problemas.length > 0) {
+  // Mismo contrato que Links: la prueba falla solo por ERRORES; las
+  // advertencias viajan aparte y la UI las lista como "Detalle menor"
+  // en amarillo (ResultadoPanel) — no bajan el score.
+  if (problemas.length > 0 || advertencias.length > 0) {
+    const detalle = problemas.length > 0
+      ? `${problemas.length} problema${problemas.length > 1 ? 's' : ''} encontrado${problemas.length > 1 ? 's' : ''}${advertencias.length > 0 ? ` (+${advertencias.length} detalle${advertencias.length > 1 ? 's' : ''} menor${advertencias.length > 1 ? 'es' : ''} en separadores)` : ''}`
+      : `Proporciones correctas — ${advertencias.length} separador${advertencias.length > 1 ? 'es' : ''} estructural${advertencias.length > 1 ? 'es' : ''} estirado${advertencias.length > 1 ? 's' : ''} a revisar si hace falta`
     return {
-      ok: false,
+      ok: problemas.length === 0,
       tipo: 'Dimensiones de imágenes',
-      detalle: `${problemas.length} problema${problemas.length > 1 ? 's' : ''} encontrado${problemas.length > 1 ? 's' : ''}`,
+      detalle,
       checks: problemas.map(p => ({ ok: false, detalle: `${p.nombre}: ${p.detalle}` })),
+      advertencias,
     }
   }
 
@@ -68,6 +90,7 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
     tipo: 'Dimensiones de imágenes',
     detalle: `Todas las imágenes (${imagenes.length}) tienen proporciones correctas`,
     checks: [],
+    advertencias: [],
   }
 }
 

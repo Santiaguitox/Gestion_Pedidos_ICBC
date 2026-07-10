@@ -13,6 +13,7 @@ import {
   TEMAS,
   TEMA_DEFAULT,
 } from '@/lib/editor/constantes.js'
+import { esImagenEstructural } from '@/lib/imagenesEstructurales'
 import { BLOQUES, BLOQUES_CONTENIDO, BLOQUES_HEADER, BLOQUE_ESPACIADOR } from '@/lib/editor/bloques.js'
 import { extraerTdsConBalance, limpiarHtmlEditor, validarUrl } from '@/lib/editor/htmlUtils.js'
 import { actualizarCampoEnHtml, detectarCampos } from '@/lib/editor/campos.js'
@@ -333,16 +334,13 @@ function CampoImagen({ campo, onActualizar }) {
 
   function onSrcBlur(nuevoSrc) {
     setSrcLocal(nuevoSrc)
-    // Imágenes puramente estructurales — "separador" (Img_Separador_*)
-    // y "línea punteada" (MediaLineaPunteada*, la línea divisoria del
-    // Módulo Doble Con Imagen Punteada, visible solo en mobile) son
-    // píxeles transparentes usados para forzar espacios o decoración
-    // de layout, no contenido real — su aspect ratio no tiene ningún
-    // significado visual, así que no tiene sentido alertar por una
-    // "desproporción" que en los hechos no se ve. Se detecta por el
-    // nombre de archivo en la URL, no por el contenido real de la
-    // imagen.
-    const esEstructural = /img[_-]?separador|lineapunteada/i.test(nuevoSrc)
+    // Imágenes puramente estructurales (separadores y líneas
+    // punteadas): su aspect ratio no significa nada visual, no tiene
+    // sentido alertar desproporción. El criterio vive centralizado en
+    // lib/imagenesEstructurales — el mismo que usa la Revisión de
+    // emails para degradar estos casos a "detalle menor" — así el
+    // editor y la revisión nunca vuelven a divergir.
+    const esEstructural = esImagenEstructural(nuevoSrc)
     if (!nuevoSrc || !origW || !origH || esEstructural) { commit({ src: nuevoSrc }); return }
     const img = new window.Image()
     img.onload = () => {

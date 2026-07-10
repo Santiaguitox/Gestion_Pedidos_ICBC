@@ -1,3 +1,4 @@
+import { esImagenEstructural } from '@/lib/imagenesEstructurales'
 // Detección y edición de campos (texto/imagen/link) sobre el HTML
 // de un bloque, como string puro. El contrato de posicionOrden vs
 // posicionContenido está documentado junto a extraerTdsConBalance
@@ -93,7 +94,7 @@ export function detectarCampos(html) {
       return m ? m[1] : ''
     }
     const src = getAttr('src')
-    if (/img[_-]?separador|lineapunteada/i.test(src)) continue
+    if (esImagenEstructural(src)) continue
     campos.push({
       tipo: 'imagen', label: `Imagen ${imgIdx + 1}`, idx: imgIdx, posicionReal,
       src, alt: getAttr('alt'), title: getAttr('title'),
