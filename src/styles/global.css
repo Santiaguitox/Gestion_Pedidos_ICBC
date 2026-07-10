@@ -5706,6 +5706,22 @@ select:focus {
   /* El mockup mobile usa 1px 4px (vs 1px 5px en desktop) para el chip
      de mención — diferencia mínima pero la dejamos fiel al pixel. */
   .coment-mencion { padding: 1px 4px; }
+
+  /* Evita el auto-zoom de iOS/Android al enfocar un campo de texto: los
+     navegadores mobile hacen zoom automático en cualquier input,
+     textarea o select con font-size menor a 16px, y no siempre vuelven
+     solos al zoom original — la página queda desplazada/recortada
+     hasta que el usuario la ajusta a mano con un pellizco. Forzando
+     16px acá el zoom nunca se dispara. Vive DENTRO del @media, así que
+     en desktop no cambia nada.
+     El !important en `select` es necesario porque su regla base (más
+     arriba en este archivo) también usa !important — sin eso, la
+     cascada normal no alcanza a pisarla. `.coment-input` se resetea
+     aparte porque su tamaño lo fija un shorthand `font:` con mayor
+     especificidad que el `input, textarea` genérico de acá abajo. */
+  input, textarea, select { font-size: 16px; }
+  select { font-size: 16px !important; }
+  .coment-input { font-size: 16px; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════

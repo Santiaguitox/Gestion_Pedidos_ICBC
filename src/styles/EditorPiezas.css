@@ -1260,6 +1260,13 @@
 @media (max-width: 768px) {
   .ep-biblioteca { display: none; }
   .ep-editor { display: none; }
+
+  /* Mismo motivo que el bloque de mobile de global.css: sin esto, el
+     textarea de "pegar HTML" (12px) dispara el auto-zoom de iOS/Android
+     al enfocarlo — y como este editor vive en una pantalla propia
+     (ep-m-screen) sin recargar la página, el usuario queda con el zoom
+     pegado hasta que lo ajusta a mano. */
+  .ep-m-textarea { font-size: 16px; }
 }
 
 /* ─── Ajustes v2 ─────────────────────────────────────────────────────────── */
