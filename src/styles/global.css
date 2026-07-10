@@ -797,9 +797,11 @@ select:focus {
   border-radius: var(--radius-md);
   padding: 0.6rem 1rem;
   cursor: pointer;
-  /* Necesario para que la franja de color del borde izquierdo (ver
-     .pedido-compact-mobile, solo mobile) respete las esquinas
-     redondeadas de la tarjeta en vez de sobresalir con ángulos rectos. */
+  /* Necesario para que el bloque mobile (que se estira hasta los bordes
+     de la tarjeta con margins negativos — ver .pedido-compact-mobile)
+     respete las esquinas redondeadas en vez de sobresalir con ángulos
+     rectos. (Antes acá también vivía la franja de color del borde
+     izquierdo, reemplazada por el punto de atención del rediseño 4b.) */
   overflow: hidden;
 }
 
@@ -5314,18 +5316,16 @@ select:focus {
     display: none;
   }
 
+  /* Rediseño 4b (2026-07-10): la severidad de revisión ya NO va como
+     franja de color en el borde izquierdo — ahora es un punto a la
+     derecha de la fila 2 del header (.pedido-compact-mobile-punto-
+     atencion, color inline desde PedidoCard.jsx vía
+     colorAtencionRevision). */
   .pedido-compact-mobile {
     display: flex;
     flex-direction: column;
-    /* Franja de color en el borde izquierdo — indica severidad de
-       revisión (no prioridad): sin color (var(--border), el borde
-       normal de la tarjeta) si no hay piezas con revisión o el
-       resultado es perfecto; ámbar/rojo si hace falta atención (el
-       color real lo pone el style inline en PedidoCard.jsx, calculado
-       con peorRevisionDePedido — ver colorBordeRevision). */
-    border-left: 3px solid var(--border);
     margin: -0.6rem -1rem;
-    padding: 0.6rem 1rem;
+    padding: 0.75rem 0.875rem;
   }
 
   .pedido-compact-mobile-header {
@@ -5350,12 +5350,13 @@ select:focus {
     margin-top: 0.0625rem;
   }
 
+  /* Rediseño 4b: el título va en UNA sola línea con ellipsis (antes
+     envolvía en varias líneas) — la base .pedido-asunto-compact ya trae
+     nowrap + ellipsis, acá solo se refuerza el peso y el min-width para
+     que el ellipsis funcione dentro del flex. */
   .pedido-compact-mobile-header-fila1 .pedido-asunto-compact {
     flex: 1;
     min-width: 0;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
     font-weight: 700;
   }
 
@@ -5365,25 +5366,80 @@ select:focus {
     gap: 0.5rem;
   }
 
+  /* Avatares + punto de atención empujados a la derecha de la fila 2. */
+  .pedido-compact-mobile-fila2-derecha {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-left: auto;
+  }
+
+  /* Mismos avatares de la vista full pero más chicos (18px vs 22px)
+     para no engordar el header compacto. */
+  .pedido-compact-mobile-avatares .avatar-asignado {
+    width: 18px;
+    height: 18px;
+    font-size: 0.5rem;
+  }
+
+  .pedido-compact-mobile-punto-atencion {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  /* Fecha límite vencida (anterior a hoy) — en rojo, como en el
+     rediseño 4b. Solo se aplica en el header mobile (la clase se pone
+     únicamente ahí en PedidoCard.jsx). */
+  .pedido-fecha-vencida {
+    color: var(--accent-primary);
+  }
+
+  /* Un solo ChevronDown que rota 180° al abrir (antes se intercambiaban
+     dos íconos ChevronUp/ChevronDown sin transición). */
   .pedido-compact-mobile-chevron {
     color: var(--text-muted);
     flex-shrink: 0;
     margin-top: 0.125rem;
+    transition: transform var(--transition);
   }
 
+  .pedido-compact-mobile-chevron-abierto {
+    transform: rotate(180deg);
+  }
+
+  /* Sin border-top divisorio: el cajón gris de abajo ya separa
+     visualmente el cuerpo del header (rediseño 4b). */
   .pedido-compact-mobile-body {
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
-    margin-top: 0.6rem;
-    padding-top: 0.6rem;
-    border-top: 1px solid var(--border);
+    margin-top: 0.65rem;
   }
 
-  /* Cada sección (Tipo/Estados/Tags/Revisión) muestra su etiqueta en su
-     PROPIA línea, con los pills debajo en otra línea — sin separadores
-     entre secciones (a diferencia de la vista anterior, que tenía un
-     border-top entre cada .pedido-compact-fila). */
+  /* El "cajón": fondo gris (--bg-base, el mismo del fondo de la app —
+     en dark queda un tono más oscuro que la tarjeta, en light el gris
+     F4F5FA del rediseño) en grilla de 2 columnas: Tipo + Estados a la
+     izquierda, Tags + QA a la derecha. La fila de Tareas (ver
+     .pedido-compact-mobile-tareas) cruza las dos columnas abajo. */
+  .pedido-compact-mobile-cajon {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    background: var(--bg-base);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+  }
+
+  /* Cada columna apila sus secciones (label + pills). */
+  .pedido-compact-mobile-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+  }
+
   .pedido-compact-mobile-seccion {
     display: flex;
     flex-direction: column;
@@ -5396,27 +5452,42 @@ select:focus {
     flex-wrap: wrap;
   }
 
-  .pedido-compact-fila-label {
-    font-size: 0.7rem;
-    font-weight: 600;
+  /* Etiqueta de sección estilo "ficha técnica" del rediseño 4b:
+     mayúsculas chicas, sin los dos puntos de la versión anterior. */
+  .pedido-compact-mobile-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
     color: var(--text-muted);
-    flex-shrink: 0;
+  }
+
+  /* Fila de Tareas al 100% del ancho del cajón, abajo del todo —
+     reusa el look de la vista mobile extendida (PedidoCardFull →
+     .pedido-progreso), destrabando el max-width de 120px de la barra
+     para que ocupe todo el ancho disponible. */
+  .pedido-compact-mobile-tareas {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+
+  .pedido-compact-mobile-tareas .pedido-progreso-barra {
+    max-width: none;
   }
 
   /* Botón "Ver pedido" — mismo patrón estructural que .toast-link
      (AppLayout.jsx), pero rojo institucional sólido en vez de violeta:
-     este SÍ navega (es la única forma de ir al detalle desde la vista
-     colapsada), por eso se destaca como una acción real, no como un
-     link secundario. */
+     este SÍ navega, por eso se destaca como una acción real, no como
+     un link secundario. Rediseño 4b: al 100% del ancho debajo del
+     cajón (antes iba chico alineado a la derecha). */
   .pedido-compact-mobile-ver-pedido {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    align-self: flex-end;
-    margin-top: 0.2rem;
-    padding: 0.45rem 0.875rem;
-    border-radius: var(--radius-md);
+    width: 100%;
+    padding: 0.6rem 0.875rem;
+    border-radius: var(--radius-sm);
     background: var(--accent-primary);
     color: #fff;
     font-size: 0.8125rem;

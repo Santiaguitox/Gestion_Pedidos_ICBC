@@ -255,15 +255,30 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
   // obligatorios al crear un pedido, así que el cuerpo expandido nunca
   // queda vacío — siempre hay algo que mostrar al abrirlo).
   const [expandidoMobile, setExpandidoMobile] = useState(false)
-  // Color del borde izquierdo en mobile: NO es prioridad, es "necesita
-  // atención en la revisión" — sin color si no hay piezas con revisión
-  // o si el resultado es perfecto (10/10); ámbar si la peor severidad
-  // es 'advertencia'; rojo si es 'error'. Reusa peorRevisionDePedido
-  // (ya calculado arriba), sin lógica de severidad nueva.
+  // Punto de atención en el header mobile (rediseño 2026-07): NO es
+  // prioridad, es "necesita atención en la revisión" — sin punto si no
+  // hay piezas con revisión o si el resultado es perfecto (10/10);
+  // ámbar si la peor severidad es 'advertencia'; rojo si es 'error'.
+  // Reusa peorRevisionDePedido (ya calculado arriba), sin lógica de
+  // severidad nueva. Antes este mismo color iba en el borde izquierdo
+  // de la tarjeta como franja — ahora es un punto a la derecha de la
+  // fila 2 del header, como en la variante 4b del rediseño.
   const esRevisionPerfecta = peorRevision && peorRevision.revision_pruebas_ok === peorRevision.revision_pruebas_total
-  const colorBordeRevision = ocultarRevisiones || !peorRevision || esRevisionPerfecta
+  const colorAtencionRevision = ocultarRevisiones || !peorRevision || esRevisionPerfecta
     ? null
     : peorRevision.revision_severidad === 'error' ? 'var(--icbc-red)' : '#F59E0B'
+  // Peor resultado de Revisión de envíos — hoisted acá (antes se
+  // calculaba inline en el body) porque ahora lo necesitan tanto la
+  // sección QA del cajón como la condición de si mostrarla.
+  const peorBase = peorBaseDePedido(pedido.pedido_base)
+  // Fecha vencida = anterior a HOY (el día del vencimiento todavía no
+  // cuenta como vencido — recién a partir del día siguiente). Solo se
+  // usa en mobile para pintar la fecha de rojo en el header, como en
+  // el rediseño 4b; desktop no cambia.
+  const fechaVencida = pedido.fecha_limite
+    ? new Date(pedido.fecha_limite + 'T23:59:59') < new Date()
+    : false
+  const asignados = pedido.pedido_asignados ?? []
 
   return (
     <div className="pedido-card-compact">
@@ -330,14 +345,16 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
         </div>
       </div>
 
-      {/* Mobile: acordeón colapsado por default — header siempre visible
-          (franja de color + título + prioridad + fecha + chevron), cuerpo
-          expandible con Tipo/Estados/Tags/Revisión + botón Ver pedido.
-          Oculto en desktop vía CSS (.pedido-compact-mobile). El click del
-          header solo abre/cierra — NUNCA navega (a diferencia del bloque
-          desktop de arriba); la única forma de ir al detalle es el botón
-          "Ver pedido" de adentro. */}
-      <div className="pedido-compact-mobile" style={colorBordeRevision ? { borderLeftColor: colorBordeRevision } : undefined}>
+      {/* Mobile: acordeón colapsado por default — rediseño "cajón gris,
+          grilla 2 columnas con pills" (variante 4b, 2026-07-10). Header
+          siempre visible de dos filas: (1) ↗ al detalle + título en UNA
+          línea con ellipsis + chevron que rota al abrir; (2) prioridad +
+          fecha (roja si venció) + avatares de asignados + punto de
+          atención de revisión a la derecha. Oculto en desktop vía CSS
+          (.pedido-compact-mobile). El click del header solo abre/cierra —
+          NUNCA navega (a diferencia del bloque desktop de arriba); al
+          detalle se va con el ↗ del header o el botón "Ver pedido". */}
+      <div className="pedido-compact-mobile">
         <div
           onClick={() => setExpandidoMobile(v => !v)}
           role="button"
@@ -354,88 +371,121 @@ export function PedidoCardCompact({ pedido, onTagClick, filtroTag, tipos = [], e
               <ExternalLink size={14} />
             </button>
             <span className="pedido-asunto-compact">{pedido.asunto}</span>
-            {expandidoMobile ? <ChevronUp size={16} className="pedido-compact-mobile-chevron" /> : <ChevronDown size={16} className="pedido-compact-mobile-chevron" />}
+            <ChevronDown size={16} className={`pedido-compact-mobile-chevron ${expandidoMobile ? 'pedido-compact-mobile-chevron-abierto' : ''}`} />
           </div>
           <div className="pedido-compact-mobile-header-fila2">
             {prio && <Badge label={prio.label} color={prio.color} size="sm" />}
-            <span className={`pedido-meta-item ${!fechaTexto ? 'pedido-meta-sin-fecha' : ''}`}>
+            <span className={`pedido-meta-item ${!fechaTexto ? 'pedido-meta-sin-fecha' : ''} ${fechaVencida ? 'pedido-fecha-vencida' : ''}`}>
               <Calendar size={12} />
               {fechaTexto ?? 'Sin fecha'}
             </span>
+            <div className="pedido-compact-mobile-fila2-derecha">
+              {asignados.length > 0 && (
+                <span className="pedido-meta-avatares pedido-compact-mobile-avatares">
+                  {asignados.map(a => <AvatarAsignado key={a.user_id} asignado={a} />)}
+                </span>
+              )}
+              {colorAtencionRevision && (
+                <span
+                  className="pedido-compact-mobile-punto-atencion"
+                  style={{ background: colorAtencionRevision }}
+                  title="Requiere revisión"
+                />
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Cuerpo expandido (rediseño 4b): un "cajón" gris en grilla de
+            2 columnas — Tipo + Estados a la izquierda, Tags + QA a la
+            derecha — para que un pedido cargado ocupe menos alto total
+            que la lista apilada anterior. Abajo del todo, DENTRO del
+            cajón y al 100% del ancho (grid-column: 1 / -1), la barra de
+            Tareas con el mismo look de la vista mobile extendida
+            (PedidoCardFull → .pedido-progreso). El botón "Ver pedido" va
+            al 100% debajo del cajón, no adentro de una columna. */}
         {expandidoMobile && (
           <div className="pedido-compact-mobile-body" onClick={e => e.stopPropagation()}>
-            {tipo && (
-              <div className="pedido-compact-mobile-seccion">
-                <span className="pedido-compact-fila-label">Tipo:</span>
-                <div className="pedido-compact-mobile-pills">
-                  <Badge label={tipo.label} color={tipo.color} size="sm" />
-                </div>
-              </div>
-            )}
-
-            {estadosBadge.length > 0 && (
-              <div className="pedido-compact-mobile-seccion">
-                <span className="pedido-compact-fila-label">Estados:</span>
-                <div className="pedido-compact-mobile-pills">
-                  {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
-                </div>
-              </div>
-            )}
-
-            {pedido.tags?.length > 0 && (
-              <div className="pedido-compact-mobile-seccion">
-                <span className="pedido-compact-fila-label">Tags:</span>
-                <div className="pedido-compact-mobile-pills">
-                  {pedido.tags.map(t => (
-                    <button key={t} onClick={() => onTagClick?.(t)}
-                      className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
-                      <Tag size={9} />{t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!ocultarRevisiones && (() => {
-              const peorBase = peorBaseDePedido(pedido.pedido_base)
-              const cantidadRevisiones = (peorRevision ? 1 : 0) + (peorBase ? 1 : 0)
-              if (cantidadRevisiones === 0) return null
-              return (
-                <div className="pedido-compact-mobile-seccion">
-                  <span className="pedido-compact-fila-label">
-                    {cantidadRevisiones === 1 ? 'Revisión:' : 'Revisiones:'}
-                  </span>
-                  <div className="pedido-compact-mobile-pills">
-                    {peorRevision && (
-                      esRevisionPerfecta ? (
-                        <span
-                          className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
-                          title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
-                        >
-                          <FileSearch size={10} style={{ marginRight: '3px' }} />
-                          {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => navigate('/revision-html', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
-                          className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
-                          title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
-                        >
-                          <FileSearch size={10} style={{ marginRight: '3px' }} />
-                          {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total}
-                        </button>
-                      )
-                    )}
-                    {peorBase && (
-                      <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
-                    )}
+            <div className="pedido-compact-mobile-cajon">
+              <div className="pedido-compact-mobile-col">
+                {tipo && (
+                  <div className="pedido-compact-mobile-seccion">
+                    <span className="pedido-compact-mobile-label">Tipo</span>
+                    <div className="pedido-compact-mobile-pills">
+                      <Badge label={tipo.label} color={tipo.color} size="sm" />
+                    </div>
                   </div>
-                </div>
-              )
-            })()}
+                )}
+                {estadosBadge.length > 0 && (
+                  <div className="pedido-compact-mobile-seccion">
+                    <span className="pedido-compact-mobile-label">Estados</span>
+                    <div className="pedido-compact-mobile-pills">
+                      {estadosBadge.map(e => <Badge key={e.value} label={e.label} color={e.color} size="sm" />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pedido-compact-mobile-col">
+                {pedido.tags?.length > 0 && (
+                  <div className="pedido-compact-mobile-seccion">
+                    <span className="pedido-compact-mobile-label">Tags</span>
+                    <div className="pedido-compact-mobile-pills">
+                      {pedido.tags.map(t => (
+                        <button key={t} onClick={() => onTagClick?.(t)}
+                          className={`tag-chip ${filtroTag === t ? 'tag-chip-active' : ''}`}>
+                          <Tag size={9} />{t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!ocultarRevisiones && (peorRevision || peorBase) && (
+                  <div className="pedido-compact-mobile-seccion">
+                    <span className="pedido-compact-mobile-label">QA</span>
+                    <div className="pedido-compact-mobile-pills">
+                      {peorRevision && (
+                        esRevisionPerfecta ? (
+                          <span
+                            className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                            title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                          >
+                            <FileSearch size={10} style={{ marginRight: '3px' }} />
+                            {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total} pruebas
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => navigate('/revision-html', { state: { url: peorRevision.link_online, entregableId: peorRevision.id } })}
+                            className={`entregable-revision-badge-compacto entregable-revision-${peorRevision.revision_severidad}`}
+                            title={`Revisión de HTML: ${peorRevision.revision_pruebas_ok}/${peorRevision.revision_pruebas_total} pruebas superadas`}
+                          >
+                            <FileSearch size={10} style={{ marginRight: '3px' }} />
+                            {peorRevision.revision_pruebas_ok}/{peorRevision.revision_pruebas_total} pruebas
+                          </button>
+                        )
+                      )}
+                      {peorBase && (
+                        <PillBaseCompacto pedidoBase={pedido.pedido_base} entregables={entregablesNorm} onClick={irARevisionEnvios} />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {pedido.subtareas?.length > 0 && (() => {
+                const completadas = pedido.subtareas.filter(s => s.completada).length
+                const total = pedido.subtareas.length
+                const porcentaje = Math.round((completadas / total) * 100)
+                return (
+                  <div className="pedido-progreso pedido-compact-mobile-tareas">
+                    <span className="pedido-progreso-label">Tareas {completadas}/{total}</span>
+                    <div className="pedido-progreso-barra">
+                      <div className="pedido-progreso-relleno" style={{ width: `${porcentaje}%` }} />
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
 
             <button onClick={irAlDetalle} className="pedido-compact-mobile-ver-pedido">
               <ExternalLink size={13} />Ver pedido
