@@ -51,6 +51,15 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     cantidad_envios:    pedido?.cantidad_envios ?? '',
     fecha_programacion: pedido?.fecha_programacion ?? '',
     hora_programacion:  pedido?.hora_programacion ?? '',
+    // Token del lock optimista: el updated_at del pedido TAL COMO
+    // ESTABA cuando este form se abrió (useState inicializa una sola
+    // vez, así que aunque el prop se refresque con el detalle, este
+    // valor queda congelado — que es exactamente la gracia). Viaja con
+    // el submit y actualizarPedido lo compara en el UPDATE: si otra
+    // persona guardó en el medio, matchea 0 filas y avisa en vez de
+    // pisar. No es un campo editable: limpiarCampos lo saca antes de
+    // tocar la base.
+    updated_at:         pedido?.updated_at ?? null,
   })
   const [usuarios, setUsuarios] = useState([])
   const [tagInput, setTagInput] = useState('')

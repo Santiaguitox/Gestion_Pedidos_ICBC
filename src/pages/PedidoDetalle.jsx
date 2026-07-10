@@ -140,7 +140,25 @@ export default function PedidoDetalle() {
     queryPedido().then(data => { setPedido(data); setLoading(false) })
   }, [queryPedido])
 
-  async function handleEdit(data) { await actualizarPedido(id, data); setEditando(false); fetchPedido() }
+  async function handleEdit(data) {
+    try {
+      await actualizarPedido(id, data)
+      setEditando(false)
+      fetchPedido()
+    } catch (err) {
+      // Refrescar el detalle TAMBIÉN cuando falla: si el error fue el
+      // lock optimista ("otra persona modificó..."), al cerrar el form
+      // el usuario ya ve los valores nuevos del otro, y al reabrirlo el
+      // remount captura un token fresco — sin esto el detalle quedaba
+      // stale (no tiene realtime) y reabrir repetía el conflicto para
+      // siempre. El form abierto no pierde nada: su estado se inicializa
+      // una sola vez, así que lo tipeado sigue ahí mientras deciden qué
+      // conservar. El throw sigue viaje al catch del form, que muestra
+      // el mensaje.
+      fetchPedido()
+      throw err
+    }
+  }
 
   function handleDelete() {
     setConfirm({

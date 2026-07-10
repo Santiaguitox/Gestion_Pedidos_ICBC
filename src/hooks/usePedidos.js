@@ -17,6 +17,11 @@ function limpiarCampos(data) {
   // El formulario ya preselecciona un valor válido, esto es solo respaldo.
   if (limpio.tipo === '') limpio.tipo = 'creacion_email'
   if (limpio.prioridad === '') limpio.prioridad = 'media'
+  // updated_at NO es un campo editable: es el token del lock optimista
+  // que PedidoForm agrega a su estado (ver ahí). Se saca acá para que
+  // jamás llegue al INSERT/UPDATE como columna — la mantiene el trigger
+  // pedidos_updated_at, no el cliente.
+  delete limpio.updated_at
   return limpio
 }
 
@@ -106,17 +111,25 @@ export function usePedidos(filters = {}) {
     }
   }, [queryPedidos])
 
-  // loading arranca en true (useState arriba) para la carga inicial, así
-  // que no hace falta prenderlo ahí. Para los refetches *por cambio de
-  // filtro* sí queremos mostrar loading de nuevo (puede tardar con muchos
-  // pedidos); el realtime, en cambio, nunca refetchea la lista completa
-  // (ver más abajo) así que no compite con este loading.
-  const esPrimeraCarga = useRef(true)
-  useEffect(() => {
-    if (!esPrimeraCarga.current) setLoading(true)
-    esPrimeraCarga.current = false
+  // Reset por CAMBIO de filtros, ajustado DURANTE el render (patrón
+  // oficial "adjusting state when props change", el mismo que
+  // useComentarios usa para el cambio de pedido): se compara contra la
+  // clave del render anterior y se resetea ahí mismo — React re-corre
+  // el render con el estado nuevo antes de pintar, así que el loading
+  // aparece un frame ANTES que con el useEffect que había acá (que
+  // además era el setState-sincrónico-en-efecto que marca la regla de
+  // React 19). En el primer render no entra: loading ya arranca en true
+  // desde el useState.
+  const [prevFiltrosKey, setPrevFiltrosKey] = useState(filtrosKey)
+  if (prevFiltrosKey !== filtrosKey) {
+    setPrevFiltrosKey(filtrosKey)
+    setLoading(true)
     setHayNuevos(false)
     setPaginaActual(0)
+  }
+
+  // El efecto queda solo con el trabajo async — sin setState sincrónico.
+  useEffect(() => {
     queryPedidos(0)
       .then(({ pedidos: data, total: t }) => { setError(null); setPedidos(data); setTotal(t) })
       .catch(err => setError(err.message))
@@ -156,9 +169,19 @@ export function usePedidos(filters = {}) {
         if (!id) return
 
         if (!idsVisiblesRef.current.has(id)) {
-          // Caso 2: pedido nuevo (o uno que pasó a matchear pero no
-          // estaba visible) — no se inserta, solo se avisa.
-          setHayNuevos(true)
+          // Caso 2: el pedido no está visible. Antes esto prendía
+          // "hay pedidos nuevos" a ciegas, con falsos positivos para
+          // TODO el equipo: editar un pedido viejo de la página 3, o
+          // uno finalizado con mostrarFinalizados apagado, avisaba
+          // "nuevos" sin que hubiera nada nuevo que ver. Ahora se
+          // consulta la misma RPC puntual del caso 1: solo si el pedido
+          // realmente matchea los filtros actuales se prende el aviso.
+          // Un DELETE físico ni se consulta — una fila que ya no existe
+          // no puede ser "nueva" (y su old record solo trae el id).
+          if (payload.eventType === 'DELETE') return
+          rpcListarPedidos(filters, 0, id).then(({ pedidos: encontrados }) => {
+            if (encontrados.length > 0) setHayNuevos(true)
+          }).catch(err => console.warn('[realtime pedidos]', err))
           return
         }
 
@@ -192,7 +215,16 @@ export function usePedidos(filters = {}) {
     try {
       const siguiente = paginaActual + 1
       const { pedidos: data } = await queryPedidos(siguiente)
-      setPedidos(prev => [...prev, ...data])
+      // Dedup contra el corrimiento de offset: si entre la carga de la
+      // página N y este "Cargar más" entró un pedido nuevo (o se
+      // restauró uno) que ordena antes, toda la paginación se corre un
+      // lugar y la página N+1 repite el último ítem de la N — sin este
+      // filtro aparecía la card duplicada (y el warning de keys
+      // repetidas de React). verNuevos ya deduplicaba; esto lo empareja.
+      setPedidos(prev => {
+        const vistos = new Set(prev.map(p => p.id))
+        return [...prev, ...data.filter(p => !vistos.has(p.id))]
+      })
       setPaginaActual(siguiente)
     } catch (err) {
       setError(err.message)
@@ -252,10 +284,39 @@ export function usePedidos(filters = {}) {
   async function actualizarPedido(id, data) {
     const { asignados, ...rest } = data
     const campos = limpiarCampos(rest)
-    const { data: anterior } = await supabase
-      .from('pedidos').select('prioridad, estados, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
-    const { error } = await supabase.from('pedidos').update(campos).eq('id', id)
+    // updated_at entra al select para el lock optimista de abajo. La
+    // lectura ahora también valida: sin el estado anterior no hay
+    // contra qué lockear (y antes un error acá seguía de largo y
+    // registraba actividad con "anterior: undefined").
+    const { data: anterior, error: errorAnterior } = await supabase
+      .from('pedidos').select('updated_at, prioridad, estados, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
+    if (errorAnterior || !anterior) throw new Error('No se pudo leer el estado actual del pedido — reintentá')
+
+    // LOCK OPTIMISTA contra el update perdido: dos personas con el
+    // mismo pedido abierto en el form, la primera guarda, la segunda
+    // guarda después con datos viejos y pisa TODO en silencio (el form
+    // manda todos los campos). El .eq('updated_at', ...) hace que el
+    // segundo update matchee 0 filas — el trigger pedidos_updated_at
+    // ya movió el timestamp — y acá se corta con un mensaje claro.
+    //
+    // ⚠️ El token correcto es data.updated_at: el updated_at que el
+    // FORM capturó al abrirse. La primera versión de este lock usaba
+    // anterior.updated_at — la lectura fresca de tres líneas arriba —
+    // o sea, comparaba la fila contra sí misma de milisegundos antes:
+    // cubría solo esa micro-ventana y el escenario real (form abierto
+    // con datos viejos) pasaba de largo, como demostró el test de dos
+    // pestañas del 2026-07-10. La lectura fresca queda solo como
+    // fallback para un caller hipotético que no traiga token (hoy el
+    // único caller es el form, que siempre lo trae).
+    const tokenLock = data.updated_at ?? anterior.updated_at
+    const { data: filas, error } = await supabase
+      .from('pedidos').update(campos).eq('id', id)
+      .eq('updated_at', tokenLock)
+      .select('id')
     if (error) throw error
+    if (!filas?.length) {
+      throw new Error('Otra persona modificó este pedido mientras lo editabas. Cerrá el formulario para ver los cambios nuevos y volvé a aplicar los tuyos.')
+    }
 
     if (campos.prioridad && anterior?.prioridad !== campos.prioridad) {
       await logActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_PRIORIDAD, { anterior: anterior.prioridad, nuevo: campos.prioridad })
