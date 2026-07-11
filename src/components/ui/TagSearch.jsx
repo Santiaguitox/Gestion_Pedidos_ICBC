@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Tag, X, ChevronDown } from 'lucide-react'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
@@ -8,20 +9,28 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 //
 // - DESKTOP: popover absolute anclado al trigger, en flujo. Sin teclado
 //   virtual no hay nada que mueva el viewport, el anclaje es estable.
-//   El overflow:hidden del acordeon de filtros se libera solo mientras
-//   esta abierto via :has (ver .acordeon-anim-clip en global.css).
+//   El overflow:hidden del acordeon de filtros ya no le afecta: ver mas
+//   abajo por que ahora ni siquiera vive adentro del acordeon.
 //
-// - MOBILE: bottom sheet calcado del que ya usa el editor de piezas
-//   (.ep-m-sheet), mismo patron que ahi resuelve el teclado de iOS sin
-//   franja gris: overlay fixed inset:0 + sheet con max-height ESTATICO
-//   en vh (no un height dinamico en dvh atado a :focus-within — eso fue
-//   lo que no terminaba de asentarse) y, sobre todo, SIN autoFocus. El
-//   editor nunca autoenfoca el input al abrir un sheet: el usuario tapea
-//   el campo y el teclado aparece con el sheet ya asentado en pantalla,
-//   por eso iOS nunca necesita panear la ventana para "revelarlo". Se
-//   achica el problema a: abrir el sheet (sin foco) -> el usuario tapea
-//   el buscador cuando quiere -> el teclado sube sobre un layout que ya
-//   esta quieto. El autoFocus de desktop no se toca.
+// - MOBILE: bottom sheet con position:fixed. La causa real de TODOS los
+//   síntomas anteriores (franja gris, el panel "se movía"/desaparecía
+//   con "Sin resultados") no era el teclado ni el autoFocus: es que
+//   fixed se ancla al layout viewport, y si la PÁGINA DE FONDO se
+//   scrollea mientras el sheet está abierto (el navegador la reacomoda
+//   solo, por ejemplo cuando el contenido cambia de alto al no haber
+//   coincidencias), el sheet queda "flotando" en un punto que ya no
+//   coincide con lo que ves en pantalla. Se resuelve de raíz con lo que
+//   usa cualquier bottom-sheet mobile serio, dos cosas combinadas:
+//
+//   1) SCROLL-LOCK: mientras el sheet está abierto, el body queda
+//      literalmente congelado (position:fixed + top negativo = scrollY
+//      guardado) — no puede moverse pase lo que pase adentro del sheet.
+//      Sin página movediza debajo, no hay a qué desalinearse. Se
+//      restaura el scroll exacto al cerrar.
+//   2) PORTAL: el sheet se renderiza directo en document.body (createPortal),
+//      no anidado en el acordeón de filtros. Así queda aislado de
+//      cualquier overflow/clip/transform de ese contenedor — ya no hace
+//      falta el parche :has(.tagsearch-abierto) en el acordeón.
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -35,11 +44,44 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
 
   useEffect(() => {
     function handleClick(e) {
+      // El sheet mobile vive portaleado en document.body, fuera del
+      // subárbol de `ref` — sin este chequeo extra, cualquier click
+      // adentro del sheet (tipear, elegir un tag) se leería como "click
+      // afuera" y lo cerraría antes de procesar la selección.
+      if (e.target.closest('.tagsearch-sheet-overlay')) return
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // SCROLL-LOCK del fondo mientras el sheet mobile está abierto — ver
+  // comentario de cabecera. Congela el body en su posición actual
+  // (position:fixed + top negativo con el scrollY guardado) para que
+  // nada pueda moverlo mientras el sheet vive encima, y lo restaura tal
+  // cual estaba al cerrar. Solo aplica en mobile: el popover de desktop
+  // no lo necesita (nunca desalinea nada).
+  useEffect(() => {
+    if (!open || !isMobile) return
+    const scrollY = window.scrollY
+    const { style } = document.body
+    const prev = { position: style.position, top: style.top, left: style.left, right: style.right, width: style.width, overflow: style.overflow }
+    style.position = 'fixed'
+    style.top = `-${scrollY}px`
+    style.left = '0'
+    style.right = '0'
+    style.width = '100%'
+    style.overflow = 'hidden'
+    return () => {
+      style.position = prev.position
+      style.top = prev.top
+      style.left = prev.left
+      style.right = prev.right
+      style.width = prev.width
+      style.overflow = prev.overflow
+      window.scrollTo(0, scrollY)
+    }
+  }, [open, isMobile])
 
   function abrir() {
     if (!isMobile) {
@@ -132,12 +174,11 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         }
       </div>
 
-      {/* MOBILE: bottom sheet (lenguaje visual de los sheets del editor
-          de piezas). Fixed inset:0 — no se ancla a nada, ningun
-          corrimiento de viewport puede desacomodarlo, y el overflow del
-          acordeon no lo recorta (overflow no clipea descendientes
-          fixed). Tap en el fondo o en la X cierra. */}
-      {open && isMobile && (
+      {/* MOBILE: bottom sheet, portaleado directo a document.body — ver
+          comentario de cabecera. Fixed inset:0 dentro del portal, y con
+          el scroll-lock de arriba nada puede desalinearlo. Tap en el
+          fondo o en la X cierra. */}
+      {open && isMobile && createPortal(
         <div className="tagsearch-sheet-overlay" onClick={cerrar}>
           <div className="tagsearch-sheet" onClick={e => e.stopPropagation()}>
             <div className="tagsearch-sheet-handle" />
@@ -152,7 +193,8 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
               {lista}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DESKTOP: popover anclado al trigger */}
