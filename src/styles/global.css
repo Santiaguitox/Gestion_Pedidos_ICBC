@@ -5266,14 +5266,19 @@ select:focus {
    mobile usa hex fijos de paleta clara mientras que Dashboard/Pedidos
    respetan el theme — acá van variables.
 
-   REGLA DE GEOMETRÍA (no "mejorar" sin leer esto): el sheet mide 82dvh
-   FIJOS, no max-height. Con altura fija, el buscador — pegado al
-   header — queda siempre en el quinto superior de la pantalla, por
-   ENCIMA de donde aparece el teclado, esté el trigger donde esté. Si
-   esto se convierte en max-height y la lista es corta, el sheet se
-   achica, el input cae a la zona del teclado y vuelve el bug de la
-   franja gris (iOS panea la ventana para revelar el input enfocado y
-   no siempre deshace el corrimiento al cerrar). */
+   REGLA DE GEOMETRÍA (no "mejorar" sin leer esto): mientras el buscador
+   tiene foco (= el teclado está o está subiendo), el sheet mide 82dvh
+   — así el input, pegado al header, queda en el quinto superior de la
+   pantalla, por ENCIMA del teclado, y iOS nunca necesita panear la
+   ventana para revelarlo (ese paneo no deshecho era la franja gris al
+   pie). El foco es el detector de teclado perfecto y es CSS puro:
+   teclado presente ⇔ un campo del sheet tiene foco ⇔ :focus-within.
+   Sin foco (teclado cerrado), el sheet colapsa a la altura de su
+   contenido — nada de un salón vacío de 82dvh con dos resultados.
+   El cambio de altura es instantáneo a propósito (height auto→fija no
+   es animable y NO debe serlo): el reflow tiene que aplicarse en el
+   mismo frame del focus, antes de que iOS calcule si necesita revelar
+   el input. */
 .tagsearch-sheet-overlay {
   position: fixed;
   inset: 0;
@@ -5286,7 +5291,8 @@ select:focus {
 
 .tagsearch-sheet {
   width: 100%;
-  height: 82dvh;
+  height: auto;
+  max-height: 82dvh;
   background: var(--bg-surface);
   border-radius: 18px 18px 0 0;
   display: flex;
@@ -5294,6 +5300,12 @@ select:focus {
   animation: tagsearch-sheet-slideup 0.2s ease-out;
   overflow: hidden;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Ver REGLA DE GEOMETRÍA arriba: la altura grande existe solo mientras
+   el teclado existe. */
+.tagsearch-sheet:focus-within {
+  height: 82dvh;
 }
 
 .tagsearch-sheet-handle {
