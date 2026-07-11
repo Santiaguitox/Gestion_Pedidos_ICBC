@@ -5259,88 +5259,175 @@ select:focus {
   padding: 0.375rem 0.625rem;
 }
 
-/* ── Presentación mobile del TagSearch: bottom sheet ──
-   Mismo lenguaje visual Y MISMA GEOMETRÍA que los sheets del editor de
-   piezas (.ep-m-sheet-*), replicado acá con clases propias por dos
-   motivos: EditorPiezas.css solo se carga en la página del editor, y el
-   editor mobile usa hex fijos de paleta clara mientras que
-   Dashboard/Pedidos respetan el theme — acá van variables.
-
-   Altura ESTÁTICA en vh (no dvh, no dinámica con :focus-within): el
-   sheet mide siempre lo mismo, se abra con foco o no. Eso, sumado a que
-   el input del buscador NO lleva autoFocus (ver TagSearch.jsx), es lo
-   que evita la franja gris — el teclado sube recién cuando el usuario
-   tapea el campo, con el sheet ya asentado, igual que en el editor. */
-.tagsearch-sheet-overlay {
+/* ── Presentación mobile del TagSearch: panel FULL-SCREEN ──
+   Reemplaza el bottom-sheet anterior. Patrón "toma completa de
+   pantalla" (spec de diseño dedicado): sin backdrop —el panel ES la
+   pantalla—, alto 100dvh (dinámico, se ajusta solo con o sin teclado),
+   header y buscador fijos arriba, la lista es la ÚNICA zona flexible
+   con scroll propio. El buscador no lleva autoFocus (ver TagSearch.jsx)
+   así el teclado nunca aparece solo al abrir. */
+.tagsearch-full {
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: rgba(13, 15, 32, 0.45);
-  display: flex;
-  align-items: flex-end;
-  animation: tagsearch-sheet-fade 0.15s ease-out;
-}
-
-.tagsearch-sheet {
-  width: 100%;
-  max-height: 78vh;
+  height: 100dvh;
   background: var(--bg-surface);
-  border-radius: 18px 18px 0 0;
   display: flex;
   flex-direction: column;
-  animation: tagsearch-sheet-slideup 0.2s ease-out;
   overflow: hidden;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  animation: tagsearch-full-slideup 0.24s cubic-bezier(.32,.72,0,1);
 }
 
-.tagsearch-sheet-handle {
+.tagsearch-full-header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.tagsearch-full-handle {
   width: 36px;
   height: 4px;
   border-radius: 99px;
   background: var(--border-strong);
-  margin: 10px auto 4px;
-  flex-shrink: 0;
+  margin: max(10px, env(safe-area-inset-top)) auto 6px;
 }
 
-.tagsearch-sheet-header {
-  flex-shrink: 0;
+.tagsearch-full-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 16px 12px;
+  padding: 4px 20px 12px;
   font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.01em;
 }
 
-.tagsearch-sheet-header button {
+.tagsearch-full-close {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tagsearch-full-searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 12px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1.5px solid transparent;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.tagsearch-full-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1rem; /* 16px fijos: evita el auto-zoom de iOS al enfocar */
   color: var(--text-primary);
 }
 
-.tagsearch-sheet-search {
+/* El tema tiene una regla global `input:focus` (border-color rojo +
+   box-shadow de glow) pensada para inputs sueltos con su propio borde.
+   Acá el borde rojo ya lo pone el contenedor (.tagsearch-full-searchbar,
+   vía JS), así que sin este override el input duplicaba el borde y
+   sumaba el glow encima → el efecto "halo" de la captura. `input:focus`
+   pesa más que una sola clase por especificidad, por eso hace falta
+   :focus acá para ganarle. */
+.tagsearch-full-input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.tagsearch-full-clear-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text-secondary);
   flex-shrink: 0;
-  padding: 12px 16px 10px;
 }
 
-.tagsearch-sheet-search .tagsearch-input {
-  width: 100%;
-  border-radius: 10px;
-  padding: 9px 12px;
-}
-
-.tagsearch-sheet-body {
+.tagsearch-full-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 8px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 
-@keyframes tagsearch-sheet-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tagsearch-sheet-slideup { from { transform: translateY(24px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+.tagsearch-full-row {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+  text-align: left;
+  transition: background 100ms ease;
+}
+
+.tagsearch-full-row-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tagsearch-full-row-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 100ms ease;
+}
+
+/* Estado "sin resultados": se renderiza ADENTRO del mismo .tagsearch-full-body
+   (flex:1), centrado — nunca colapsa el panel a la altura del header. */
+.tagsearch-full-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.tagsearch-full-empty-btn {
+  margin-top: 4px;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 0.8438rem;
+  font-weight: 600;
+}
+
+@keyframes tagsearch-full-slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
 /* La lista del popover de desktop: mismos 220px de tope que siempre. */
 .tagsearch-lista { max-height: 220px; }

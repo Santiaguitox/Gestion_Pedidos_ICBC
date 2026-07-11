@@ -1,66 +1,77 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Tag, X, ChevronDown } from 'lucide-react'
+import { Tag, X, ChevronDown, Search, Check } from 'lucide-react'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
 // Selector de tag con buscador.
 //
-// DOS presentaciones, una por contexto:
+// DOS presentaciones, totalmente independientes:
 //
-// - DESKTOP: popover absolute anclado al trigger, en flujo. Sin teclado
-//   virtual no hay nada que mueva el viewport, el anclaje es estable.
-//   El overflow:hidden del acordeon de filtros ya no le afecta: ver mas
-//   abajo por que ahora ni siquiera vive adentro del acordeon.
+// - DESKTOP: popover absolute anclado al trigger, en flujo. Nunca se
+//   tocó en toda esta saga y sigue igual.
 //
-// - MOBILE: bottom sheet con position:fixed. La causa real de TODOS los
-//   síntomas anteriores (franja gris, el panel "se movía"/desaparecía
-//   con "Sin resultados") no era el teclado ni el autoFocus: es que
-//   fixed se ancla al layout viewport, y si la PÁGINA DE FONDO se
-//   scrollea mientras el sheet está abierto (el navegador la reacomoda
-//   solo, por ejemplo cuando el contenido cambia de alto al no haber
-//   coincidencias), el sheet queda "flotando" en un punto que ya no
-//   coincide con lo que ves en pantalla. Se resuelve de raíz con lo que
-//   usa cualquier bottom-sheet mobile serio, dos cosas combinadas:
+// - MOBILE: panel de TOMA COMPLETA DE PANTALLA (full-screen takeover),
+//   no un bottom-sheet. Este es el patrón que usan los buscadores/filtros
+//   nativos (Maps, App Store, Gmail) y el que resuelve de raíz — no
+//   parchea — los tres síntomas que veníamos arrastrando:
 //
-//   1) SCROLL-LOCK: mientras el sheet está abierto, el body queda
-//      literalmente congelado (position:fixed + top negativo = scrollY
-//      guardado) — no puede moverse pase lo que pase adentro del sheet.
-//      Sin página movediza debajo, no hay a qué desalinearse. Se
-//      restaura el scroll exacto al cerrar.
-//   2) PORTAL: el sheet se renderiza directo en document.body (createPortal),
-//      no anidado en el acordeón de filtros. Así queda aislado de
-//      cualquier overflow/clip/transform de ese contenedor — ya no hace
-//      falta el parche :has(.tagsearch-abierto) en el acordeón.
+//   - "Franja gris": un panel con alto fijo en vh no se achica cuando
+//     aparece el teclado (en iOS el teclado reduce el visual viewport,
+//     no el layout viewport) y deja un espacio muerto. Acá el panel usa
+//     100dvh (dinámico) y el teclado nunca tiene que competir por
+//     espacio con nada: el header y el buscador son fijos arriba, la
+//     lista es la ÚNICA zona flexible.
+//   - "El panel se movía o desaparecía": pasaba porque Safari, al
+//     enfocar un input, hace scroll automático del documento — y un
+//     panel fixed queda anclado al layout viewport que Safari acaba de
+//     mover. Acá el buscador NO tiene autoFocus (el usuario lo toca
+//     cuando quiere buscar), así que el teclado nunca aparece solo, sin
+//     que el usuario ya esté mirando el panel ya asentado.
+//   - "Colapsaba con 0 resultados": pasaba porque el alto dependía del
+//     contenido. Acá el alto es SIEMPRE 100dvh y el estado "sin
+//     resultados" se renderiza adentro del mismo flex:1 — nunca encoge
+//     el panel.
+//
+//   Se cierra con la X, eligiendo un tag, o con el botón atrás de
+//   Android (se pushea una entrada al history al abrir y se escucha
+//   popstate — ver efecto más abajo). No existe "tocar afuera" porque
+//   no hay afuera: es pantalla completa, sin backdrop que alinear.
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  // Solo visual, panel mobile: resalta el buscador (fondo blanco + borde
+  // rojo de marca) mientras tiene foco, calcado del refresh visual que
+  // pidió el usuario. No afecta el layout ni el teclado.
+  const [buscadorEnfocado, setBuscadorEnfocado] = useState(false)
   // Solo desktop: de que lado del trigger cuelga el popover. En la
   // grilla de filtros el TagSearch suele vivir pegado al borde derecho
   // y colgar siempre a la izquierda (left:0) mandaba sus 220px por
   // fuera del viewport. Se decide al abrir midiendo el espacio real.
   const [alineacion, setAlineacion] = useState('left')
+  // Refuerzo del punto 7 del spec (Android WebView viejos): si hay
+  // window.visualViewport, seguimos su alto en vivo y lo aplicamos como
+  // alto explícito del panel en vez de confiar solo en 100dvh.
+  const [altoVisual, setAltoVisual] = useState(null)
   const ref = useRef(null)
   const isMobile = useIsMobile()
 
   useEffect(() => {
     function handleClick(e) {
-      // El sheet mobile vive portaleado en document.body, fuera del
-      // subárbol de `ref` — sin este chequeo extra, cualquier click
-      // adentro del sheet (tipear, elegir un tag) se leería como "click
-      // afuera" y lo cerraría antes de procesar la selección.
-      if (e.target.closest('.tagsearch-sheet-overlay')) return
+      // El panel mobile vive portaleado en document.body, fuera del
+      // subárbol de `ref` — sin este chequeo, cualquier click adentro
+      // (tipear, elegir un tag) se leería como "click afuera".
+      if (e.target.closest('.tagsearch-full')) return
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // SCROLL-LOCK del fondo mientras el sheet mobile está abierto — ver
-  // comentario de cabecera. Congela el body en su posición actual
-  // (position:fixed + top negativo con el scrollY guardado) para que
-  // nada pueda moverlo mientras el sheet vive encima, y lo restaura tal
-  // cual estaba al cerrar. Solo aplica en mobile: el popover de desktop
-  // no lo necesita (nunca desalinea nada).
+  // SCROLL-LOCK del fondo mientras el panel mobile está abierto. No es
+  // estrictamente necesario para el layout (el panel es pantalla
+  // completa, no depende de dónde esté el scroll de la página) pero
+  // evita que un swipe se "filtre" al fondo y lo mueva mientras tanto.
+  // Se restaura el scroll exacto al cerrar (punto 8 del spec).
   useEffect(() => {
     if (!open || !isMobile) return
     const scrollY = window.scrollY
@@ -83,6 +94,37 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     }
   }, [open, isMobile])
 
+  // Botón ATRÁS de Android (punto 8 del spec): pushea una entrada al
+  // history al abrir, y popstate cierra el panel en vez de sacar al
+  // usuario de la pantalla. cerrar() dispara history.back() en vez de
+  // cerrar directo, para consumir esa entrada — así el próximo atrás
+  // "de verdad" no queda pisado por una entrada fantasma.
+  useEffect(() => {
+    if (!open || !isMobile) return
+    window.history.pushState({ tagsearchOpen: true }, '')
+    function handlePopState() {
+      setOpen(false)
+      setQuery('')
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [open, isMobile])
+
+  // Refuerzo opcional de visualViewport (punto 7 del spec) — sigue el
+  // alto real disponible en vivo (con o sin teclado) para navegadores
+  // viejos donde 100dvh no alcance a reaccionar solo.
+  useEffect(() => {
+    if (!open || !isMobile || !window.visualViewport) return
+    const vv = window.visualViewport
+    function actualizar() { setAltoVisual(vv.height) }
+    actualizar()
+    vv.addEventListener('resize', actualizar)
+    return () => {
+      vv.removeEventListener('resize', actualizar)
+      setAltoVisual(null)
+    }
+  }, [open, isMobile])
+
   function abrir() {
     if (!isMobile) {
       const ANCHO_DROPDOWN = 220 // debe matchear el width del popover
@@ -96,8 +138,14 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
   }
 
   function cerrar() {
-    setQuery('')
-    setOpen(false)
+    if (isMobile && open) {
+      // Deja que el popstate handler cierre y limpie el query — así se
+      // consume la entrada de history que se pusheó al abrir.
+      window.history.back()
+    } else {
+      setQuery('')
+      setOpen(false)
+    }
   }
 
   const filtrados = tags.filter(t =>
@@ -115,25 +163,13 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     setQuery('')
   }
 
-  // Input de DESKTOP — se conserva tal cual, con autoFocus (ahi nunca
+  // Input de DESKTOP — se conserva tal cual, con autoFocus (ahí nunca
   // hubo problema de teclado). La clase tagsearch-input trae el override
   // de 16px en mobile que evita el auto-zoom de iOS al enfocarlo (un
-  // fontSize inline le ganaria a ese override, por eso no hay ninguno).
+  // fontSize inline le ganaría a ese override, por eso no hay ninguno).
   const inputBuscador = (
     <input
       autoFocus
-      className="tagsearch-input"
-      value={query}
-      onChange={e => setQuery(e.target.value)}
-      placeholder={placeholder}
-      onClick={e => e.stopPropagation()}
-    />
-  )
-
-  // Input de MOBILE — igual pero SIN autoFocus (ver comentario de
-  // cabecera: es la pieza clave para que no haya franja gris).
-  const inputBuscadorMobile = (
-    <input
       className="tagsearch-input"
       value={query}
       onChange={e => setQuery(e.target.value)}
@@ -159,6 +195,29 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     </>
   )
 
+  // Lista MOBILE — filas de 52px con badge de ícono redondeado (look del
+  // refresh visual), rojo de marca (--accent-primary / --red-bg) en vez
+  // de gris plano cuando el tag está seleccionado.
+  const listaMobile = (
+    <>
+      {filtrados.map(t => {
+        const sel = value === t
+        return (
+          <button key={t} onClick={() => seleccionar(t)} className="tagsearch-full-row"
+            style={{ background: sel ? 'var(--red-bg)' : 'transparent' }}>
+            <span className="tagsearch-full-row-left">
+              <span className="tagsearch-full-row-badge" style={{ background: sel ? 'var(--red-bg-soft)' : 'var(--bg-hover)' }}>
+                <Tag size={14} style={{ color: sel ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
+              </span>
+              <span style={{ color: sel ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: sel ? 700 : 500, fontSize:'0.9688rem' }}>{t}</span>
+            </span>
+            {sel && <Check size={17} strokeWidth={2.6} style={{ color:'var(--accent-primary)', flexShrink:0 }} />}
+          </button>
+        )
+      })}
+    </>
+  )
+
   return (
     <div ref={ref} className={`tagsearch${open ? ' tagsearch-abierto' : ''}`} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
       {/* Trigger */}
@@ -174,30 +233,46 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         }
       </div>
 
-      {/* MOBILE: bottom sheet, portaleado directo a document.body — ver
-          comentario de cabecera. Fixed inset:0 dentro del portal, y con
-          el scroll-lock de arriba nada puede desalinearlo. Tap en el
-          fondo o en la X cierra. */}
+      {/* MOBILE: panel full-screen, portaleado a document.body — ver
+          comentario de cabecera. Sin backdrop: el panel ES la pantalla. */}
       {open && isMobile && createPortal(
-        <div className="tagsearch-sheet-overlay" onClick={cerrar}>
-          <div className="tagsearch-sheet" onClick={e => e.stopPropagation()}>
-            <div className="tagsearch-sheet-handle" />
-            <div className="tagsearch-sheet-header">
+        <div className="tagsearch-full" style={altoVisual ? { height: `${altoVisual}px` } : undefined}>
+          <div className="tagsearch-full-header">
+            <div className="tagsearch-full-handle" />
+            <div className="tagsearch-full-titlebar">
               <span>Filtrar por tag</span>
-              <button onClick={cerrar} aria-label="Cerrar"><X size={18} /></button>
+              <button onClick={cerrar} aria-label="Cerrar" className="tagsearch-full-close"><X size={16} /></button>
             </div>
-            <div className="tagsearch-sheet-search">
-              {inputBuscadorMobile}
+            <div className="tagsearch-full-searchbar" style={{ background: buscadorEnfocado ? 'var(--bg-surface)' : 'var(--bg-hover)', borderColor: buscadorEnfocado ? 'var(--accent-primary)' : 'transparent' }}>
+              <Search size={16} style={{ flexShrink:0, color:'var(--text-muted)' }} />
+              <input
+                className="tagsearch-full-input"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onFocus={() => setBuscadorEnfocado(true)}
+                onBlur={() => setBuscadorEnfocado(false)}
+                placeholder={placeholder}
+              />
+              {query && (
+                <button onClick={() => setQuery('')} aria-label="Limpiar búsqueda" className="tagsearch-full-clear-x"><X size={11} /></button>
+              )}
             </div>
-            <div className="tagsearch-sheet-body">
-              {lista}
-            </div>
+          </div>
+
+          <div className="tagsearch-full-body">
+            {filtrados.length > 0 ? listaMobile : (
+              <div className="tagsearch-full-empty">
+                <Tag size={36} strokeWidth={1.6} style={{ color:'var(--border-strong)' }} />
+                <p>No hay tags que coincidan con<br /><strong style={{ color:'var(--text-secondary)' }}>"{query}"</strong></p>
+                <button onClick={() => setQuery('')} className="tagsearch-full-empty-btn">Limpiar búsqueda</button>
+              </div>
+            )}
           </div>
         </div>,
         document.body
       )}
 
-      {/* DESKTOP: popover anclado al trigger */}
+      {/* DESKTOP: popover anclado al trigger — sin cambios */}
       {open && !isMobile && (
         <div style={{ position:'absolute', top:'calc(100% + 4px)', left: alineacion === 'left' ? 0 : 'auto', right: alineacion === 'right' ? 0 : 'auto', zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', width:'220px', maxWidth:'calc(100vw - 24px)', overflow:'hidden' }}>
           <div style={{ padding:'0.5rem' }}>
