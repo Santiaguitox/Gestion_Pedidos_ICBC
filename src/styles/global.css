@@ -4295,6 +4295,127 @@ select:focus {
   gap: 0.75rem;
 }
 
+/* ─── Configuración: sección Tags (unificar / renombrar) ─────────────────────
+   Solo super_admin. Lista de tags reales de la base (papelera incluida)
+   con selección múltiple: 1 seleccionado = renombrar, 2+ = unificar bajo
+   un nombre final. Aplica vía RPC unificar_tags (ver migración
+   20260711030000). */
+.tags-admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  background: var(--bg-surface);
+}
+
+.tags-admin-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  text-align: left;
+  width: 100%;
+  transition: background 100ms;
+}
+
+.tags-admin-row:hover { background: var(--bg-hover); }
+
+.tags-admin-row.sel {
+  background: var(--red-bg);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tags-admin-check {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  transition: background 100ms, border-color 100ms;
+}
+
+.tags-admin-row.sel .tags-admin-check {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.tags-admin-count {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Tag que solo existe en pedidos de la papelera: visible a propósito —
+   es justo el que conviene unificar antes de que una restauración lo
+   reintroduzca al selector. */
+.tags-admin-papelera {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.375rem;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.tags-admin-panel {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.tags-admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/* Chip de tag seleccionado: click = usarlo como nombre final. */
+.tags-admin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.75rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  transition: background 100ms, border-color 100ms, color 100ms;
+}
+
+.tags-admin-chip:hover {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--accent-primary);
+}
+
+.tags-admin-chip.es-final {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+
 /* ─── Calendario ──────────────────────────────────────────────────────────── */
 .cal-root {
   display: grid;

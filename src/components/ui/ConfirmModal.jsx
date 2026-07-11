@@ -3,7 +3,15 @@ import { AlertTriangle, Trash2, X } from 'lucide-react'
 
 /**
  * ConfirmModal — modal de confirmación reutilizable
- * Props: open, title, message, confirmLabel, cancelLabel, variant ('danger'|'warning'|'default'), onConfirm, onCancel
+ * Props: open, title, message, confirmLabel, cancelLabel, variant ('danger'|'warning'|'default'), onConfirm, onCancel, onDismiss
+ *
+ * onDismiss (opcional): handler para los cierres "implícitos" — Escape,
+ * click en el backdrop y la X del header. Si no se pasa, esos cierres
+ * caen en onCancel (comportamiento histórico, todos los usos existentes
+ * siguen igual). Pasalo cuando el botón de cancelar NO es un simple
+ * "cerrar" sino una acción con efecto (ej. el aviso de tag pendiente de
+ * PedidoForm, donde "Cancelar" guarda el pedido sin el tag): ahí
+ * Escape/backdrop/X deben volver al formulario sin ejecutar nada.
  */
 export function ConfirmModal({
   open,
@@ -14,13 +22,16 @@ export function ConfirmModal({
   variant = 'danger',
   onConfirm,
   onCancel,
+  onDismiss,
 }) {
+  // Cierres implícitos (Escape / backdrop / X). Ver doc de arriba.
+  const dismiss = onDismiss ?? onCancel
   useEffect(() => {
     if (!open) return
-    function handleKey(e) { if (e.key === 'Escape') onCancel() }
+    function handleKey(e) { if (e.key === 'Escape') dismiss() }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [open, onCancel])
+  }, [open, dismiss])
 
   if (!open) return null
 
@@ -33,7 +44,7 @@ export function ConfirmModal({
   const Icon = variant === 'warning' ? AlertTriangle : Trash2
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 9998 }} onClick={onCancel}>
+    <div className="modal-overlay" style={{ zIndex: 9998 }} onClick={dismiss}>
       <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
 
         <div className="modal-header">
@@ -44,7 +55,7 @@ export function ConfirmModal({
             </div>
             <h2 className="modal-title">{title}</h2>
           </div>
-          <button onClick={onCancel} className="modal-close"><X size={18} /></button>
+          <button onClick={dismiss} className="modal-close"><X size={18} /></button>
         </div>
 
         {message && (

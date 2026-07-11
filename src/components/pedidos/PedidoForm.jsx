@@ -156,6 +156,16 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     ejecutarGuardado(form)
   }
 
+  // Cierres implícitos del aviso (Escape, click en el backdrop, X del
+  // header): vuelven al formulario SIN guardar nada. Acá "Cancelar" no
+  // es un simple cerrar — guarda el pedido sin el tag — así que estos
+  // cierres no pueden caer ahí: apretar Escape esperando descartar el
+  // aviso terminaba guardando el pedido igual. Va como onDismiss del
+  // ConfirmModal (prop nueva, opcional, ver ConfirmModal.jsx).
+  function cerrarAvisoTagPendiente() {
+    setTagPendienteAbierto(false)
+  }
+
   function addTag(valorForzado) {
     const t = (valorForzado ?? tagInput).trim()
     if (!t) return
@@ -404,6 +414,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
         cancelLabel="No, guardar sin agregarlo"
         onConfirm={confirmarAgregarTagYGuardar}
         onCancel={guardarSinAgregarTag}
+        onDismiss={cerrarAvisoTagPendiente}
       />
     </div>
   )

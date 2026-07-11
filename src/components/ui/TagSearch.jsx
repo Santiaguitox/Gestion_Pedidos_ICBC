@@ -102,12 +102,25 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
   useEffect(() => {
     if (!open || !isMobile) return
     window.history.pushState({ tagsearchOpen: true }, '')
+    // Si el panel muere sin pasar por popstate (ej. el componente se
+    // desmonta con el panel abierto porque algo navegó por otra vía),
+    // la entrada pusheada quedaba huérfana: el próximo "atrás" del
+    // usuario la consumía sin efecto visible. El cleanup la consume él
+    // mismo — pero SOLO si el tope del history sigue siendo nuestra
+    // entrada (history.state.tagsearchOpen): si react-router ya pusheó
+    // una navegación encima, hacer back() acá sacaría al usuario de la
+    // pantalla a la que acaba de ir, que es peor que la entrada muerta.
+    let consumida = false
     function handlePopState() {
+      consumida = true
       setOpen(false)
       setQuery('')
     }
     window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      if (!consumida && window.history.state?.tagsearchOpen) window.history.back()
+    }
   }, [open, isMobile])
 
   // Refuerzo opcional de visualViewport (punto 7 del spec) — sigue el
