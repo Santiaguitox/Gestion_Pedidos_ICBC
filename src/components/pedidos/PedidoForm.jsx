@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
@@ -6,8 +6,10 @@ import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
 import { useInstancias } from '@/hooks/useInstancias'
-import { X, Check } from 'lucide-react'
+import { useTagsDisponibles } from '@/hooks/useTagsDisponibles'
+import { X, Check, Plus } from 'lucide-react'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 const TIPOS_ENVIO = [
   { value: 'test', label: 'Test' },
@@ -63,8 +65,21 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   })
   const [usuarios, setUsuarios] = useState([])
   const [tagInput, setTagInput] = useState('')
+  const [tagSugerenciasAbiertas, setTagSugerenciasAbiertas] = useState(false)
+  // Se abre cuando se aprieta Guardar/Crear con texto tipeado en el
+  // campo de tags que nunca se confirmó con el + ni con Enter — ver
+  // handleSubmit.
+  const [tagPendienteAbierto, setTagPendienteAbierto] = useState(false)
+  const tagFieldRef = useRef(null)
   const [saving, setSaving] = useState(false)
   const { estados } = useEstados()
+  // Tags YA cargados en cualquier pedido de la base — se usan para
+  // autocompletar mientras se escribe. Así el que está cargando ve que
+  // "Plazo Fijo" ya existe en vez de escribir "plazo fijo" a ciegas y
+  // crear una variante nueva que después el filtro de tags no puede
+  // unificar. Ver addTag: si lo que se escribió matchea alguno de estos
+  // ignorando mayúsculas, se usa la ortografía ya cargada, no la tipeada.
+  const { tags: tagsExistentes } = useTagsDisponibles()
   const { tipos } = useTipos()
   const { instancias } = useInstancias()
   const [error, setError] = useState('')
@@ -78,13 +93,18 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.asunto.trim()) { setError('El asunto es obligatorio.'); return }
+  // Lógica real de guardado, separada de handleSubmit para poder
+  // dispararla también después de resolver el aviso de "tag sin
+  // agregar" (ver handleSubmit y el modal de tagPendienteAbierto más
+  // abajo) — ahí necesitamos guardar con un array de tags ya corregido
+  // ANTES de que la actualización de estado de React se refleje, así
+  // que se recibe por parámetro en vez de leer form.tags directo.
+  async function ejecutarGuardado(formAGuardar) {
+    if (!formAGuardar.asunto.trim()) { setError('El asunto es obligatorio.'); return }
     setSaving(true)
     setError('')
     try {
-      await onSave(form)
+      await onSave(formAGuardar)
       showSuccess(isEdit ? 'Pedido actualizado correctamente' : 'Pedido creado correctamente')
     } catch (err) {
       setError(err.message)
@@ -94,11 +114,80 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     }
   }
 
-  function addTag() {
-    const t = tagInput.trim()
-    if (t && !form.tags.includes(t)) set('tags', [...form.tags, t])
-    setTagInput('')
+  async function handleSubmit(e) {
+    e.preventDefault()
+    // Si queda texto tipeado en el campo de tags sin confirmar (se
+    // olvidó de tocar el +), no guardamos directo — primero
+    // preguntamos. Es un descuido fácil porque el botón + queda muy
+    // cerca del de guardar.
+    if (tagInput.trim()) {
+      setTagPendienteAbierto(true)
+      return
+    }
+    ejecutarGuardado(form)
   }
+
+  // Calcula qué tag final correspondería para un texto tipeado, reusando
+  // la ortografía ya cargada si matchea alguno existente ignorando
+  // mayúsculas/minúsculas (misma regla que addTag).
+  function calcularTagFinal(t) {
+    const existente = tagsExistentes.find(et => et.toLowerCase() === t.toLowerCase())
+    return existente ?? t
+  }
+
+  // Opción "Sí, agregarlo" del aviso: agrega el tag pendiente y recién
+  // ahí guarda, pasando el array de tags YA actualizado a mano (no se
+  // puede confiar en que form.tags refleje el set() en el mismo tick).
+  function confirmarAgregarTagYGuardar() {
+    const t = tagInput.trim()
+    const final = calcularTagFinal(t)
+    const yaEstaba = form.tags.some(x => x.toLowerCase() === final.toLowerCase())
+    const tagsFinal = yaEstaba ? form.tags : [...form.tags, final]
+    set('tags', tagsFinal)
+    setTagInput('')
+    setTagPendienteAbierto(false)
+    ejecutarGuardado({ ...form, tags: tagsFinal })
+  }
+
+  // Opción "No, descartarlo" del aviso: guarda tal cual estaba, sin
+  // sumar lo que quedó tipeado.
+  function guardarSinAgregarTag() {
+    setTagPendienteAbierto(false)
+    ejecutarGuardado(form)
+  }
+
+  function addTag(valorForzado) {
+    const t = (valorForzado ?? tagInput).trim()
+    if (!t) return
+    // Si ya existe un tag igual ignorando mayúsculas/minúsculas, se
+    // reusa la ortografía YA CARGADA en vez de la recién tipeada — esto
+    // es lo que evita que "plazo fijo" y "Plazo Fijo" terminen siendo
+    // dos tags distintos en la base.
+    const final = calcularTagFinal(t)
+    if (!form.tags.some(x => x.toLowerCase() === final.toLowerCase())) set('tags', [...form.tags, final])
+    setTagInput('')
+    setTagSugerenciasAbiertas(false)
+  }
+
+  // Sugerencias del autocompletado: tags existentes que contienen lo
+  // tipeado (ignorando mayúsculas/minúsculas) y que todavía no están
+  // agregados a este pedido. Tope de 6 para no tapar el formulario.
+  const tagSugerencias = tagInput.trim()
+    ? tagsExistentes
+        .filter(et =>
+          et.toLowerCase().includes(tagInput.trim().toLowerCase()) &&
+          !form.tags.some(x => x.toLowerCase() === et.toLowerCase())
+        )
+        .slice(0, 6)
+    : []
+
+  useEffect(() => {
+    function handleClickAfuera(e) {
+      if (tagFieldRef.current && !tagFieldRef.current.contains(e.target)) setTagSugerenciasAbiertas(false)
+    }
+    document.addEventListener('mousedown', handleClickAfuera)
+    return () => document.removeEventListener('mousedown', handleClickAfuera)
+  }, [])
 
   function chipStyle(color, active) {
     if (active) return { color, borderColor: `${color}60`, background: `${color}20` }
@@ -262,11 +351,23 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
             <FieldLabel done={form.tags.length > 0}>
               Tags <span className="field-label-optional">opcional</span>
             </FieldLabel>
-            <div className="tag-input-row">
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+            <div className="tag-input-row" ref={tagFieldRef} style={{ position:'relative' }}>
+              <input value={tagInput}
+                onChange={e => { setTagInput(e.target.value); setTagSugerenciasAbiertas(true) }}
+                onFocus={() => setTagSugerenciasAbiertas(true)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
                 placeholder="Escribí y presioná Enter…" />
-              <button type="button" onClick={addTag} className="btn-add-tag">+</button>
+              <button type="button" onClick={() => addTag()} className="btn-add-tag" aria-label="Agregar tag"><Plus size={16} strokeWidth={2.4} /></button>
+
+              {tagSugerenciasAbiertas && tagSugerencias.length > 0 && (
+                <div className="tag-sugerencias">
+                  {tagSugerencias.map(s => (
+                    <button key={s} type="button" className="tag-sugerencia-item" onClick={() => addTag(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {form.tags.length > 0 && (
               <div className="tag-list">
@@ -293,6 +394,17 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
         </form>
       </div>
+
+      <ConfirmModal
+        open={tagPendienteAbierto}
+        variant="warning"
+        title="Tenés un tag sin agregar"
+        message={`Escribiste "${tagInput.trim()}" en Tags pero no lo agregaste con Enter o el +. ¿Lo sumamos antes de guardar?`}
+        confirmLabel="Sí, agregarlo y guardar"
+        cancelLabel="No, guardar sin agregarlo"
+        onConfirm={confirmarAgregarTagYGuardar}
+        onCancel={guardarSinAgregarTag}
+      />
     </div>
   )
 }

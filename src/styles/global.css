@@ -2119,7 +2119,17 @@ select:focus {
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   width: 36px;
-  font-size: 1.2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.btn-add-tag:hover {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--accent-primary);
 }
 
 .tag-list {
@@ -2146,6 +2156,38 @@ select:focus {
   opacity: 0.6;
   font-size: 0.875rem;
   line-height: 1;
+}
+
+/* ─── Autocompletado del input de tags ───────────────────────────────────────
+   Dropdown con los tags ya cargados que matchean lo tipeado (ignorando
+   mayúsculas/minúsculas). El objetivo es que el usuario VEA que "Plazo
+   Fijo" ya existe antes de escribir "plazo fijo" a ciegas y crear una
+   variante nueva — ver comentario de addTag en PedidoForm.jsx. */
+.tag-sugerencias {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 44px; /* deja afuera el ancho del botón + */
+  z-index: 20;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.tag-sugerencia-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  transition: background 100ms;
+}
+
+.tag-sugerencia-item:hover {
+  background: var(--bg-hover);
 }
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
