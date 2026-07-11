@@ -491,11 +491,9 @@
 /* ════════════════════════════════════════════════════════════════════════
    RESPONSIVE — MOBILE (max-width: 640px)
    ════════════════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .re2-actions { flex-direction: column; align-items: stretch; }
-  .re2-btn-analizar { justify-content: center; width: 100%; }
-  .re2-btn-reset { width: 100%; }
-}
+/* El bloque @media 640px de este archivo vive al FINAL del archivo —
+   único bloque de ese breakpoint, mismo criterio que el resto de los
+   CSS del proyecto (cascada por orden de aparición). */
 
 /* ─── Switch de vista (Comparar / Generar base de test) ─────────────────
    Reusa la clase .re2-tabs (mismo look que el switch HTML/URL de más
@@ -690,6 +688,15 @@
 }
 
 @media (max-width: 640px) {
+  /* Único bloque 640px del archivo, AL FINAL a propósito: con la misma
+     especificidad gana la regla que aparece último, así nada de este
+     archivo le puede ganar por orden (mismo criterio que EditorPiezas.css
+     y AuditoriaPiezas.css). Si una clase nueva necesita ajuste mobile,
+     agregarla ACÁ. */
+  .re2-actions { flex-direction: column; align-items: stretch; }
+  .re2-btn-analizar { justify-content: center; width: 100%; }
+  .re2-btn-reset { width: 100%; }
+
   /* Con muchos campos (pieza con 8-10 variables) uno por línea se
      hace larguísimo — de a 2 por fila usa mucho menos alto sin que
      los inputs queden ilegibles. */
@@ -698,4 +705,10 @@
      pasa a fluido, así su ancho real queda por debajo de los ~600px
      que dispara el media query mobile del HTML del email. */
   .re2-iframe { width: 100%; }
+
+  /* Anti auto-zoom de iOS/Android: el textarea del modo HTML (y los
+     headers, que comparten la clase) tiene 12.5px y le gana por
+     especificidad al fix global de global.css. El input del modo URL
+     no tiene clase, a ese sí lo cubre el fix global. */
+  .re2-header-input { font-size: 16px; }
 }

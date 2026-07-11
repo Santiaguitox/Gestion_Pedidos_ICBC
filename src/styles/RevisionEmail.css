@@ -436,4 +436,11 @@
 
   .re-input-row { flex-direction: column; align-items: stretch; }
   .re-btn-analizar { width: 100%; justify-content: center; }
+
+  /* Anti auto-zoom de iOS/Android: el textarea del modo HTML tiene
+     clase propia (12px) y le gana por especificidad al fix global de
+     global.css (input, textarea { font-size: 16px }), así que necesita
+     su regla puntual. El input del modo URL no tiene clase, a ese sí
+     lo cubre el fix global. */
+  .re-textarea { font-size: 16px; }
 }

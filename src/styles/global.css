@@ -2268,6 +2268,10 @@ select:focus {
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   transition: all 150ms;
+  /* El texto nunca se parte en 2 líneas — en mobile además se oculta
+     el destino (.btn-back-destino, en el bloque 640) y queda "← Volver". */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-edit {
@@ -5005,6 +5009,19 @@ select:focus {
   color: var(--text-muted);
 }
 
+/* Los botones de estas tarjetas (Resetear / Eliminar) nunca deben
+   partirse en dos líneas ni dejarse aplastar por la columna de texto:
+   .btn-secondary no declara display, así que su ícono + texto fluyen
+   como contenido inline y se partían cuando el flex del contenedor
+   apretaba al botón (la llave arriba y "Resetear" abajo). nowrap
+   evita el quiebre interno y flex-shrink: 0 evita el aplastamiento
+   en el layout de fila de desktop. */
+.danger-zone .btn-secondary,
+.danger-zone .btn-danger-outline {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .btn-danger-outline {
   display: inline-flex;
   align-items: center;
@@ -5929,6 +5946,12 @@ select:focus {
      arriba en este archivo, por eso acá ganan por orden sin !important). */
   .tagsearch-input { font-size: 16px; }
   .busqueda-global-input { font-size: 16px; }
+
+  /* Botón "Volver a X" del detalle de pedido: en el celu se oculta el
+     destino y queda "← Volver" — el texto completo se partía en 2
+     líneas, y con nowrap a secas desbordaba la topbar en pantallas
+     angostas junto a Editar + Eliminar. */
+  .btn-back-destino { display: none; }
 
   /* Danger zone (modal editar usuario: resetear contraseña / eliminar
      usuario) — en desktop texto y botón conviven en una fila, pero en

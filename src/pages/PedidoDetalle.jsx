@@ -287,7 +287,11 @@ export default function PedidoDetalle() {
     <div className="det-root">
       <div className="det-topbar">
         <button onClick={() => navigate(backTo)} className="btn-back">
-          <ArrowLeft size={16} />Volver a {backLabel}
+          {/* En mobile el destino se oculta por CSS (.btn-back-destino) y
+              queda solo "← Volver": con "Volver a Dashboard" completo el
+              texto se partía en 2 líneas, y con nowrap a secas corría
+              riesgo de desbordar la topbar junto a Editar + Eliminar. */}
+          <ArrowLeft size={16} />Volver<span className="btn-back-destino"> a {backLabel}</span>
         </button>
         {(canEditPedido || canDelete) && (
           <div className="detalle-topbar-actions">
