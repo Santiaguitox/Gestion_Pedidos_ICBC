@@ -5282,12 +5282,17 @@ select:focus {
      h-screen (100vh) de Tailwind ya aplicado arriba — no hay pantalla
      en blanco ni layout roto en navegadores viejos. */
   .app-shell {
+    /* dvh a secas y nada más: la altura del contenedor raíz es 100% CSS
+       y NUNCA depende de una medición de JS. Se probó fijarla desde
+       visualViewport.height y fue un desastre — en el arranque en frío
+       de la PWA en iOS, WebKit puede reportar un valor transitorio (o
+       directamente 0) y si después no dispara resize, la app entera
+       queda colapsada en un shell de 0px (pantalla "vacía"). El
+       corrimiento residual que deja iOS al cerrar el teclado (la franja
+       gris al pie) NO se arregla tocando alturas: se deshace con un
+       scrollTo(0,0) al cerrarse el teclado — ver el efecto de
+       visualViewport en AppLayout.jsx. */
     height: 100dvh;
-    /* --app-vh la fija AppLayout.jsx vía visualViewport.resize — ver el
-       comentario ahí. Si por lo que sea no llegó a correr (JS
-       deshabilitado, navegador viejo) esta línea nunca se aplica y
-       queda el 100dvh de arriba como fallback real, no decorativo. */
-    height: var(--app-vh, 100dvh);
   }
 
   .page-header {
@@ -5874,10 +5879,9 @@ select:focus {
     position: fixed;
     top: 0;
     left: 0;
+    /* dvh puro, mismo criterio que .app-shell (ver comentario ahí):
+       la altura nunca depende de una medición de JS. */
     height: 100dvh;
-    /* Mismo fix que .app-shell — ver el comentario en el bloque de
-       arriba y en AppLayout.jsx (visualViewport.resize). */
-    height: var(--app-vh, 100dvh);
     width: 260px;
     z-index: 300;
     background: var(--bg-surface);

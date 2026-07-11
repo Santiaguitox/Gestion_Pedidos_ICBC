@@ -211,31 +211,43 @@ export default function AppLayout() {
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
 
-  // Altura real de pantalla en mobile, sincronizada a mano.
-  // .app-shell usa 100dvh (ver global.css) porque en teoría se recalcula
-  // solo con el espacio visible real — pero en iOS Safari, cuando el
-  // teclado se abre o se cierra, dvh no siempre se re-evalúa en el
-  // momento: queda con el valor viejo hasta que algo fuerza un reflow.
-  // Eso es exactamente el hueco gris "tipo fondo de pantalla" que se
-  // veía al entrar a un input y salir — el documento quedaba con la
-  // altura de cuando el teclado estaba abierto (más chica) hasta que el
-  // scroll manual forzaba el recálculo. visualViewport.resize se dispara
-  // de forma confiable en cada apertura/cierre de teclado y en cada
-  // cambio real de tamaño, así que replicamos ese forzado nosotros: la
-  // variable se actualiza en cada resize y .app-shell la usa como
-  // override de 100dvh (ver el bloque mobile de global.css). Sin
-  // soporte de visualViewport (navegadores viejos) esto no corre y
-  // .app-shell se queda con el 100dvh de siempre, que ya andaba bien
-  // ahí salvo por este caso puntual.
+  // Corrector del corrimiento residual que iOS deja al cerrar el teclado.
+  //
+  // El diagnóstico completo (después de varios intentos fallidos, que
+  // quede documentado): .app-shell mide 100dvh con overflow: hidden — la
+  // VENTANA nunca debería scrollear. Pero cuando se enfoca un input, iOS
+  // panea la ventana igual para mostrar el input por encima del teclado,
+  // y al cerrarse el teclado muchas veces NO deshace ese corrimiento: la
+  // app entera queda desplazada hacia arriba y abajo asoma el fondo del
+  // body — la "franja gris que come pantalla". Scrollear a mano lo
+  // arregla porque iOS clampea la ventana de vuelta a 0; este efecto hace
+  // exactamente eso, pero solo y al instante.
+  //
+  // Reglas de diseño de este fix, para no repetir la historia:
+  // 1. El LAYOUT no se toca: .app-shell sigue siendo 100dvh puro en CSS.
+  //    (Se probó fijar la altura desde visualViewport.height y en el
+  //    arranque en frío de la PWA en iOS llegaba un valor transitorio
+  //    que dejaba la app colapsada en 0px — pantalla vacía.)
+  // 2. Solo se corrige cuando el teclado se CIERRA: mientras está
+  //    abierto, el corrimiento es deseado (muestra el input) y pelearle
+  //    a iOS ahí escondería el campo enfocado. Teclado abierto se
+  //    detecta porque el visual viewport queda bastante más bajo que el
+  //    layout viewport (innerHeight); cuando vuelven a coincidir (con
+  //    margen de 50px por la barra dinámica de Safari), se cerró.
+  // 3. Si el navegador no soporta visualViewport, no corre y queda el
+  //    comportamiento de siempre (la franja se va con un scroll manual):
+  //    degradación suave, jamás una pantalla rota.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    function setAltura() {
-      document.documentElement.style.setProperty('--app-vh', `${vv.height}px`)
+    function onResize() {
+      const tecladoCerrado = window.innerHeight - vv.height < 50
+      if (tecladoCerrado && window.scrollY !== 0) {
+        window.scrollTo(0, 0)
+      }
     }
-    setAltura()
-    vv.addEventListener('resize', setAltura)
-    return () => vv.removeEventListener('resize', setAltura)
+    vv.addEventListener('resize', onResize)
+    return () => vv.removeEventListener('resize', onResize)
   }, [])
 
   // Atajo global Cmd+K (Mac) / Ctrl+K (Windows/Linux) — funciona desde
