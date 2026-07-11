@@ -4,28 +4,24 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 
 // Selector de tag con buscador.
 //
-// DOS presentaciones, una por contexto — y la razon importa (esta
-// decision cerro una saga larga de bugs de teclado en iOS, no
-// simplificarla sin leer esto):
+// DOS presentaciones, una por contexto:
 //
 // - DESKTOP: popover absolute anclado al trigger, en flujo. Sin teclado
 //   virtual no hay nada que mueva el viewport, el anclaje es estable.
 //   El overflow:hidden del acordeon de filtros se libera solo mientras
 //   esta abierto via :has (ver .acordeon-anim-clip en global.css).
 //
-// - MOBILE: bottom sheet de altura FIJA (mismo lenguaje visual que los
-//   sheets del editor de piezas, replicado en clases tagsearch-sheet-*
-//   de global.css porque EditorPiezas.css solo se carga en esa pagina).
-//   Un popover anclado a un trigger en medio de la pagina no convive
-//   con el teclado de iOS: si el trigger esta en la mitad inferior, el
-//   input del buscador nace en la zona que el teclado va a tapar, iOS
-//   lo "revela" paneando la VENTANA (aunque el shell sea
-//   overflow:hidden) y al cerrar el teclado no siempre deshace el
-//   corrimiento — esa era la franja gris al pie. El sheet mide 82dvh
-//   FIJOS (no max-height): el buscador, pegado al header, queda siempre
-//   en el quinto superior de la pantalla, por encima del teclado, este
-//   el trigger donde este — iOS no necesita panear nada, nunca. El
-//   autoFocus se conserva.
+// - MOBILE: bottom sheet calcado del que ya usa el editor de piezas
+//   (.ep-m-sheet), mismo patron que ahi resuelve el teclado de iOS sin
+//   franja gris: overlay fixed inset:0 + sheet con max-height ESTATICO
+//   en vh (no un height dinamico en dvh atado a :focus-within — eso fue
+//   lo que no terminaba de asentarse) y, sobre todo, SIN autoFocus. El
+//   editor nunca autoenfoca el input al abrir un sheet: el usuario tapea
+//   el campo y el teclado aparece con el sheet ya asentado en pantalla,
+//   por eso iOS nunca necesita panear la ventana para "revelarlo". Se
+//   achica el problema a: abrir el sheet (sin foco) -> el usuario tapea
+//   el buscador cuando quiere -> el teclado sube sobre un layout que ya
+//   esta quieto. El autoFocus de desktop no se toca.
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -77,13 +73,25 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     setQuery('')
   }
 
-  // Compartido entre ambas presentaciones — el input mantiene la clase
-  // tagsearch-input SIEMPRE: en global.css esa clase tiene el override
+  // Input de DESKTOP — se conserva tal cual, con autoFocus (ahi nunca
+  // hubo problema de teclado). La clase tagsearch-input trae el override
   // de 16px en mobile que evita el auto-zoom de iOS al enfocarlo (un
   // fontSize inline le ganaria a ese override, por eso no hay ninguno).
   const inputBuscador = (
     <input
       autoFocus
+      className="tagsearch-input"
+      value={query}
+      onChange={e => setQuery(e.target.value)}
+      placeholder={placeholder}
+      onClick={e => e.stopPropagation()}
+    />
+  )
+
+  // Input de MOBILE — igual pero SIN autoFocus (ver comentario de
+  // cabecera: es la pieza clave para que no haya franja gris).
+  const inputBuscadorMobile = (
+    <input
       className="tagsearch-input"
       value={query}
       onChange={e => setQuery(e.target.value)}
@@ -138,7 +146,7 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
               <button onClick={cerrar} aria-label="Cerrar"><X size={18} /></button>
             </div>
             <div className="tagsearch-sheet-search">
-              {inputBuscador}
+              {inputBuscadorMobile}
             </div>
             <div className="tagsearch-sheet-body">
               {lista}

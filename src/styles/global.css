@@ -5260,25 +5260,17 @@ select:focus {
 }
 
 /* ── Presentación mobile del TagSearch: bottom sheet ──
-   Mismo lenguaje visual que los sheets del editor de piezas
-   (.ep-m-sheet-*), replicado acá con clases propias por dos motivos:
-   EditorPiezas.css solo se carga en la página del editor, y el editor
-   mobile usa hex fijos de paleta clara mientras que Dashboard/Pedidos
-   respetan el theme — acá van variables.
+   Mismo lenguaje visual Y MISMA GEOMETRÍA que los sheets del editor de
+   piezas (.ep-m-sheet-*), replicado acá con clases propias por dos
+   motivos: EditorPiezas.css solo se carga en la página del editor, y el
+   editor mobile usa hex fijos de paleta clara mientras que
+   Dashboard/Pedidos respetan el theme — acá van variables.
 
-   REGLA DE GEOMETRÍA (no "mejorar" sin leer esto): mientras el buscador
-   tiene foco (= el teclado está o está subiendo), el sheet mide 82dvh
-   — así el input, pegado al header, queda en el quinto superior de la
-   pantalla, por ENCIMA del teclado, y iOS nunca necesita panear la
-   ventana para revelarlo (ese paneo no deshecho era la franja gris al
-   pie). El foco es el detector de teclado perfecto y es CSS puro:
-   teclado presente ⇔ un campo del sheet tiene foco ⇔ :focus-within.
-   Sin foco (teclado cerrado), el sheet colapsa a la altura de su
-   contenido — nada de un salón vacío de 82dvh con dos resultados.
-   El cambio de altura es instantáneo a propósito (height auto→fija no
-   es animable y NO debe serlo): el reflow tiene que aplicarse en el
-   mismo frame del focus, antes de que iOS calcule si necesita revelar
-   el input. */
+   Altura ESTÁTICA en vh (no dvh, no dinámica con :focus-within): el
+   sheet mide siempre lo mismo, se abra con foco o no. Eso, sumado a que
+   el input del buscador NO lleva autoFocus (ver TagSearch.jsx), es lo
+   que evita la franja gris — el teclado sube recién cuando el usuario
+   tapea el campo, con el sheet ya asentado, igual que en el editor. */
 .tagsearch-sheet-overlay {
   position: fixed;
   inset: 0;
@@ -5291,8 +5283,7 @@ select:focus {
 
 .tagsearch-sheet {
   width: 100%;
-  height: auto;
-  max-height: 82dvh;
+  max-height: 78vh;
   background: var(--bg-surface);
   border-radius: 18px 18px 0 0;
   display: flex;
@@ -5300,12 +5291,6 @@ select:focus {
   animation: tagsearch-sheet-slideup 0.2s ease-out;
   overflow: hidden;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
-}
-
-/* Ver REGLA DE GEOMETRÍA arriba: la altura grande existe solo mientras
-   el teclado existe. */
-.tagsearch-sheet:focus-within {
-  height: 82dvh;
 }
 
 .tagsearch-sheet-handle {
