@@ -5259,6 +5259,95 @@ select:focus {
   padding: 0.375rem 0.625rem;
 }
 
+/* ── Presentación mobile del TagSearch: bottom sheet ──
+   Mismo lenguaje visual que los sheets del editor de piezas
+   (.ep-m-sheet-*), replicado acá con clases propias por dos motivos:
+   EditorPiezas.css solo se carga en la página del editor, y el editor
+   mobile usa hex fijos de paleta clara mientras que Dashboard/Pedidos
+   respetan el theme — acá van variables.
+
+   REGLA DE GEOMETRÍA (no "mejorar" sin leer esto): el sheet mide 82dvh
+   FIJOS, no max-height. Con altura fija, el buscador — pegado al
+   header — queda siempre en el quinto superior de la pantalla, por
+   ENCIMA de donde aparece el teclado, esté el trigger donde esté. Si
+   esto se convierte en max-height y la lista es corta, el sheet se
+   achica, el input cae a la zona del teclado y vuelve el bug de la
+   franja gris (iOS panea la ventana para revelar el input enfocado y
+   no siempre deshace el corrimiento al cerrar). */
+.tagsearch-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(13, 15, 32, 0.45);
+  display: flex;
+  align-items: flex-end;
+  animation: tagsearch-sheet-fade 0.15s ease-out;
+}
+
+.tagsearch-sheet {
+  width: 100%;
+  height: 82dvh;
+  background: var(--bg-surface);
+  border-radius: 18px 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: tagsearch-sheet-slideup 0.2s ease-out;
+  overflow: hidden;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+.tagsearch-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--border-strong);
+  margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+
+.tagsearch-sheet-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 12px;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.tagsearch-sheet-header button {
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+}
+
+.tagsearch-sheet-search {
+  flex-shrink: 0;
+  padding: 12px 16px 10px;
+}
+
+.tagsearch-sheet-search .tagsearch-input {
+  width: 100%;
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.tagsearch-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+
+@keyframes tagsearch-sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tagsearch-sheet-slideup { from { transform: translateY(24px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+/* La lista del popover de desktop: mismos 220px de tope que siempre. */
+.tagsearch-lista { max-height: 220px; }
+
 /* ════════════════════════════════════════════════════════════════════════
    RESPONSIVE — MOBILE (max-width: 640px)
    ────────────────────────────────────────────────────────────────────────

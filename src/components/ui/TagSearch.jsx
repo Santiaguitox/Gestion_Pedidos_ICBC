@@ -1,17 +1,41 @@
 import { useState, useRef, useEffect } from 'react'
 import { Tag, X, ChevronDown } from 'lucide-react'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
+// Selector de tag con buscador.
+//
+// DOS presentaciones, una por contexto — y la razon importa (esta
+// decision cerro una saga larga de bugs de teclado en iOS, no
+// simplificarla sin leer esto):
+//
+// - DESKTOP: popover absolute anclado al trigger, en flujo. Sin teclado
+//   virtual no hay nada que mueva el viewport, el anclaje es estable.
+//   El overflow:hidden del acordeon de filtros se libera solo mientras
+//   esta abierto via :has (ver .acordeon-anim-clip en global.css).
+//
+// - MOBILE: bottom sheet de altura FIJA (mismo lenguaje visual que los
+//   sheets del editor de piezas, replicado en clases tagsearch-sheet-*
+//   de global.css porque EditorPiezas.css solo se carga en esa pagina).
+//   Un popover anclado a un trigger en medio de la pagina no convive
+//   con el teclado de iOS: si el trigger esta en la mitad inferior, el
+//   input del buscador nace en la zona que el teclado va a tapar, iOS
+//   lo "revela" paneando la VENTANA (aunque el shell sea
+//   overflow:hidden) y al cerrar el teclado no siempre deshace el
+//   corrimiento — esa era la franja gris al pie. El sheet mide 82dvh
+//   FIJOS (no max-height): el buscador, pegado al header, queda siempre
+//   en el quinto superior de la pantalla, por encima del teclado, este
+//   el trigger donde este — iOS no necesita panear nada, nunca. El
+//   autoFocus se conserva.
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  // 'left' (default) o 'right' — decide de qué lado del trigger cuelga
-  // el dropdown. En la grilla de filtros el TagSearch suele vivir en la
-  // columna derecha, pegado casi al borde de la pantalla: colgar
-  // siempre a la izquierda (left:0) hacía que sus 200px de ancho mínimo
-  // se fueran por fuera del viewport hacia la derecha. Se decide al
-  // abrir, midiendo el espacio real disponible a cada lado.
+  // Solo desktop: de que lado del trigger cuelga el popover. En la
+  // grilla de filtros el TagSearch suele vivir pegado al borde derecho
+  // y colgar siempre a la izquierda (left:0) mandaba sus 220px por
+  // fuera del viewport. Se decide al abrir midiendo el espacio real.
   const [alineacion, setAlineacion] = useState('left')
   const ref = useRef(null)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     function handleClick(e) {
@@ -22,13 +46,20 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
   }, [])
 
   function abrir() {
-    const ANCHO_DROPDOWN = 220 // debe matchear el width real de abajo
-    const r = ref.current?.getBoundingClientRect()
-    if (r) {
-      const espacioDerecha = window.innerWidth - r.left
-      setAlineacion(espacioDerecha < ANCHO_DROPDOWN + 8 ? 'right' : 'left')
+    if (!isMobile) {
+      const ANCHO_DROPDOWN = 220 // debe matchear el width del popover
+      const r = ref.current?.getBoundingClientRect()
+      if (r) {
+        const espacioDerecha = window.innerWidth - r.left
+        setAlineacion(espacioDerecha < ANCHO_DROPDOWN + 8 ? 'right' : 'left')
+      }
     }
     setOpen(v => !v)
+  }
+
+  function cerrar() {
+    setQuery('')
+    setOpen(false)
   }
 
   const filtrados = tags.filter(t =>
@@ -37,8 +68,7 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
 
   function seleccionar(tag) {
     onChange(tag)
-    setQuery('')
-    setOpen(false)
+    cerrar()
   }
 
   function limpiar(e) {
@@ -47,17 +77,38 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     setQuery('')
   }
 
-  // El dropdown se renderiza EN FLUJO (absolute dentro de este wrapper),
-  // no en un portal con position: fixed: fixed se rompe en iOS cuando el
-  // teclado esta abierto (el sistema panea el visual viewport y los
-  // elementos fixed quedan anclados al layout viewport, asi que el
-  // dropdown quedaba flotando en cualquier lado). En flujo scrollea junto
-  // con el contenido y no tiene ese problema.
-  // El recorte del overflow: hidden del acordeon de filtros se resuelve
-  // del lado del CSS: la clase tagsearch-abierto de este wrapper le avisa
-  // al clip del acordeon (via :has, ver .acordeon-anim-clip en global.css)
-  // que libere el overflow SOLO mientras el dropdown esta abierto — asi
-  // la animacion de apertura/cierre del acordeon queda intacta.
+  // Compartido entre ambas presentaciones — el input mantiene la clase
+  // tagsearch-input SIEMPRE: en global.css esa clase tiene el override
+  // de 16px en mobile que evita el auto-zoom de iOS al enfocarlo (un
+  // fontSize inline le ganaria a ese override, por eso no hay ninguno).
+  const inputBuscador = (
+    <input
+      autoFocus
+      className="tagsearch-input"
+      value={query}
+      onChange={e => setQuery(e.target.value)}
+      placeholder={placeholder}
+      onClick={e => e.stopPropagation()}
+    />
+  )
+
+  const lista = (
+    <>
+      {filtrados.length === 0 && (
+        <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', padding:'0.5rem 0.75rem' }}>Sin resultados</p>
+      )}
+      {filtrados.map(t => (
+        <button key={t} onClick={() => seleccionar(t)}
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', fontSize:'0.8125rem', textAlign:'left', background: value === t ? 'rgba(91,78,232,0.08)' : 'transparent', color: value === t ? 'var(--icomm-violet)' : 'var(--text-secondary)', fontWeight: value === t ? 600 : 400, transition:'background 100ms' }}
+          onMouseEnter={e => { if (value !== t) e.currentTarget.style.background = 'var(--bg-hover)' }}
+          onMouseLeave={e => { if (value !== t) e.currentTarget.style.background = 'transparent' }}>
+          <Tag size={11} style={{ flexShrink:0 }} />{t}
+          {value === t && <span style={{ marginLeft:'auto', fontSize:'0.6875rem', color:'var(--icomm-violet)' }}>✓</span>}
+        </button>
+      ))}
+    </>
+  )
+
   return (
     <div ref={ref} className={`tagsearch${open ? ' tagsearch-abierto' : ''}`} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
       {/* Trigger */}
@@ -73,42 +124,37 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         }
       </div>
 
-      {/* Dropdown — width fijo en vez de minWidth: con minWidth el
-          dropdown podía terminar más ancho que la pantalla en mobile
-          (era justamente el otro síntoma reportado, "se va por fuera").
-          calc(100vw - 24px) lo tapa como red de seguridad final incluso
-          si la medición de `abrir()` fallara por algún borde. */}
-      {open && (
-        <div style={{ position:'absolute', top:'calc(100% + 4px)', left: alineacion === 'left' ? 0 : 'auto', right: alineacion === 'right' ? 0 : 'auto', zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', width:'220px', maxWidth:'calc(100vw - 24px)', overflow:'hidden' }}>
-          {/* Buscador */}
-          <div style={{ padding:'0.5rem' }}>
-            {/* fontSize y padding viven en .tagsearch-input (global.css) y no
-                inline: un estilo inline le gana hasta al bloque mobile de
-                global.css, y este input necesita el override de 16px en el
-                celu para no disparar el auto-zoom al enfocarlo. */}
-            <input
-              autoFocus
-              className="tagsearch-input"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder={placeholder}
-              onClick={e => e.stopPropagation()}
-            />
+      {/* MOBILE: bottom sheet (lenguaje visual de los sheets del editor
+          de piezas). Fixed inset:0 — no se ancla a nada, ningun
+          corrimiento de viewport puede desacomodarlo, y el overflow del
+          acordeon no lo recorta (overflow no clipea descendientes
+          fixed). Tap en el fondo o en la X cierra. */}
+      {open && isMobile && (
+        <div className="tagsearch-sheet-overlay" onClick={cerrar}>
+          <div className="tagsearch-sheet" onClick={e => e.stopPropagation()}>
+            <div className="tagsearch-sheet-handle" />
+            <div className="tagsearch-sheet-header">
+              <span>Filtrar por tag</span>
+              <button onClick={cerrar} aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="tagsearch-sheet-search">
+              {inputBuscador}
+            </div>
+            <div className="tagsearch-sheet-body">
+              {lista}
+            </div>
           </div>
-          {/* Opciones */}
-          <div style={{ maxHeight:'220px', overflowY:'auto' }}>
-            {filtrados.length === 0 && (
-              <p style={{ fontSize:'0.8125rem', color:'var(--text-muted)', padding:'0.5rem 0.75rem' }}>Sin resultados</p>
-            )}
-            {filtrados.map(t => (
-              <button key={t} onClick={() => seleccionar(t)}
-                style={{ width:'100%', display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', fontSize:'0.8125rem', textAlign:'left', background: value === t ? 'rgba(91,78,232,0.08)' : 'transparent', color: value === t ? 'var(--icomm-violet)' : 'var(--text-secondary)', fontWeight: value === t ? 600 : 400, transition:'background 100ms' }}
-                onMouseEnter={e => { if (value !== t) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                onMouseLeave={e => { if (value !== t) e.currentTarget.style.background = 'transparent' }}>
-                <Tag size={11} style={{ flexShrink:0 }} />{t}
-                {value === t && <span style={{ marginLeft:'auto', fontSize:'0.6875rem', color:'var(--icomm-violet)' }}>✓</span>}
-              </button>
-            ))}
+        </div>
+      )}
+
+      {/* DESKTOP: popover anclado al trigger */}
+      {open && !isMobile && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left: alineacion === 'left' ? 0 : 'auto', right: alineacion === 'right' ? 0 : 'auto', zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', width:'220px', maxWidth:'calc(100vw - 24px)', overflow:'hidden' }}>
+          <div style={{ padding:'0.5rem' }}>
+            {inputBuscador}
+          </div>
+          <div className="tagsearch-lista" style={{ overflowY:'auto' }}>
+            {lista}
           </div>
         </div>
       )}
