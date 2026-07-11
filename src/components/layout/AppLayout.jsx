@@ -211,44 +211,21 @@ export default function AppLayout() {
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
 
-  // Corrector del corrimiento residual que iOS deja al cerrar el teclado.
-  //
-  // El diagnóstico completo (después de varios intentos fallidos, que
-  // quede documentado): .app-shell mide 100dvh con overflow: hidden — la
-  // VENTANA nunca debería scrollear. Pero cuando se enfoca un input, iOS
-  // panea la ventana igual para mostrar el input por encima del teclado,
-  // y al cerrarse el teclado muchas veces NO deshace ese corrimiento: la
-  // app entera queda desplazada hacia arriba y abajo asoma el fondo del
-  // body — la "franja gris que come pantalla". Scrollear a mano lo
-  // arregla porque iOS clampea la ventana de vuelta a 0; este efecto hace
-  // exactamente eso, pero solo y al instante.
-  //
-  // Reglas de diseño de este fix, para no repetir la historia:
-  // 1. El LAYOUT no se toca: .app-shell sigue siendo 100dvh puro en CSS.
-  //    (Se probó fijar la altura desde visualViewport.height y en el
-  //    arranque en frío de la PWA en iOS llegaba un valor transitorio
-  //    que dejaba la app colapsada en 0px — pantalla vacía.)
-  // 2. Solo se corrige cuando el teclado se CIERRA: mientras está
-  //    abierto, el corrimiento es deseado (muestra el input) y pelearle
-  //    a iOS ahí escondería el campo enfocado. Teclado abierto se
-  //    detecta porque el visual viewport queda bastante más bajo que el
-  //    layout viewport (innerHeight); cuando vuelven a coincidir (con
-  //    margen de 50px por la barra dinámica de Safari), se cerró.
-  // 3. Si el navegador no soporta visualViewport, no corre y queda el
-  //    comportamiento de siempre (la franja se va con un scroll manual):
-  //    degradación suave, jamás una pantalla rota.
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    function onResize() {
-      const tecladoCerrado = window.innerHeight - vv.height < 50
-      if (tecladoCerrado && window.scrollY !== 0) {
-        window.scrollTo(0, 0)
-      }
-    }
-    vv.addEventListener('resize', onResize)
-    return () => vv.removeEventListener('resize', onResize)
-  }, [])
+  // NOTA sobre la "franja gris" al cerrar el teclado en iOS (queda
+  // documentado para no reintentar a ciegas): .app-shell mide 100dvh con
+  // overflow: hidden, pero al enfocar un input iOS panea la ventana
+  // igual para mostrarlo sobre el teclado, y al cerrar no siempre
+  // deshace el corrimiento — abajo asoma el fondo del body hasta que un
+  // scroll manual lo clampea de vuelta a 0. Es cosmético y se acomoda
+  // solo. Se intentó corregirlo automáticamente dos veces y ambas
+  // salieron caras: (1) fijar la altura del shell desde
+  // visualViewport.height dejó la PWA en pantalla vacía (WebKit reporta
+  // valores transitorios en el arranque frío); (2) un scrollTo(0,0) al
+  // detectar teclado cerrado por diferencia de alturas le ganaba de
+  // mano a la animación de apertura y pisaba el paneo de iOS (el input
+  // quedaba tapado). Si algún día se retoma: el layout jamás depende de
+  // mediciones de JS, y cualquier corrector necesita compuerta por
+  // document.activeElement, no solo comparación de alturas.
 
   // Atajo global Cmd+K (Mac) / Ctrl+K (Windows/Linux) — funciona desde
   // cualquier pantalla de la app, no solo desde un input específico.

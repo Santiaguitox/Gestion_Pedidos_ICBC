@@ -5287,11 +5287,11 @@ select:focus {
        visualViewport.height y fue un desastre — en el arranque en frío
        de la PWA en iOS, WebKit puede reportar un valor transitorio (o
        directamente 0) y si después no dispara resize, la app entera
-       queda colapsada en un shell de 0px (pantalla "vacía"). El
-       corrimiento residual que deja iOS al cerrar el teclado (la franja
-       gris al pie) NO se arregla tocando alturas: se deshace con un
-       scrollTo(0,0) al cerrarse el teclado — ver el efecto de
-       visualViewport en AppLayout.jsx. */
+       queda colapsada en un shell de 0px (pantalla "vacía").
+       La franja gris que iOS a veces deja al cerrar el teclado es un
+       comportamiento conocido y aceptado (se acomoda sola con un
+       scroll) — ver la NOTA en AppLayout.jsx antes de intentar
+       corregirla de nuevo. */
     height: 100dvh;
   }
 
