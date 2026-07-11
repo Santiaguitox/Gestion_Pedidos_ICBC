@@ -5010,14 +5010,20 @@ select:focus {
 }
 
 /* Los botones de estas tarjetas (Resetear / Eliminar) nunca deben
-   partirse en dos líneas ni dejarse aplastar por la columna de texto:
-   .btn-secondary no declara display, así que su ícono + texto fluyen
-   como contenido inline y se partían cuando el flex del contenedor
-   apretaba al botón (la llave arriba y "Resetear" abajo). nowrap
-   evita el quiebre interno y flex-shrink: 0 evita el aplastamiento
-   en el layout de fila de desktop. */
+   partirse en dos líneas. La causa real del quiebre: el preflight de
+   Tailwind pone display: block a los <svg>, y como .btn-secondary no
+   declara display, el ícono de la llave se iba a su propio renglón y
+   "Resetear" quedaba abajo — por eso white-space: nowrap solo no
+   alcanzaba (no era texto partiéndose, era un bloque). inline-flex
+   pone ícono y texto en la misma línea, como hacen todos los demás
+   botones de la app; nowrap y flex-shrink: 0 blindan contra el
+   aplastamiento en el layout de fila de desktop. */
 .danger-zone .btn-secondary,
 .danger-zone .btn-danger-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -6348,6 +6354,20 @@ select:focus {
 .acordeon-anim-clip {
   overflow: hidden;
   min-height: 0;
+}
+/* El overflow: hidden de arriba (necesario para la animación de
+   apertura) también recorta cualquier cosa posicionada absoluta
+   adentro — el dropdown del filtro de tags (TagSearch) no llegaba a
+   verse completo en los acordeones de filtros de Dashboard y Pedidos.
+   Con :has, el clip se libera SOLO mientras el dropdown está abierto
+   (clase tagsearch-abierto que pone el propio componente): el usuario
+   solo puede abrirlo con el acordeón ya desplegado, así que la
+   animación de apertura/cierre nunca se ve afectada. Se descartó
+   portalear el dropdown con position: fixed — en iOS con el teclado
+   abierto el sistema panea el visual viewport y los elementos fixed
+   quedan flotando en cualquier lado. */
+.acordeon-anim-clip:has(.tagsearch-abierto) {
+  overflow: visible;
 }
 
 

@@ -1,58 +1,18 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useRef, useEffect } from 'react'
 import { Tag, X, ChevronDown } from 'lucide-react'
 
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  // Posicion del dropdown en coordenadas del viewport (position: fixed).
-  // El dropdown se renderiza en un PORTAL a document.body y no adentro
-  // del wrapper: cuando vivia adentro, cualquier ancestro con
-  // overflow: hidden (el .acordeon-anim-clip del acordeon de filtros
-  // del Dashboard, por ejemplo) lo recortaba y no se llegaba a ver
-  // completo. Con el portal + fixed ningun contenedor lo puede recortar.
-  const [pos, setPos] = useState(null)
   const ref = useRef(null)
-  const dropdownRef = useRef(null)
 
   useEffect(() => {
     function handleClick(e) {
-      // El dropdown vive en el portal (FUERA de ref), asi que el
-      // click-afuera tiene que chequear los dos contenedores — si solo
-      // mirara ref, un click en una opcion cerraria el dropdown en el
-      // mousedown antes de que llegue a dispararse el onClick.
-      if (ref.current && ref.current.contains(e.target)) return
-      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return
-      setOpen(false)
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
-
-  // Recalcula la posicion al abrir, y la mantiene pegada al trigger si
-  // la pagina scrollea o cambia el tamano de la ventana mientras esta
-  // abierto (scroll en fase captura para enterarse tambien del scroll
-  // de contenedores internos, no solo del window).
-  useLayoutEffect(() => {
-    if (!open) return
-    function reposicionar() {
-      const r = ref.current?.getBoundingClientRect()
-      if (!r) return
-      const ancho = Math.max(200, r.width)
-      setPos({
-        top: r.bottom + 4,
-        left: Math.min(r.left, Math.max(8, window.innerWidth - ancho - 8)),
-        minWidth: ancho,
-      })
-    }
-    reposicionar()
-    window.addEventListener('resize', reposicionar)
-    window.addEventListener('scroll', reposicionar, true)
-    return () => {
-      window.removeEventListener('resize', reposicionar)
-      window.removeEventListener('scroll', reposicionar, true)
-    }
-  }, [open])
 
   const filtrados = tags.filter(t =>
     t.toLowerCase().includes(query.toLowerCase())
@@ -70,8 +30,19 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     setQuery('')
   }
 
+  // El dropdown se renderiza EN FLUJO (absolute dentro de este wrapper),
+  // no en un portal con position: fixed: fixed se rompe en iOS cuando el
+  // teclado esta abierto (el sistema panea el visual viewport y los
+  // elementos fixed quedan anclados al layout viewport, asi que el
+  // dropdown quedaba flotando en cualquier lado). En flujo scrollea junto
+  // con el contenido y no tiene ese problema.
+  // El recorte del overflow: hidden del acordeon de filtros se resuelve
+  // del lado del CSS: la clase tagsearch-abierto de este wrapper le avisa
+  // al clip del acordeon (via :has, ver .acordeon-anim-clip en global.css)
+  // que libere el overflow SOLO mientras el dropdown esta abierto — asi
+  // la animacion de apertura/cierre del acordeon queda intacta.
   return (
-    <div ref={ref} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
+    <div ref={ref} className={`tagsearch${open ? ' tagsearch-abierto' : ''}`} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
       {/* Trigger */}
       <div onClick={() => setOpen(v => !v)}
         style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.5rem 0.75rem', background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', cursor:'pointer', fontFamily:'var(--font-body)', fontSize:'0.875rem', fontWeight:400, color: value ? 'var(--icomm-violet)' : 'var(--text-muted)', minWidth:'150px', userSelect:'none', transition:'border-color 150ms ease, box-shadow 150ms ease' }}>
@@ -85,9 +56,9 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         }
       </div>
 
-      {/* Dropdown — en portal a document.body (ver comentario de pos) */}
-      {open && pos && createPortal(
-        <div ref={dropdownRef} style={{ position:'fixed', top:pos.top, left:pos.left, zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', minWidth:pos.minWidth, overflow:'hidden' }}>
+      {/* Dropdown */}
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', minWidth:'200px', overflow:'hidden' }}>
           {/* Buscador */}
           <div style={{ padding:'0.5rem' }}>
             {/* fontSize y padding viven en .tagsearch-input (global.css) y no
@@ -118,8 +89,7 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
               </button>
             ))}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   )
