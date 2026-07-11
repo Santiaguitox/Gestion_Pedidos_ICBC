@@ -5283,6 +5283,11 @@ select:focus {
      en blanco ni layout roto en navegadores viejos. */
   .app-shell {
     height: 100dvh;
+    /* --app-vh la fija AppLayout.jsx vía visualViewport.resize — ver el
+       comentario ahí. Si por lo que sea no llegó a correr (JS
+       deshabilitado, navegador viejo) esta línea nunca se aplica y
+       queda el 100dvh de arriba como fallback real, no decorativo. */
+    height: var(--app-vh, 100dvh);
   }
 
   .page-header {
@@ -5870,6 +5875,9 @@ select:focus {
     top: 0;
     left: 0;
     height: 100dvh;
+    /* Mismo fix que .app-shell — ver el comentario en el bloque de
+       arriba y en AppLayout.jsx (visualViewport.resize). */
+    height: var(--app-vh, 100dvh);
     width: 260px;
     z-index: 300;
     background: var(--bg-surface);

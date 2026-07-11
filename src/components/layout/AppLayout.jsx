@@ -211,6 +211,33 @@ export default function AppLayout() {
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
 
+  // Altura real de pantalla en mobile, sincronizada a mano.
+  // .app-shell usa 100dvh (ver global.css) porque en teoría se recalcula
+  // solo con el espacio visible real — pero en iOS Safari, cuando el
+  // teclado se abre o se cierra, dvh no siempre se re-evalúa en el
+  // momento: queda con el valor viejo hasta que algo fuerza un reflow.
+  // Eso es exactamente el hueco gris "tipo fondo de pantalla" que se
+  // veía al entrar a un input y salir — el documento quedaba con la
+  // altura de cuando el teclado estaba abierto (más chica) hasta que el
+  // scroll manual forzaba el recálculo. visualViewport.resize se dispara
+  // de forma confiable en cada apertura/cierre de teclado y en cada
+  // cambio real de tamaño, así que replicamos ese forzado nosotros: la
+  // variable se actualiza en cada resize y .app-shell la usa como
+  // override de 100dvh (ver el bloque mobile de global.css). Sin
+  // soporte de visualViewport (navegadores viejos) esto no corre y
+  // .app-shell se queda con el 100dvh de siempre, que ya andaba bien
+  // ahí salvo por este caso puntual.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    function setAltura() {
+      document.documentElement.style.setProperty('--app-vh', `${vv.height}px`)
+    }
+    setAltura()
+    vv.addEventListener('resize', setAltura)
+    return () => vv.removeEventListener('resize', setAltura)
+  }, [])
+
   // Atajo global Cmd+K (Mac) / Ctrl+K (Windows/Linux) — funciona desde
   // cualquier pantalla de la app, no solo desde un input específico.
   // Se ignora si ya hay otro modal abierto (perfil, cambiar contraseña)

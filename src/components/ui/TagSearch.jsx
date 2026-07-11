@@ -4,6 +4,13 @@ import { Tag, X, ChevronDown } from 'lucide-react'
 export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…' }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  // 'left' (default) o 'right' — decide de qué lado del trigger cuelga
+  // el dropdown. En la grilla de filtros el TagSearch suele vivir en la
+  // columna derecha, pegado casi al borde de la pantalla: colgar
+  // siempre a la izquierda (left:0) hacía que sus 200px de ancho mínimo
+  // se fueran por fuera del viewport hacia la derecha. Se decide al
+  // abrir, midiendo el espacio real disponible a cada lado.
+  const [alineacion, setAlineacion] = useState('left')
   const ref = useRef(null)
 
   useEffect(() => {
@@ -13,6 +20,16 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  function abrir() {
+    const ANCHO_DROPDOWN = 220 // debe matchear el width real de abajo
+    const r = ref.current?.getBoundingClientRect()
+    if (r) {
+      const espacioDerecha = window.innerWidth - r.left
+      setAlineacion(espacioDerecha < ANCHO_DROPDOWN + 8 ? 'right' : 'left')
+    }
+    setOpen(v => !v)
+  }
 
   const filtrados = tags.filter(t =>
     t.toLowerCase().includes(query.toLowerCase())
@@ -44,7 +61,7 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
   return (
     <div ref={ref} className={`tagsearch${open ? ' tagsearch-abierto' : ''}`} style={{ position:'relative', minWidth:'150px', width:'auto' }}>
       {/* Trigger */}
-      <div onClick={() => setOpen(v => !v)}
+      <div onClick={abrir}
         style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.5rem 0.75rem', background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', cursor:'pointer', fontFamily:'var(--font-body)', fontSize:'0.875rem', fontWeight:400, color: value ? 'var(--icomm-violet)' : 'var(--text-muted)', minWidth:'150px', userSelect:'none', transition:'border-color 150ms ease, box-shadow 150ms ease' }}>
         <Tag size={13} style={{ flexShrink:0 }} />
         <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -56,9 +73,13 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         }
       </div>
 
-      {/* Dropdown */}
+      {/* Dropdown — width fijo en vez de minWidth: con minWidth el
+          dropdown podía terminar más ancho que la pantalla en mobile
+          (era justamente el otro síntoma reportado, "se va por fuera").
+          calc(100vw - 24px) lo tapa como red de seguridad final incluso
+          si la medición de `abrir()` fallara por algún borde. */}
       {open && (
-        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', minWidth:'200px', overflow:'hidden' }}>
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left: alineacion === 'left' ? 0 : 'auto', right: alineacion === 'right' ? 0 : 'auto', zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', width:'220px', maxWidth:'calc(100vw - 24px)', overflow:'hidden' }}>
           {/* Buscador */}
           <div style={{ padding:'0.5rem' }}>
             {/* fontSize y padding viven en .tagsearch-input (global.css) y no
