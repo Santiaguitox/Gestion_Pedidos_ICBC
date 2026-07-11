@@ -125,8 +125,15 @@ a { color: inherit; text-decoration: none; }
    background:none y border:none — sin esto, Safari iOS puede seguir
    pintando su propio bisel/estilo nativo por encima de un <button> en
    estado disabled (se ve como una franja o borde "fantasma" que no
-   respeta el CSS). Pasó en el botón "Guardando…" de PedidoForm. */
-button { font-family: var(--font-body); cursor: pointer; border: none; background: none; -webkit-appearance: none; appearance: none; }
+   respeta el CSS). Pasó en el botón "Guardando…" de PedidoForm.
+   webkit-tap-highlight-color en 'transparent' saca el resaltado nativo
+   que iOS pinta al tocar un elemento — ese resaltado se dibuja del
+   tamaño de la caja en el momento del tap, y si el botón cambia de
+   texto/ancho en ese mismo instante (como "Guardar cambios" →
+   "Guardando…", que además de deshabilitarse se hace más angosto), el
+   resaltado viejo queda asomando un instante por fuera del botón nuevo
+   — la franja/letra fantasma que se veía. */
+button { font-family: var(--font-body); cursor: pointer; border: none; background: none; -webkit-appearance: none; appearance: none; -webkit-tap-highlight-color: transparent; }
 input, textarea {
   font-family: var(--font-body);
   font-size: 0.875rem;

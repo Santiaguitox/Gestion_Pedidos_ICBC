@@ -387,7 +387,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
           <div className="modal-footer">
             <button type="button" onClick={onCancel} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={saving} className="btn-primary"
-              style={{ width: 'auto', opacity: saving ? 0.6 : 1 }}>
+              style={{ width: 'auto', minWidth: '9.5rem', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear pedido'}
             </button>
           </div>
