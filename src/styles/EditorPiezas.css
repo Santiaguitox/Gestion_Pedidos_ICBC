@@ -1257,23 +1257,8 @@
 .ep-preview-close:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
 /* ─── Responsive mobile ────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .ep-biblioteca { display: none; }
-  .ep-editor { display: none; }
-
-  /* Mismo motivo que el bloque de mobile de global.css: sin esto, el
-     textarea de "pegar HTML" (12px) dispara el auto-zoom de iOS/Android
-     al enfocarlo — y como este editor vive en una pantalla propia
-     (ep-m-screen) sin recargar la página, el usuario queda con el zoom
-     pegado hasta que lo ajusta a mano.
-     El !important es necesario: la regla desktop de `.ep-m-textarea`
-     (font-size: 12px) está más abajo en este archivo que este propio
-     bloque @media — con la misma especificidad, en CSS gana la regla
-     que aparece último en el archivo, así que sin !important la de
-     escritorio le ganaba a esta por orden de aparición, no por
-     especificidad (mismo bug ya encontrado en .coment-input). */
-  .ep-m-textarea { font-size: 16px !important; }
-}
+/* El bloque @media mobile de este archivo vive al FINAL del archivo —
+   ver el comentario ahí sobre por qué (cascada por orden de aparición). */
 
 /* ─── Ajustes v2 ─────────────────────────────────────────────────────────── */
 
@@ -2555,3 +2540,44 @@ input[autocomplete="off"] { }
    resto de las acciones del menú con un borde arriba. ── */
 .ep-m-menu-item-danger { color: #D0111B; border-top: 1px solid #F0F1F8; margin-top: 4px; }
 .ep-m-menu-item-danger:active { background: rgba(208,17,27,0.06); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (max-width: 768px)
+   ────────────────────────────────────────────────────────────────────────
+   Único bloque @media mobile de este archivo, y vive AL FINAL a propósito:
+   con la misma especificidad, en CSS gana la regla que aparece último en
+   el archivo. Cuando este bloque vivía en el medio, cualquier clase
+   declarada más abajo (los "Ajustes v2", etc.) le ganaba a sus overrides
+   por orden de aparición — ese era exactamente el bug del auto-zoom que
+   obligó al !important de .ep-m-textarea. Al estar último, nada de este
+   archivo le puede ganar por orden y no hace falta !important.
+   Si una clase nueva necesita ajuste mobile, agregarla ACÁ (no crear un
+   @media nuevo más arriba). */
+@media (max-width: 768px) {
+  .ep-biblioteca { display: none; }
+  .ep-editor { display: none; }
+
+  /* ── Anti auto-zoom de iOS/Android ──
+     Cualquier input/textarea/contenteditable con font-size menor a 16px
+     dispara el auto-zoom del navegador mobile al enfocarlo — y como el
+     editor vive en pantallas propias sin recargar la página, el zoom
+     queda pegado hasta ajustarlo a mano con un pellizco.
+     El fix global de global.css (input, textarea { font-size: 16px })
+     NO alcanza acá: usa selectores de elemento, y estas clases le ganan
+     por ESPECIFICIDAD (no por orden), así que cada una necesita su
+     propia regla. Inventario completo de los campos del editor: */
+  .ep-campo-input,
+  .ep-codigo-textarea,
+  .ep-img-input,
+  .ep-importar-input,
+  .ep-m-input,
+  .ep-m-nombre-input,
+  .ep-m-textarea,
+  .ep-nombre-pieza-input,
+  .ep-rich-link-input,
+  .ep-search { font-size: 16px; }
+
+  /* El "editorcito" de texto enriquecido es un contenteditable — también
+     dispara el auto-zoom si su font-size es menor a 16px. */
+  .ep-rich-content { font-size: 16px; }
+}

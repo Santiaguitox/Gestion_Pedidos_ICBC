@@ -50,12 +50,16 @@ export function TagSearch({ tags, value, onChange, placeholder = 'Buscar tag…'
         <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:400, background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-lg)', minWidth:'200px', overflow:'hidden' }}>
           {/* Buscador */}
           <div style={{ padding:'0.5rem' }}>
+            {/* fontSize y padding viven en .tagsearch-input (global.css) y no
+                inline: un estilo inline le gana hasta al bloque mobile de
+                global.css, y este input necesita el override de 16px en el
+                celu para no disparar el auto-zoom al enfocarlo. */}
             <input
               autoFocus
+              className="tagsearch-input"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder={placeholder}
-              style={{ fontSize:'0.8125rem', padding:'0.375rem 0.625rem' }}
               onClick={e => e.stopPropagation()}
             />
           </div>

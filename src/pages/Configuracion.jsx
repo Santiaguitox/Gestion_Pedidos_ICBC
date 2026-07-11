@@ -160,7 +160,7 @@ function SeccionConfig({ titulo, descripcion, items, tabla, loading, refetch, no
             {descripcion && <p className="config-section-desc">{descripcion}</p>}
           </div>
           <div className="flex items-center gap-[0.625rem]">
-            <span className="text-muted-sm">{items.length} {nombreItem.toLowerCase()}{items.length !== 1 ? 's' : ''}</span>
+            <span className="config-section-count">{items.length}</span>
             {open ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
           </div>
         </div>

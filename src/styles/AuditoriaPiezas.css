@@ -734,17 +734,8 @@
 
 /* ---------- Responsive ---------- */
 
-@media (max-width: 720px) {
-  .ap-resumen-clickeable {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .ap-regla-fila {
-    flex-wrap: wrap;
-  }
-  .ap-regla-tipo {
-    width: 100%;
-  }
-}
+/* El bloque @media mobile de este archivo vive al FINAL del archivo —
+   ver el comentario ahí sobre por qué (cascada por orden de aparición). */
 
 /* ---------- Tabs de modo de carga ---------- */
 
@@ -1065,4 +1056,44 @@
 .ap-campo-secundario-etiqueta {
   color: var(--text-muted);
   opacity: 0.8;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (max-width: 720px)
+   ────────────────────────────────────────────────────────────────────────
+   Único bloque @media mobile de este archivo, y vive AL FINAL a propósito:
+   con la misma especificidad gana la regla que aparece último en el
+   archivo, así que al estar acá nada le puede ganar por orden (mismo
+   criterio que el bloque mobile de EditorPiezas.css). Si una clase nueva
+   necesita ajuste mobile, agregarla ACÁ. */
+@media (max-width: 720px) {
+  .ap-resumen-clickeable {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Reglas de búsqueda: cada campo ocupa su propia línea al 100% ──
+     El wrap ya existía, pero el input del texto a buscar (flex: 1)
+     compartía renglón con el toggle Aa de mayúsculas/minúsculas y el
+     botón de eliminar, que le comían casi todo el ancho. Con
+     flex-basis 100% cada campo fuerza su propia línea: selector de
+     tipo → input de valor → (toggle Aa + eliminar). */
+  .ap-regla-fila {
+    flex-wrap: wrap;
+  }
+  .ap-regla-tipo {
+    width: 100%;
+  }
+  .ap-regla-valor-wrap {
+    flex: 1 1 100%;
+  }
+
+  /* ── Anti auto-zoom de iOS/Android ──
+     Campos con font-size menor a 16px disparan el auto-zoom del
+     navegador mobile al enfocarlos. El fix global de global.css usa
+     selectores de elemento y estas clases le ganan por especificidad,
+     así que necesitan su propia regla (mismo caso que en el editor). */
+  .ap-regla-valor,
+  .ap-regla-tipo,
+  .ap-textarea,
+  .ap-select-link { font-size: 16px; }
 }

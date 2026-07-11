@@ -1752,6 +1752,18 @@ select:focus {
   color: var(--text-primary);
   outline: none;
 }
+/* La regla global input:focus (más arriba) le pone borde + box-shadow
+   rojos a CUALQUIER input — en el buscador (Ctrl+K y su equivalente
+   mobile de la lupita) ese glow no pega con el diseño del panel, y
+   como el input autofocusea al abrirse quedaba encendido SIEMPRE.
+   Se anula puntualmente acá sin tocar la regla global (la usan los
+   inputs de formularios de toda la app) — mismo criterio que
+   .coment-input:focus. */
+.busqueda-global-input:focus {
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
 .busqueda-global-input::placeholder { color: var(--text-muted); }
 
 .busqueda-global-kbd {
@@ -4184,6 +4196,23 @@ select:focus {
   margin-top: 0.125rem;
 }
 
+/* Globito con la cantidad de ítems en el header del acordeón — mismo
+   patrón que .ep-categoria-count del editor de piezas (fondo gris,
+   solo el número). Reemplaza al texto "8 estados" / "5 tipos" que en
+   mobile se partía en dos líneas y rompía la vista cuando el título
+   del acordeón era largo. flex-shrink: 0 para que nunca lo aplaste
+   el título. */
+.config-section-count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
 .config-section-body {
   padding: 0 1.25rem 1.25rem;
   display: flex;
@@ -5198,6 +5227,15 @@ select:focus {
 }
 
 
+/* ── Input de búsqueda del filtro de tags (TagSearch) ──
+   Vive acá y no inline en el componente para que el bloque mobile de
+   abajo pueda subirlo a 16px (anti auto-zoom) — un estilo inline le
+   ganaría a cualquier regla CSS. */
+.tagsearch-input {
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.625rem;
+}
+
 /* ════════════════════════════════════════════════════════════════════════
    RESPONSIVE — MOBILE (max-width: 640px)
    ────────────────────────────────────────────────────────────────────────
@@ -5884,6 +5922,23 @@ select:focus {
   input, textarea, select { font-size: 16px; }
   select { font-size: 16px !important; }
   .coment-input { font-size: 16px !important; }
+
+  /* Mismo anti-zoom para inputs con clase propia: la regla de elemento
+     de arriba pierde por ESPECIFICIDAD contra cualquier clase, así que
+     estos necesitan su regla puntual (sus declaraciones base están más
+     arriba en este archivo, por eso acá ganan por orden sin !important). */
+  .tagsearch-input { font-size: 16px; }
+  .busqueda-global-input { font-size: 16px; }
+
+  /* Danger zone (modal editar usuario: resetear contraseña / eliminar
+     usuario) — en desktop texto y botón conviven en una fila, pero en
+     el celu el botón le aplastaba el texto en una columna finita. Se
+     apila en 2: descripción arriba, botón abajo. */
+  .danger-zone {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
