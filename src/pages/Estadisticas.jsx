@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { startOfMonth, subMonths, isSameMonth, startOfWeek, endOfWeek, isSameDay, isToday } from 'date-fns'
+import { startOfMonth, subMonths, isSameMonth, startOfWeek, endOfWeek, isToday } from 'date-fns'
 import {
   Download, RotateCcw, AlertCircle, Info, CalendarClock, Hourglass, Filter,
   ChevronDown, ChevronUp, X, BarChart2, Plus, CheckCircle2, Clock, Zap,
@@ -14,7 +14,7 @@ import { useInstancias } from '@/hooks/useInstancias'
 import { useUsuarios } from '@/hooks/useUsuarios'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useIsMobile } from '@/hooks/useIsMobile'
-import { useEstadisticas, rangoDeMes, rangoMesAnterior, labelMes, mesesDisponibles } from '@/hooks/useEstadisticas'
+import { useEstadisticas, rangoDeMes, labelMes, mesesDisponibles } from '@/hooks/useEstadisticas'
 import { colorAvatar, iniciales } from '@/lib/avatares'
 import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
 import '@/styles/Estadisticas.css'
@@ -25,9 +25,17 @@ const fmtDia = f => format(new Date(f + 'T00:00:00'), "d 'de' MMM", { locale: es
 
 function labelBucket(bucket, gran) {
   const d = new Date(bucket + 'T00:00:00')
-  if (gran === 'day') return format(d, 'd MMM', { locale: es })
+  if (gran === 'day') return format(d, 'd', { locale: es })
   if (gran === 'week') return format(d, "'Sem' d MMM", { locale: es })
   return format(d, 'MMM yy', { locale: es })
+}
+
+// Fin de semana: ningún pedido se genera sábado/domingo (asunción de
+// Santi) — se filtran del gráfico de throughput (desktop y mobile) para
+// no gastar espacio ni scroll en columnas que siempre van a estar en 0.
+function esFinDeSemana(bucket) {
+  const dia = new Date(bucket + 'T00:00:00').getDay()
+  return dia === 0 || dia === 6
 }
 
 // Mismo criterio que TODA la app: el color elegido a mano en Usuarios.jsx
@@ -86,12 +94,12 @@ function Kpi({ icono: Icono, label, valor, sufijo, delta, colorClase }) {
   return (
     <div className={`est-kpi-color ${colorClase}`}>
       <div className="est-kpi-color-top">
-        <Icono size={15} />
-        <span className="est-kpi-color-label">{label}</span>
-      </div>
-      <div className="est-kpi-color-valor-row">
-        <span className="est-kpi-color-valor">{valor ?? '—'}{sufijo}</span>
+        <span className="est-kpi-color-icono"><Icono size={16} /></span>
         {delta}
+      </div>
+      <div>
+        <div className="est-kpi-color-valor">{valor ?? '—'}{sufijo}</div>
+        <div className="est-kpi-color-label">{label}</div>
       </div>
     </div>
   )
@@ -130,8 +138,12 @@ function ThroughputBarsDesktop({ serie }) {
         {serie.map(s => (
           <div key={s.bucket} className="est-through-col">
             <div className="est-through-barras">
-              <div className="est-barra" style={{ height: `${s.creados / max * 100}%`, background: COLOR_CREADOS }} title={`Creados: ${s.creados}`} />
-              <div className="est-barra" style={{ height: `${s.finalizados / max * 100}%`, background: COLOR_FINALIZADOS }} title={`Finalizados: ${s.finalizados}`} />
+              <div className="est-barra est-tip" tabIndex={0} style={{ height: `${s.creados / max * 100}%`, background: COLOR_CREADOS }}>
+                <span className="est-popover-sm" role="tooltip">Creados: {s.creados}</span>
+              </div>
+              <div className="est-barra est-tip" tabIndex={0} style={{ height: `${s.finalizados / max * 100}%`, background: COLOR_FINALIZADOS }}>
+                <span className="est-popover-sm" role="tooltip">Finalizados: {s.finalizados}</span>
+              </div>
             </div>
             <span className="est-through-label">{labelBucket(s.bucket, 'day')}</span>
           </div>
@@ -238,7 +250,8 @@ function ThroughputAccordionMobile({ serie }) {
 // mismo hook y mismo breakpoint —640px— que ya usa el resto de la app).
 function ThroughputChart({ serie }) {
   const isMobile = useIsMobile()
-  return isMobile ? <ThroughputAccordionMobile serie={serie} /> : <ThroughputBarsDesktop serie={serie} />
+  const serieHabil = useMemo(() => (serie ?? []).filter(s => !esFinDeSemana(s.bucket)), [serie])
+  return isMobile ? <ThroughputAccordionMobile serie={serieHabil} /> : <ThroughputBarsDesktop serie={serieHabil} />
 }
 
 function LeadTipoBars({ filas, labelTipo }) {
@@ -257,8 +270,18 @@ function LeadTipoBars({ filas, labelTipo }) {
             <b>{f.total} d</b>
           </div>
           <div className="est-hbar-pista" style={{ width: `${Number(f.total) / max * 100}%` }}>
-            <div style={{ width: `${f.total > 0 ? f.interno / f.total * 100 : 0}%`, background: '#5B4EE8' }} title={`Interno: ${f.interno} d`} />
-            <div style={{ width: `${f.total > 0 ? f.espera / f.total * 100 : 0}%`, background: '#9EA3BE' }} title={`Espera: ${f.espera} d`} />
+            <div className="est-hbar-pista-fill">
+              <div style={{ width: `${f.total > 0 ? f.interno / f.total * 100 : 0}%`, background: '#5B4EE8' }} />
+              <div style={{ width: `${f.total > 0 ? f.espera / f.total * 100 : 0}%`, background: '#9EA3BE' }} />
+            </div>
+            <div className="est-hbar-pista-tips">
+              <div className="est-tip" tabIndex={0} style={{ width: `${f.total > 0 ? f.interno / f.total * 100 : 0}%` }}>
+                <span className="est-popover-sm" role="tooltip">Interno: {f.interno} d</span>
+              </div>
+              <div className="est-tip" tabIndex={0} style={{ width: `${f.total > 0 ? f.espera / f.total * 100 : 0}%` }}>
+                <span className="est-popover-sm" role="tooltip">Espera: {f.espera} d</span>
+              </div>
+            </div>
           </div>
         </div>
       ))}
@@ -269,13 +292,12 @@ function LeadTipoBars({ filas, labelTipo }) {
 function DonutTipos({ filas, labelTipo, colorTipo }) {
   if (!filas?.length) return <EmptyMini texto="Sin pedidos creados en este período" />
   const total = filas.reduce((acc, f) => acc + f.n, 0)
-  let acum = 0
-  const stops = filas.map((f, i) => {
-    const desde = acum / total * 360
-    acum += f.n
-    const hasta = acum / total * 360
-    return `${colorTipo(f.tipo, i)} ${desde}deg ${hasta}deg`
-  }).join(', ')
+  const segmentos = filas.reduce((acc, f, i) => {
+    const desde = acc.length ? acc[acc.length - 1].hasta : 0
+    const hasta = desde + (f.n / total * 360)
+    return [...acc, { desde, hasta, color: colorTipo(f.tipo, i) }]
+  }, [])
+  const stops = segmentos.map(s => `${s.color} ${s.desde}deg ${s.hasta}deg`).join(', ')
   return (
     <div className="est-donut-wrap">
       <div className="est-donut" style={{ background: `conic-gradient(${stops})` }}>
@@ -564,8 +586,8 @@ export default function Estadisticas() {
 
       {!loading && !error && data && (
         <div className="est-grid">
-          <Card span={12} titulo="Creados vs. finalizados"
-            ayuda="Compara, período a período, cuántos pedidos se crearon contra cuántos se finalizaron.">
+          <Card span={12} titulo={`Creados vs. finalizados · ${labelMes(mesSeleccionado)}`}
+            ayuda="Compara, período a período, cuántos pedidos se crearon contra cuántos se finalizaron. No se muestran sábados ni domingos (no se generan pedidos esos días).">
             <ThroughputChart serie={data.throughput} />
           </Card>
 
@@ -583,7 +605,7 @@ export default function Estadisticas() {
               data.distribucion_instancia.map(i => (
                 <div key={i.instancia} className="est-hbar-row">
                   <div className="est-hbar-top"><span>{labelInstancia(i.instancia)}</span><b>{i.n}</b></div>
-                  <div className="est-hbar-pista"><div style={{ width: `${i.n / maxInst * 100}%`, background: '#1A2EE6' }} /></div>
+                  <div className="est-hbar-pista"><div className="est-hbar-pista-fill"><div style={{ width: `${i.n / maxInst * 100}%`, background: '#1A2EE6' }} /></div></div>
                 </div>
               ))}
           </Card>
@@ -591,16 +613,53 @@ export default function Estadisticas() {
             <DonutTipos filas={data.distribucion_tipo} labelTipo={labelTipo} colorTipo={colorTipo} />
           </Card>
 
-          {/* Fila 3: SIEMPRE 9/3, ancho fijo — Reprogramaciones (cuando
-              aparece) ya no comparte esta fila, va en su propia fila
-              full-width más abajo. Así el 25% de acá siempre queda
-              alineado con el 25% de la fila 2, sin condicionales. */}
-          <Card span={9} titulo="Pedidos sin actividad"
+          {/* Fila 3: SIEMPRE 9/3, ancho fijo. Reprogramaciones ahora vive
+              acá (card fija, siempre visible con su propio estado
+              vacío) — "Pedidos sin actividad" pasó a su propia fila
+              full-width más abajo, para darle más lugar a la lista. */}
+          <Card span={9} titulo="Reprogramaciones"
+            ayuda="Cuántas veces se cambió la fecha límite de los pedidos en el período, y los más reprogramados."
+            footer={hayReprogramaciones && reprogSinHistorico && (
+              <span className="est-nota-metrica">
+                <CalendarClock size={12} />Métrica registrada desde el {fmtDia(config.reprog_desde)}
+              </span>
+            )}>
+            {hayReprogramaciones ? (
+              <div className="est-reprog-layout">
+                <div className="est-reprog-total-big">
+                  <div className="est-reprog-total-num">{data.reprogramaciones.total}</div>
+                  <div className="est-reprog-total-label">cambios de fecha en el período</div>
+                </div>
+                <div className="est-reprog-lista">
+                  {data.reprogramaciones.top.map(r => (
+                    <button key={r.id} className="est-fila-link" onClick={() => navigate(`/pedidos/${r.id}`, { state: { from: '/estadisticas' } })}>
+                      <span className="est-fila-asunto">{r.asunto}</span>
+                      <span className="est-reprog-count"><RotateCcw size={12} />{r.n}×</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="est-reprog-vacio">
+                <CalendarClock size={28} />
+                <span>Sin datos en este período</span>
+              </div>
+            )}
+          </Card>
+          <Card span={3} titulo="Ranking de tags" ayuda="Tags más usados en los pedidos creados en el período.">
+            {data.top_tags.length === 0 ? <EmptyMini texto="Sin tags en este período" /> : (
+              <div className="est-tags">
+                {data.top_tags.map(t => <span key={t.tag} className="est-tag-chip">{t.tag} <b>{t.n}</b></span>)}
+              </div>
+            )}
+          </Card>
+
+          <Card span={12} titulo="Pedidos sin actividad"
             ayuda="Pedidos activos sin ningún movimiento (actividad ni comentarios) hace más de 7 días. Click para abrir el pedido.">
             {data.estancados.length === 0
               ? <EmptyMini texto="No hay pedidos sin actividad." />
               : data.estancados.map(s => (
-                <button key={s.id} className="est-fila-link" onClick={() => navigate(`/pedidos/${s.id}`)}>
+                <button key={s.id} className="est-fila-link" onClick={() => navigate(`/pedidos/${s.id}`, { state: { from: '/estadisticas' } })}>
                   <Hourglass size={13} className="est-fila-icono" />
                   <span className="est-fila-asunto">{s.asunto}</span>
                   <span className="est-avatares-mini">
@@ -612,31 +671,6 @@ export default function Estadisticas() {
                 </button>
               ))}
           </Card>
-          <Card span={3} titulo="Ranking de tags" ayuda="Tags más usados en los pedidos creados en el período.">
-            {data.top_tags.length === 0 ? <EmptyMini texto="Sin tags en este período" /> : (
-              <div className="est-tags">
-                {data.top_tags.map(t => <span key={t.tag} className="est-tag-chip">{t.tag} <b>{t.n}</b></span>)}
-              </div>
-            )}
-          </Card>
-
-          {hayReprogramaciones && (
-            <Card span={12} titulo="Reprogramaciones"
-              ayuda="Cuántas veces se cambió la fecha límite de los pedidos en el período, y los más reprogramados."
-              footer={reprogSinHistorico && (
-                <span className="est-nota-metrica">
-                  <CalendarClock size={12} />Métrica registrada desde el {fmtDia(config.reprog_desde)}
-                </span>
-              )}>
-              <div className="est-reprog-total"><b>{data.reprogramaciones.total}</b> cambios de fecha en el período</div>
-              {data.reprogramaciones.top.map(r => (
-                <button key={r.id} className="est-fila-link" onClick={() => navigate(`/pedidos/${r.id}`)}>
-                  <span className="est-fila-asunto">{r.asunto}</span>
-                  <span className="est-reprog-count"><RotateCcw size={12} />{r.n}×</span>
-                </button>
-              ))}
-            </Card>
-          )}
         </div>
       )}
     </div>

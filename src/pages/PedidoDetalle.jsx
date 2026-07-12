@@ -33,7 +33,7 @@ export default function PedidoDetalle() {
   const navigate = useNavigate()
   const { state } = useLocation()
   const backTo = state?.from ?? '/pedidos'
-  const backLabel = backTo === '/' ? 'Dashboard' : backTo === '/calendario' ? 'Calendario' : backTo === '/notificaciones' ? 'Notificaciones' : 'Pedidos'
+  const backLabel = backTo === '/' ? 'Dashboard' : backTo === '/calendario' ? 'Calendario' : backTo === '/notificaciones' ? 'Notificaciones' : backTo === '/estadisticas' ? 'Estadísticas' : 'Pedidos'
   const { role, user } = useAuth()
   const { showError } = useNotificaciones()
   const { actualizarPedido, eliminarPedido } = usePedidos()

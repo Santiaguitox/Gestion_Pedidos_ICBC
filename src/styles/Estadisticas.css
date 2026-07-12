@@ -111,17 +111,18 @@
   flex-direction: column;
 }
 
-/* ── KPIs — opción 5a: 4 variantes de color, una por tarjeta.
-   Los hex puntuales (verde/naranja para texto e ícono) son los del
-   mockup aprobado, levemente más oscuros que --green-text para que el
-   número tenga contraste suficiente sobre el fondo tintado. ── */
+/* ── KPIs — rediseño aplicado (IA de diseño, opción 1a): fondo pastel
+   sin borde, ícono metido en un recuadro blanco/surface propio (en vez
+   de suelto sobre el tinte), y texto neutro (valor en --text-primary,
+   label en --text-secondary) en vez de todo coloreado — el color de
+   marca queda solo en el tinte de fondo y el ícono. El pill de delta
+   ahora vive arriba a la derecha, a la altura del recuadro del ícono. ── */
 .est-kpi-color {
-  border-radius: 14px;
+  border-radius: 11px;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid;
   /* El pill de delta agrega ~2px de alto real (afecta el cálculo de
      baseline de la fila aunque el pill en sí sea más bajo que el
      número) — con min-height fijo, aparezca o no el delta, las 4
@@ -129,38 +130,31 @@
   min-height: 91px;
   box-sizing: border-box;
 }
-.est-kpi-color-top { display: flex; align-items: center; gap: 8px; }
-.est-kpi-color-label { font: 600 12.5px var(--font-body); color: var(--text-secondary); }
-.est-kpi-color-valor-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.est-kpi-color-valor { font: 800 30px var(--font-display); line-height: 1; }
-
-.est-kpi-azul {
-  background: rgba(26, 46, 230, 0.09);
-  border-color: rgba(26, 46, 230, 0.22);
+.est-kpi-color-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.est-kpi-color-icono {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
-.est-kpi-azul .est-kpi-color-top svg { color: #1A2EE6; }
-.est-kpi-azul .est-kpi-color-valor { color: #1A2EE6; }
+.est-kpi-color-label { font: 600 12.5px var(--font-body); color: var(--text-secondary); margin-top: 2px; }
+.est-kpi-color-valor { font: 800 26px var(--font-display); line-height: 1; color: var(--text-primary); }
 
-.est-kpi-verde {
-  background: rgba(16, 185, 129, 0.09);
-  border-color: rgba(16, 185, 129, 0.25);
-}
-.est-kpi-verde .est-kpi-color-top svg { color: #0E9E72; }
-.est-kpi-verde .est-kpi-color-valor { color: #0E9E72; }
+.est-kpi-azul { background: rgba(26, 46, 230, 0.09); }
+.est-kpi-azul .est-kpi-color-icono svg { color: #1A2EE6; }
 
-.est-kpi-naranja {
-  background: rgba(249, 115, 22, 0.10);
-  border-color: rgba(249, 115, 22, 0.25);
-}
-.est-kpi-naranja .est-kpi-color-top svg { color: #D9670F; }
-.est-kpi-naranja .est-kpi-color-valor { color: #D9670F; }
+.est-kpi-verde { background: rgba(14, 158, 114, 0.12); }
+.est-kpi-verde .est-kpi-color-icono svg { color: #0E9E72; }
 
-.est-kpi-rojo {
-  background: rgba(208, 17, 27, 0.08);
-  border-color: rgba(208, 17, 27, 0.22);
-}
-.est-kpi-rojo .est-kpi-color-top svg { color: var(--icbc-red); }
-.est-kpi-rojo .est-kpi-color-valor { color: var(--icbc-red); }
+.est-kpi-naranja { background: rgba(245, 158, 11, 0.14); }
+.est-kpi-naranja .est-kpi-color-icono svg { color: #D9670F; }
+
+.est-kpi-rojo { background: rgba(220, 38, 38, 0.11); }
+.est-kpi-rojo .est-kpi-color-icono svg { color: var(--icbc-red); }
 
 /* Delta: pill de fondo blanco con borde de color (no fondo sólido como
    antes) — así se lee bien encima de las 4 tarjetas ya tintadas. */
@@ -239,10 +233,55 @@
   border-top-color: var(--text-primary);
 }
 .est-help:hover .est-popover,
-.est-help:focus-visible .est-popover {
+.est-help:focus-visible .est-popover,
+.est-tip:hover .est-popover-sm,
+.est-tip:focus-visible .est-popover-sm {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   pointer-events: auto;
+}
+
+/* Variante compacta del mismo popover, para el hover de segmentos de
+   gráfico (barras de throughput, barras de tiempo por tipo) — antes
+   usaban el title nativo del navegador; ahora el mismo tipo de burbuja
+   que los "?" de ayuda, pero angosta (ancho al contenido, sin wrap)
+   porque el texto siempre es corto ("Creados: 12"). .est-tip es el
+   wrapper posicionado (ocupa el 100% del segmento real, que tiene alto
+   o ancho variable via inline style) — igual rol que .est-help pero
+   sin el círculo "?" visible. */
+.est-tip {
+  position: relative;
+  height: 100%;
+  display: block;
+  cursor: default;
+}
+.est-popover-sm {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 200px;
+  background: var(--text-primary);
+  color: var(--bg-surface);
+  font: 600 11.5px var(--font-body);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity .12s ease, transform .12s ease;
+}
+.est-popover-sm::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--text-primary);
 }
 
 .est-card-body { flex: 1; min-width: 0; }
@@ -381,42 +420,54 @@
 }
 
 /* ── Creados vs. finalizados ──────────────────────────────────────────
-   Desktop: EL ORIGINAL — barras CSS puras con tooltip nativo del
-   navegador (`title`), sin SVG. Mobile: acordeón semanal (ver
+   Desktop: barras CSS puras, sin SVG. Mobile: acordeón semanal (ver
    ".est-semana-*" más abajo). Cuál de los dos se monta lo decide
    useIsMobile() en JS, no CSS — solo uno de los dos existe en el DOM
-   en cada momento. ── */
+   en cada momento.
+
+   SIN scroll horizontal a propósito: las columnas son flex:1 1 0 con
+   min-width:0 (sin piso), así que con más días cargados (hasta ~23
+   hábiles en el mes más largo, ya sin sábados/domingos) se achican
+   solas para entrar siempre en el ancho disponible — nunca hace falta
+   scroll. Efecto colateral bueno: como acá no se declara overflow-x,
+   el eje Y tampoco queda forzado a recortar (por la regla del spec de
+   que si un eje no es 'visible' el otro deja de serlo) — el popover
+   del hover de cada barra ya no necesita colchón de aire arriba para
+   no cortarse, sea cual sea el valor de la barra. */
 .est-through {
   display: flex;
   align-items: flex-end;
-  gap: 14px;
+  gap: 6px;
   min-height: 190px;
-  padding: 0 4px;
-  overflow-x: auto;
+  padding: 20px 4px 0;
 }
 .est-through-col {
-  flex: 1;
-  min-width: 46px;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   justify-content: flex-end;
 }
 .est-through-barras {
   display: flex;
   align-items: flex-end;
-  gap: 5px;
+  justify-content: center;
+  gap: 3px;
   height: 140px;
+  width: 100%;
 }
 .est-barra {
-  width: 18px;
-  border-radius: 4px 4px 0 0;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 18px;
+  border-radius: 3px 3px 0 0;
   min-height: 2px;
   transition: var(--transition);
 }
 .est-through-label {
-  font: 600 11px var(--font-body);
+  font: 600 10.5px var(--font-body);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -530,33 +581,52 @@
   color: var(--text-primary);
 }
 .est-hbar-pista {
+  position: relative;
   display: flex;
   height: 12px;
   border-radius: 6px;
-  overflow: hidden;
   background: var(--bg-hover);
   min-width: 40px;
 }
+/* Capa de color: la que antes tenía overflow:hidden directo en
+   .est-hbar-pista para redondear las puntas de la barra — separada
+   acá porque ese mismo overflow:hidden tapaba el popover del hover
+   (que necesita salir hacia arriba, fuera de la caja de 12px). */
+.est-hbar-pista-fill {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+}
+/* Capa de hover: mismos anchos que la de color, superpuesta encima,
+   SIN overflow:hidden — acá vive el popover de cada segmento. */
+.est-hbar-pista-tips {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
 
-/* ── Donut — layout fijo con min-width en la leyenda para que no se
-   deforme el círculo cuando hay pocos o muchos ítems. ── */
+/* ── Donut — layout vertical (rediseño): título arriba (en el header de
+   la Card), torta centrada, leyenda abajo ocupando el ancho completo.
+   Antes iba en fila (torta + leyenda lado a lado), que quedaba muy
+   apretado en el 25% de ancho que le toca a esta card. ── */
 .est-donut-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 24px;
-  min-height: 122px;
 }
 .est-donut {
-  width: 122px;
-  height: 122px;
-  min-width: 122px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
   position: relative;
   flex: none;
+  margin: 4px 0 16px;
 }
 .est-donut-centro {
   position: absolute;
-  inset: 21px;
+  inset: 25px;
   border-radius: 50%;
   background: var(--bg-surface);
   display: flex;
@@ -571,7 +641,7 @@
   flex-direction: column;
   justify-content: center;
   gap: 9px;
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 .est-donut-leyenda > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -648,12 +718,34 @@
 .est-badge-naranja { background: rgba(249, 115, 22, 0.12); color: #F97316; }
 .est-badge-rojo    { background: var(--red-bg); color: var(--icbc-red); }
 
-.est-reprog-total {
-  font: 500 12.5px var(--font-body);
-  color: var(--text-secondary);
-  margin-bottom: 10px;
+/* ── Reprogramaciones — layout del rediseño: número grande a la
+   izquierda en columna fija, lista a la derecha ocupando el resto.
+   Card siempre visible ahora (antes solo aparecía si había datos). ── */
+.est-reprog-layout {
+  display: flex;
+  gap: 28px;
 }
-.est-reprog-total b { font: 700 17px var(--font-display); color: var(--text-primary); margin-right: 4px; }
+.est-reprog-total-big { flex: none; width: 150px; }
+.est-reprog-total-num { font: 800 32px var(--font-display); color: #F59E0B; line-height: 1; }
+.est-reprog-total-label { font: 600 12.5px var(--font-body); color: var(--text-secondary); margin-top: 6px; }
+.est-reprog-lista { flex: 1; min-width: 0; }
+
+/* Estado vacío copiado del rediseño: ícono + leyenda centrados, en vez
+   del .est-empty compacto que usan el resto de las cards — acá tiene
+   más aire porque la card queda siempre visible (antes no se
+   renderizaba sin datos). */
+.est-reprog-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 0;
+  color: var(--text-muted);
+}
+.est-reprog-vacio svg { color: var(--text-muted); }
+.est-reprog-vacio span { font: 600 13px var(--font-body); color: var(--text-muted); }
+
 .est-reprog-count {
   display: inline-flex;
   align-items: center;
@@ -694,6 +786,20 @@
   .est-card { grid-column: span 12 !important; }
 }
 @media (max-width: 640px) {
+  /* Fix del "arrastre" de toda la pantalla en mobile: .est-page-con-fondo
+     cancela el padding de .main-content con márgenes negativos fijos
+     (-1.75rem -2rem, los valores de DESKTOP) — pero en mobile
+     .main-content pasa a padding:1rem. Con los márgenes negativos de
+     escritorio, la caja quedaba más ancha que el viewport real (main-content
+     solo tiene overflow-y:auto, sin overflow-x), y eso volvía toda la
+     pantalla horizontalmente paneable, como si el contenido entero fuera
+     una capa que se puede correr con el dedo. Estos valores cancelan el
+     padding real de mobile, igual que hace la regla de arriba con el de
+     desktop. */
+  .est-page-con-fondo {
+    margin: -1rem;
+    padding: 1rem;
+  }
   .est-grid { gap: 12px; }
   .est-kpis-row { grid-template-columns: repeat(2, 1fr); }
   .est-presets-row { gap: 6px; }
@@ -707,4 +813,8 @@
      tiene sentido cuando cada grupo ya cae en su propia línea por el
      wrap — se saca para no dejar una rayita huérfana. */
   .est-divisor-vertical { display: none; }
+  /* Reprogramaciones: en fila queda apretado con el número fijo de
+     150px comiéndose ancho — apilado, número arriba y lista abajo. */
+  .est-reprog-layout { flex-direction: column; gap: 14px; }
+  .est-reprog-total-big { width: auto; }
 }
