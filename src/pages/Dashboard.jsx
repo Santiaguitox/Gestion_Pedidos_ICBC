@@ -162,6 +162,7 @@ function StatCard({ label, cantidad, color, onClick, activo, destacado }) {
 export default function Dashboard() {
   useDocumentTitle('Dashboard')
 
+  const navigate = useNavigate()
   const { user, profile, role } = useAuth()
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)

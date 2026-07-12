@@ -235,10 +235,28 @@ select:focus {
 .sidebar-nav {
   padding: 1rem 0.75rem;
   gap: 0.35rem;
+  /* Bug real: .sidebar-nav es "flex-1" dentro de un contenedor columna,
+     pero por default un flex item no puede achicarse por debajo de la
+     altura de su propio contenido (min-height:auto) — así que
+     "overflow-y-auto" nunca llegaba a activarse, y con más ítems en el
+     menú (ej. al sumar Estadísticas) el nav empezaba a empujar/pisar al
+     sidebar-footer de abajo en vez de scrollear internamente. Con
+     min-height:0 el nav SÍ puede achicarse hasta el espacio disponible
+     y ahí el scroll interno entra a jugar como corresponde. */
+  min-height: 0;
 }
 
 .sidebar-separator {
-  height: 1px;
+  /* No era el fix anterior (min-height:0 en .sidebar-nav) lo que fallaba
+     acá — era ESTO: un <div> vacío en un contenedor flex-column tiene
+     "auto-minimum-size" = 0 (no tiene contenido que le imponga un
+     mínimo), a diferencia de los nav-item que sí tienen texto/ícono. Con
+     el menú ya no entrando entero, el navegador reparte el achique de
+     flex-shrink entre los hijos, y como este div no tiene nada que
+     "defienda" su tamaño, absorbe TODO el achique y termina en 0 antes
+     que ningún nav-item ceda un píxel. `height` participa de ese
+     cálculo; `min-height` no — por eso `min-height:1px` lo blinda. */
+  min-height: 1px;
   background: var(--border);
   margin: 0.6rem 0.2rem;
 }

@@ -1,0 +1,710 @@
+/* ============================================================================
+   ESTADÍSTICAS — sistema de cards componibles (ver Estadisticas.jsx).
+   Todo el color sale de las variables del tema (light/dark automático).
+   ============================================================================ */
+
+/* Fondo de marca (mismo AuthBrandBackdrop que Login/SetPassword): esta
+   clase SOLO se aplica acá, combinada con .page-root — no toca el resto
+   de las páginas.
+
+   El problema real que resolvía esto: .page-root no tiene padding
+   propio, pero vive DENTRO de <main class="main-content"> (AppLayout),
+   que sí tiene `padding: 1.75rem 2rem`. Los isotipos del backdrop usan
+   offsets negativos (top:-110px, right:-130px, etc.) pensados para un
+   contenedor que llega hasta el borde real de la pantalla — pero acá
+   arrancaban recortados 28px/32px para adentro por ese padding ajeno,
+   así que se veían con un margen raro en vez de pegados al borde.
+
+   Fix: margen negativo exactamente igual al padding de .main-content
+   (lo "cancela"), y el mismo padding puesto de nuevo ACÁ ADENTRO — así
+   la caja de esta clase (donde anclan los isotipos) llega de verdad
+   hasta el borde real del área de contenido, pero el contenido visual
+   (header, filtros, cards) queda con el mismo margen de siempre, sin
+   ningún cambio. */
+.est-page-con-fondo {
+  position: relative;
+  overflow: hidden;
+  margin: -1.75rem -2rem;
+  padding: 1.75rem 2rem;
+}
+.est-page-con-fondo > *:not(.auth-bg-iso) {
+  position: relative;
+  z-index: 1;
+}
+
+.est-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+
+/* KPIs: card fija (NO acordeón) — mismo look que el resto de las cards,
+   con el switch de comparación en el header, donde antes vivía el
+   chevron del acordeón.
+   SIN margin-bottom acá a propósito: .page-root ya tiene gap:2rem
+   uniforme entre TODOS sus hijos directos (Filtros, esta card, el
+   grid de abajo) — un margin-bottom extra acá sumaba 16px de más solo
+   del lado de abajo, y por eso el espacio no quedaba parejo arriba y
+   abajo de esta card (bug real, encontrado revisando el CSS). */
+.est-kpis-card { }
+
+.est-kpis-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+/* Simula el "recargando" acotado SOLO a este bloque cuando se tilda el
+   switch de comparación — el resto de la pantalla (filtros, gráficos)
+   no se entera de que esto está pasando. */
+.est-kpis-row-cargando {
+  opacity: .45;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+
+/* Clonado 1:1 de .re2-tabs (src/styles/RevisionEnvios.css) — mismo
+   patrón que el toggle HTML/URL de Revisión de envíos y Editor de
+   piezas, para que el rojo activo sea siempre var(--accent-primary),
+   no un color inventado para esta pantalla. */
+.est-periodo-tabs {
+  display: inline-flex;
+  padding: 5px;
+  background: var(--bg-hover);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.est-periodo-tabs button {
+  padding: 5px 15px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.est-periodo-tabs button.active {
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(208, 17, 27, 0.3);
+}
+
+.est-filtro-actual {
+  font: 700 0.6875rem var(--font-body);
+  color: var(--icbc-red);
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  padding: 0.1rem 0.5rem;
+  border-radius: 99px;
+}
+
+.est-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── KPIs — opción 5a: 4 variantes de color, una por tarjeta.
+   Los hex puntuales (verde/naranja para texto e ícono) son los del
+   mockup aprobado, levemente más oscuros que --green-text para que el
+   número tenga contraste suficiente sobre el fondo tintado. ── */
+.est-kpi-color {
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid;
+  /* El pill de delta agrega ~2px de alto real (afecta el cálculo de
+     baseline de la fila aunque el pill en sí sea más bajo que el
+     número) — con min-height fijo, aparezca o no el delta, las 4
+     tarjetas miden siempre lo mismo y no "saltan" al tildar el switch. */
+  min-height: 91px;
+  box-sizing: border-box;
+}
+.est-kpi-color-top { display: flex; align-items: center; gap: 8px; }
+.est-kpi-color-label { font: 600 12.5px var(--font-body); color: var(--text-secondary); }
+.est-kpi-color-valor-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.est-kpi-color-valor { font: 800 30px var(--font-display); line-height: 1; }
+
+.est-kpi-azul {
+  background: rgba(26, 46, 230, 0.09);
+  border-color: rgba(26, 46, 230, 0.22);
+}
+.est-kpi-azul .est-kpi-color-top svg { color: #1A2EE6; }
+.est-kpi-azul .est-kpi-color-valor { color: #1A2EE6; }
+
+.est-kpi-verde {
+  background: rgba(16, 185, 129, 0.09);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.est-kpi-verde .est-kpi-color-top svg { color: #0E9E72; }
+.est-kpi-verde .est-kpi-color-valor { color: #0E9E72; }
+
+.est-kpi-naranja {
+  background: rgba(249, 115, 22, 0.10);
+  border-color: rgba(249, 115, 22, 0.25);
+}
+.est-kpi-naranja .est-kpi-color-top svg { color: #D9670F; }
+.est-kpi-naranja .est-kpi-color-valor { color: #D9670F; }
+
+.est-kpi-rojo {
+  background: rgba(208, 17, 27, 0.08);
+  border-color: rgba(208, 17, 27, 0.22);
+}
+.est-kpi-rojo .est-kpi-color-top svg { color: var(--icbc-red); }
+.est-kpi-rojo .est-kpi-color-valor { color: var(--icbc-red); }
+
+/* Delta: pill de fondo blanco con borde de color (no fondo sólido como
+   antes) — así se lee bien encima de las 4 tarjetas ya tintadas. */
+.est-delta-pill {
+  font: 700 12px var(--font-display);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid;
+}
+.est-delta-bueno  { color: var(--green-text); border-color: rgba(16, 185, 129, 0.4); }
+.est-delta-malo   { color: var(--icbc-red);   border-color: rgba(208, 17, 27, 0.4); }
+.est-delta-neutro { color: var(--text-muted); border-color: var(--border-strong); }
+
+.est-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.est-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.est-card-titulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+/* Popover real (no depende del title del navegador): CSS puro, aparece
+   al instante con hover o foco por teclado, se ve siempre por encima. */
+.est-help {
+  position: relative;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font: 700 10px var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  flex: none;
+}
+.est-popover {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: 240px;
+  background: var(--text-primary);
+  color: var(--bg-surface);
+  font: 500 12px/1.4 var(--font-body);
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+}
+.est-popover::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--text-primary);
+}
+.est-help:hover .est-popover,
+.est-help:focus-visible .est-popover {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.est-card-body { flex: 1; min-width: 0; }
+
+.est-card-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bg-hover);
+}
+
+/* ── Selector de mes + filtros: TODO en una sola línea (antes eran dos
+   filas separadas — "mes" arriba, "tipo/instancia/usuario" abajo — y
+   quedaba raro con unos arriba y otros abajo). Envuelve si no entra en
+   una sola línea (mobile / ventanas angostas).
+
+   Altura forzada con `height` explícito (no solo padding): un <select>
+   nativo puede tener quirks de renderizado del navegador que lo hacen
+   1-2px más alto o bajo que un <button> con el mismo padding/font, aun
+   siendo idénticos en CSS — fijar `height` + `box-sizing:border-box` en
+   los tres tipos de control (botón/select/dropdown) es lo único que
+   garantiza que midan EXACTO lo mismo sin depender del render nativo. */
+.est-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+.est-presets-row .est-preset,
+.est-presets-row .select-auto {
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.est-botones-mes {
+  display: flex;
+  gap: 8px;
+}
+.est-botones-mes .est-preset { flex: none; }
+
+.est-divisor-vertical {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex: none;
+}
+
+.est-preset {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0 0.875rem;
+  font: 600 0.875rem var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.est-preset:hover { background: var(--bg-hover); }
+.est-preset-activo {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+.est-preset-activo:hover { background: var(--accent-hover); }
+
+.est-select-mes { font-weight: 600; }
+.est-select-mes-activo {
+  border-color: var(--accent-primary);
+  color: var(--text-primary) !important;
+}
+
+/* ── Avisos y errores ── */
+.est-aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  border-radius: var(--radius-md);
+  padding: 9px 14px;
+  font: 500 12.5px var(--font-body);
+  color: var(--text-secondary);
+}
+
+.est-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font: 500 13px var(--font-body);
+  color: var(--icbc-red);
+}
+.est-error button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  border: 1px solid var(--red-border);
+  background: var(--bg-surface);
+  color: var(--icbc-red);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font: 600 12px var(--font-body);
+  cursor: pointer;
+}
+
+/* ── Leyendas y textos auxiliares ── */
+.est-leyenda {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.est-leyenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 11.5px var(--font-body);
+  color: var(--text-secondary);
+}
+.est-leyenda i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.est-n { font: 500 11px var(--font-body); color: var(--text-muted); font-style: normal; }
+
+.est-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font: 500 12.5px var(--font-body);
+  padding: 18px 0;
+}
+
+/* ── Creados vs. finalizados ──────────────────────────────────────────
+   Desktop: EL ORIGINAL — barras CSS puras con tooltip nativo del
+   navegador (`title`), sin SVG. Mobile: acordeón semanal (ver
+   ".est-semana-*" más abajo). Cuál de los dos se monta lo decide
+   useIsMobile() en JS, no CSS — solo uno de los dos existe en el DOM
+   en cada momento. ── */
+.est-through {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  min-height: 190px;
+  padding: 0 4px;
+  overflow-x: auto;
+}
+.est-through-col {
+  flex: 1;
+  min-width: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  justify-content: flex-end;
+}
+.est-through-barras {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 140px;
+}
+.est-barra {
+  width: 18px;
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+  transition: var(--transition);
+}
+.est-through-label {
+  font: 600 11px var(--font-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Acordeón semanal (mobile) ── */
+.est-semana-acordeon {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.est-semana-acordeon:last-child { margin-bottom: 0; }
+
+.est-semana-header {
+  width: 100%;
+  display: block;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.est-semana-header:hover { background: var(--bg-hover); }
+
+.est-semana-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.est-semana-label {
+  font: 700 12px var(--font-display);
+  color: var(--text-primary);
+}
+.est-semana-label em {
+  font: 500 10.5px var(--font-body);
+  color: var(--text-muted);
+  font-style: normal;
+  margin-left: 4px;
+}
+
+.est-semana-mini-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.est-semana-mini-row:last-child { margin-bottom: 0; }
+.est-semana-mini-label {
+  width: 66px;
+  flex: none;
+  font: 500 11px var(--font-body);
+  color: var(--text-secondary);
+}
+.est-semana-mini-pista {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.est-semana-mini-pista > div { height: 100%; border-radius: 4px; transition: var(--transition); }
+.est-semana-mini-valor {
+  width: 22px;
+  flex: none;
+  text-align: right;
+  font: 700 11.5px var(--font-body);
+  color: var(--text-primary);
+}
+
+.est-semana-detalle {
+  padding: 2px 12px 10px;
+  background: var(--bg-hover);
+}
+.est-semana-dia-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px;
+  border-top: 1px solid var(--border);
+}
+.est-semana-dia-row:first-child { border-top: none; }
+.est-semana-dia-hoy { background: var(--badge-bg); margin: 0 -12px; padding: 6px 14px; }
+.est-semana-dia-label {
+  width: 52px;
+  flex: none;
+  font: 500 11px var(--font-body);
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+.est-semana-dia-valor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 11.5px var(--font-body);
+  color: var(--text-primary);
+}
+.est-semana-dia-valor i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+/* ── Barras horizontales (lead time / instancias) ── */
+.est-hbar-row { margin-bottom: 13px; }
+.est-hbar-row:last-child { margin-bottom: 0; }
+.est-hbar-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  font: 600 12.5px var(--font-body);
+  color: var(--text-primary);
+}
+.est-hbar-pista {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-hover);
+  min-width: 40px;
+}
+
+/* ── Donut — layout fijo con min-width en la leyenda para que no se
+   deforme el círculo cuando hay pocos o muchos ítems. ── */
+.est-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 122px;
+}
+.est-donut {
+  width: 122px;
+  height: 122px;
+  min-width: 122px;
+  border-radius: 50%;
+  position: relative;
+  flex: none;
+}
+.est-donut-centro {
+  position: absolute;
+  inset: 21px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.est-donut-centro b { font: 700 19px var(--font-display); color: var(--text-primary); }
+.est-donut-centro span { font: 600 10px var(--font-body); color: var(--text-muted); }
+.est-donut-leyenda {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+}
+.est-donut-leyenda > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.est-donut-leyenda span {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 600 12px var(--font-body); color: var(--text-primary);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.est-donut-leyenda i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.est-donut-leyenda b { font: 700 12px var(--font-body); color: var(--text-secondary); flex: none; }
+
+/* ── Tags ── */
+.est-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.est-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font: 600 11.5px var(--font-body);
+  color: var(--accent-secondary);
+}
+.est-tag-chip b { color: var(--text-secondary); }
+
+/* ── Filas clickeables (estancados / reprogramaciones) ── */
+.est-fila-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border: none;
+  border-bottom: 1px solid var(--bg-hover);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+.est-fila-link:hover { background: var(--bg-hover); border-radius: var(--radius-sm); }
+.est-fila-link:last-child { border-bottom: none; }
+.est-fila-icono { color: var(--text-muted); flex: none; }
+.est-fila-asunto {
+  flex: 1;
+  min-width: 0;
+  font: 600 12.5px var(--font-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.est-avatares-mini { display: flex; flex: none; }
+.est-avatares-mini i {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 9px var(--font-body);
+  font-style: normal;
+  border: 2px solid var(--bg-surface);
+  margin-left: -6px;
+}
+.est-avatares-mini i:first-child { margin-left: 0; }
+
+.est-badge-dias {
+  flex: none;
+  font: 700 11px var(--font-body);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.est-badge-naranja { background: rgba(249, 115, 22, 0.12); color: #F97316; }
+.est-badge-rojo    { background: var(--red-bg); color: var(--icbc-red); }
+
+.est-reprog-total {
+  font: 500 12.5px var(--font-body);
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.est-reprog-total b { font: 700 17px var(--font-display); color: var(--text-primary); margin-right: 4px; }
+.est-reprog-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font: 700 12px var(--font-body);
+  color: #F59E0B;
+}
+
+.est-nota-metrica {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 11px var(--font-body);
+  color: var(--text-muted);
+}
+
+/* ── Skeleton ── */
+.est-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.est-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--bg-hover), transparent);
+  animation: est-shimmer 1.4s infinite;
+}
+@keyframes est-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .est-card { grid-column: span 12 !important; }
+}
+@media (max-width: 640px) {
+  .est-grid { gap: 12px; }
+  .est-kpis-row { grid-template-columns: repeat(2, 1fr); }
+  .est-presets-row { gap: 6px; }
+  /* Los dos botones de mes pasan a ocupar el 100% del ancho entre los
+     dos (50/50 cada uno) — en desktop se dimensionan solos por su
+     texto, pero en una pantalla angosta eso los deja chicos y
+     descentrados; forzados a mitad y mitad se ven como un par real. */
+  .est-botones-mes { width: 100%; }
+  .est-botones-mes .est-preset { flex: 1 1 0; }
+  /* El separador vertical entre "mes" y "tipo/instancia/usuario" no
+     tiene sentido cuando cada grupo ya cae en su propia línea por el
+     wrap — se saca para no dejar una rayita huérfana. */
+  .est-divisor-vertical { display: none; }
+}

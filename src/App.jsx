@@ -34,6 +34,7 @@ const RevisionBase = lazy(() => import('@/pages/RevisionBase'))
 const RevisionEnvios = lazy(() => import('@/pages/RevisionEnvios'))
 const EditorPiezas = lazy(() => import('@/pages/EditorPiezas'))
 const AuditoriaPiezas = lazy(() => import('@/pages/AuditoriaPiezas'))
+const Estadisticas = lazy(() => import('@/pages/Estadisticas'))
 const Usuarios = lazy(() => import('@/pages/Usuarios'))
 const Papelera = lazy(() => import('@/pages/Papelera'))
 const Configuracion = lazy(() => import('@/pages/Configuracion'))
@@ -89,6 +90,11 @@ export default function App() {
                 <Route path="auditoria-piezas" element={
                   <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COLABORADOR]}>
                     <AuditoriaPiezas />
+                  </ProtectedRoute>
+                } />
+                <Route path="estadisticas" element={
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN]}>
+                    <Estadisticas />
                   </ProtectedRoute>
                 } />
                 <Route path="usuarios" element={

@@ -28,6 +28,9 @@ export const TIPO_ACTIVIDAD = {
   RESTAURACION:     'restauracion',
   EDICION:          'edicion',
   DESCARGA_PIEZA:   'descarga_pieza',
+  // Cambio de fecha_limite, registrado aparte de EDICION (que no guarda
+  // detalle) — alimenta la métrica "Reprogramaciones" de Estadísticas.
+  REPROGRAMACION:   'reprogramacion',
 }
 
 // ESTADOS y TIPOS se gestionan desde Supabase — usar useEstados() y useTipos()

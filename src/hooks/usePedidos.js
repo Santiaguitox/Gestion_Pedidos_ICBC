@@ -289,7 +289,7 @@ export function usePedidos(filters = {}) {
     // contra qué lockear (y antes un error acá seguía de largo y
     // registraba actividad con "anterior: undefined").
     const { data: anterior, error: errorAnterior } = await supabase
-      .from('pedidos').select('updated_at, prioridad, estados, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
+      .from('pedidos').select('updated_at, prioridad, estados, fecha_limite, asunto, pedido_asignados(user_id, profiles(full_name))').eq('id', id).single()
     if (errorAnterior || !anterior) throw new Error('No se pudo leer el estado actual del pedido — reintentá')
 
     // LOCK OPTIMISTA contra el update perdido: dos personas con el
@@ -326,6 +326,18 @@ export function usePedidos(filters = {}) {
       if (JSON.stringify([...anteriores].sort()) !== JSON.stringify([...campos.estados].sort())) {
         await logActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos: campos.estados })
       }
+    }
+    // Reprogramación: si el form mandó fecha_limite y difiere de la que
+    // había, queda su propio evento con {anterior, nueva} — EDICION no
+    // guarda detalle, así que sin esto la métrica de Estadísticas no
+    // tendría de dónde salir. limpiarCampos ya convirtió '' en null, y
+    // la columna es date (string 'YYYY-MM-DD' o null): la comparación
+    // directa con ?? null cubre también fijar o quitar la fecha.
+    if ('fecha_limite' in campos && (anterior?.fecha_limite ?? null) !== (campos.fecha_limite ?? null)) {
+      await logActividad(id, user?.id, TIPO_ACTIVIDAD.REPROGRAMACION, {
+        anterior: anterior?.fecha_limite ?? null,
+        nueva: campos.fecha_limite ?? null,
+      })
     }
     if (asignados !== undefined) {
       const idsAnteriores = (anterior?.pedido_asignados ?? []).map(a => a.user_id)

@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { LayoutGrid, ListTodo, CalendarDays, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search, MailCheck, PenLine, ScanSearch } from 'lucide-react'
+import { LayoutGrid, ListTodo, CalendarDays, BarChart2, Bell, Users, LogOut, Sun, Moon, ChevronLeft, Trash2, Settings, X, ExternalLink, Menu, CheckCircle2, AlertCircle, Info, FileSearch, Database, Search, MailCheck, PenLine, ScanSearch } from 'lucide-react'
 import { ROLES } from '@/lib/constants'
 import { rutaDeNotificacion } from '@/lib/notificaciones'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
@@ -100,6 +100,25 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
             <Icon size={18} />{!collapsed && <span>{label}</span>}
           </NavLink>
         ))}
+
+        {/* Estadísticas va acá (entre Calendario y Notificaciones) pero
+            solo para super_admin — a propósito más restrictivo que
+            Usuarios/Configuración (esos sí son admin+): mientras esta
+            pantalla esté en pulido, que solo el equipo core la vea.
+            ⚠️ Esto es SOLO ocultamiento de UI, no una barrera de
+            seguridad: a pedido explícito, la función de base
+            (estadisticas_periodo) sigue aceptando admin+super_admin sin
+            cambios — un admin que llamara al RPC a mano igual podría
+            traer los datos. Si en algún momento se quiere que sea una
+            restricción real, hay que sumar el chequeo en la función SQL
+            también (hoy deliberadamente no está). */}
+        {isSuperAdmin && (
+          <NavLink to="/estadisticas" onClick={onNavClick}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            title={collapsed ? 'Estadísticas' : undefined}>
+            <BarChart2 size={18} />{!collapsed && <span>Estadísticas</span>}
+          </NavLink>
+        )}
 
         {/* Viewer no puede tener pedidos ni subtareas asignadas (no
             aparece como opción en esos selects — ver PedidoForm /

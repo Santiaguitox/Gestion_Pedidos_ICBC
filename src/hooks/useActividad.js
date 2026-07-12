@@ -28,6 +28,12 @@ export function labelActividad(item) {
       if (removidos.length) partes.push(`desasignó a ${removidos.join(', ')}`)
       return `${nombre} ${partes.join(' y ')}`
     }
+    case TIPO_ACTIVIDAD.REPROGRAMACION: {
+      const { anterior, nueva } = item.detalle ?? {}
+      if (!anterior) return `${nombre} fijó la fecha límite: ${nueva}`
+      if (!nueva) return `${nombre} quitó la fecha límite (era ${anterior})`
+      return `${nombre} reprogramó la fecha límite: ${anterior} → ${nueva}`
+    }
     case TIPO_ACTIVIDAD.ELIMINACION:   return `${nombre} eliminó el pedido`
     case TIPO_ACTIVIDAD.RESTAURACION:  return `${nombre} restauró el pedido`
     case TIPO_ACTIVIDAD.EDICION:       return `${nombre} editó el pedido`

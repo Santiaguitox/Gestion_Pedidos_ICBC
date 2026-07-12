@@ -1,0 +1,296 @@
+-- ============================================================================
+-- ESTADÍSTICAS — ajuste v4 (2026-07-12), reemplaza a estadisticas_periodo()
+-- de la migración 20260714000000.
+--
+-- Un solo cambio: la granularidad semanal/mensual del throughput queda
+-- SIEMPRE en 'day'. Tenía sentido cuando los rangos podían ser de
+-- cualquier largo (trimestre, personalizado); ahora que los presets se
+-- simplificaron a meses calendario (máx. ~31 días), la rama 'week'/
+-- 'month' era código muerto en la práctica — con 31 días el umbral de
+-- "<=21 → day" nunca se cumple, así que un mes completo terminaba
+-- agregado semanalmente sin querer.
+--
+-- Además, el nuevo diseño del gráfico "Creados vs. finalizados" (mobile:
+-- acordeón semanal con detalle diario adentro; desktop: barras diarias)
+-- necesita SIEMPRE el detalle día a día — el acordeón agrupa por semana
+-- en el front, pero para mostrar el detalle interno de cada semana hace
+-- falta el dato diario crudo. Pre-agregar a semana en la base se lo
+-- comía antes de que llegara al front.
+-- ============================================================================
+
+create or replace function public.estadisticas_periodo(
+  p_desde date default null,
+  p_hasta date default null,
+  p_tipo text default null,
+  p_instancia text default null,
+  p_usuario_id uuid default null,
+  p_dias_estancado int default 7
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_stats_desde  date;
+  v_reprog_desde date;
+  v_desde date;
+  v_hasta date;
+  v_gran  text;
+  v_resultado jsonb;
+  c_max_dias constant int := 400;
+begin
+  if public.my_role() is distinct from 'super_admin'
+     and public.my_role() is distinct from 'admin' then
+    raise exception 'Solo admin o super_admin pueden consultar estadísticas';
+  end if;
+
+  select c.stats_desde, c.reprog_desde
+    into v_stats_desde, v_reprog_desde
+    from public.estadisticas_config c
+    limit 1;
+  v_stats_desde  := coalesce(v_stats_desde,  current_date);
+  v_reprog_desde := coalesce(v_reprog_desde, current_date);
+
+  v_hasta := least(coalesce(p_hasta, current_date), current_date);
+  v_desde := coalesce(p_desde, v_hasta - 29);
+  -- Piso doble: no más atrás que el histórico confiable NI más ancho
+  -- que el techo defensivo — el que sea más restrictivo gana.
+  v_desde := greatest(v_desde, v_stats_desde, v_hasta - (c_max_dias - 1));
+  if v_desde > v_hasta then
+    v_desde := v_hasta;
+  end if;
+
+  -- Siempre 'day' — ver header. buckets/serie de abajo usan date_trunc
+  -- con esto, así que sigue funcionando igual, solo que ahora el
+  -- resultado son días crudos incluso para un mes completo.
+  v_gran := 'day';
+
+  with
+  pf as (
+    select p.*
+    from public.pedidos p
+    where p.deleted_at is null
+      and (p_tipo is null or p.tipo = p_tipo)
+      and (p_instancia is null or p.instancia = p_instancia)
+      and (p_usuario_id is null or exists (
+        select 1 from public.pedido_asignados pa
+        where pa.pedido_id = p.id and pa.user_id = p_usuario_id
+      ))
+  ),
+  fin as (
+    select distinct on (a.pedido_id)
+      a.pedido_id,
+      a.created_at as finalizado_en
+    from public.actividad a
+    join pf p on p.id = a.pedido_id
+    where a.tipo = 'cambio_estado'
+      and coalesce(a.detalle -> 'nuevos' ? 'finalizado', false)
+      and not coalesce(a.detalle -> 'anteriores' ? 'finalizado', false)
+      and 'finalizado' = any (p.estados)
+    order by a.pedido_id, a.created_at desc
+  ),
+  eventos as (
+    select
+      a.pedido_id,
+      a.created_at,
+      coalesce(a.detalle -> 'nuevos' ? 'esperando_respuesta', false) as esperando,
+      lead(a.created_at) over (partition by a.pedido_id order by a.created_at) as siguiente
+    from public.actividad a
+    join fin f on f.pedido_id = a.pedido_id
+    where a.tipo = 'cambio_estado'
+  ),
+  espera as (
+    select
+      e.pedido_id,
+      sum(
+        extract(epoch from (
+          least(coalesce(e.siguiente, f.finalizado_en), f.finalizado_en) - e.created_at
+        )) / 86400.0
+      ) as dias
+    from eventos e
+    join fin f on f.pedido_id = e.pedido_id
+    where e.esperando
+      and e.created_at < f.finalizado_en
+    group by e.pedido_id
+  ),
+  lead_fin as (
+    select
+      f.pedido_id,
+      p.tipo,
+      p.fecha_limite,
+      f.finalizado_en,
+      extract(epoch from (f.finalizado_en - p.created_at)) / 86400.0 as dias_total,
+      coalesce(es.dias, 0) as dias_espera
+    from fin f
+    join pf p on p.id = f.pedido_id
+    left join espera es on es.pedido_id = f.pedido_id
+    where f.finalizado_en::date between v_desde and v_hasta
+  ),
+  buckets as (
+    select distinct date_trunc(v_gran, d)::date as bucket
+    from generate_series(v_desde::timestamp, v_hasta::timestamp, interval '1 day') d
+  ),
+  serie as (
+    select
+      b.bucket,
+      (select count(*) from pf p
+        where p.created_at::date between v_desde and v_hasta
+          and date_trunc(v_gran, p.created_at)::date = b.bucket) as creados,
+      (select count(*) from lead_fin lf
+        where date_trunc(v_gran, lf.finalizado_en)::date = b.bucket) as finalizados
+    from buckets b
+  ),
+  ult_mov as (
+    select
+      p.id,
+      p.asunto,
+      greatest(
+        p.created_at,
+        coalesce((select max(a.created_at) from public.actividad a where a.pedido_id = p.id), p.created_at),
+        coalesce((select max(c.created_at) from public.pedido_comentarios c where c.pedido_id = p.id), p.created_at)
+      ) as ultimo
+    from pf p
+    where not ('finalizado' = any (p.estados))
+  ),
+  reprog as (
+    select a.pedido_id, count(*) as n
+    from public.actividad a
+    join pf p on p.id = a.pedido_id
+    where a.tipo = 'reprogramacion'
+      and a.created_at::date between v_desde and v_hasta
+    group by a.pedido_id
+  ),
+  -- Reconstrucción histórica de "activos": para cada pedido, el último
+  -- cambio_estado con created_at <= v_hasta nos dice si a ESA fecha
+  -- estaba finalizado o no — no usa p.estados (que es el estado ACTUAL,
+  -- de hoy). Si el pedido no tiene ningún cambio_estado hasta v_hasta,
+  -- se asume activo (todo pedido nace no-finalizado).
+  estado_a_fecha as (
+    select distinct on (a.pedido_id)
+      a.pedido_id,
+      coalesce(a.detalle -> 'nuevos' ? 'finalizado', false) as finalizado_a_fecha
+    from public.actividad a
+    join pf p on p.id = a.pedido_id
+    where a.tipo = 'cambio_estado'
+      and a.created_at::date <= v_hasta
+    order by a.pedido_id, a.created_at desc
+  )
+  select jsonb_build_object(
+    'meta', jsonb_build_object(
+      'desde', v_desde,
+      'hasta', v_hasta,
+      'granularidad', v_gran,
+      'stats_desde', v_stats_desde,
+      'reprog_desde', v_reprog_desde,
+      'recortado', (p_desde is not null and p_desde < v_stats_desde)
+    ),
+    'kpis', jsonb_build_object(
+      'creados', (select count(*) from pf p where p.created_at::date between v_desde and v_hasta),
+      'finalizados', (select count(*) from lead_fin),
+      'lead_promedio', (select round(avg(lf.dias_total)::numeric, 1) from lead_fin lf),
+      'lead_mediana', (select round((percentile_cont(0.5) within group (order by lf.dias_total))::numeric, 1) from lead_fin lf),
+      'pct_a_tiempo', (select round(100.0 * avg((lf.finalizado_en::date <= lf.fecha_limite)::int), 0)
+                         from lead_fin lf where lf.fecha_limite is not null),
+      'n_con_fecha', (select count(*) from lead_fin lf where lf.fecha_limite is not null),
+      'activos_hoy', (
+        select count(*)
+        from pf p
+        where p.created_at::date <= v_hasta
+          and not coalesce((select e.finalizado_a_fecha from estado_a_fecha e where e.pedido_id = p.id), false)
+      )
+    ),
+    'throughput', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'bucket', s.bucket, 'creados', s.creados, 'finalizados', s.finalizados
+      ) order by s.bucket), '[]'::jsonb)
+      from serie s
+    ),
+    'lead_por_tipo', (
+      select coalesce(jsonb_agg(t.x order by (t.x ->> 'total')::numeric desc), '[]'::jsonb)
+      from (
+        select jsonb_build_object(
+          'tipo', lf.tipo,
+          'total', round(avg(lf.dias_total)::numeric, 1),
+          'espera', round(avg(lf.dias_espera)::numeric, 1),
+          'interno', round(greatest(avg(lf.dias_total) - avg(lf.dias_espera), 0)::numeric, 1),
+          'n', count(*)
+        ) as x
+        from lead_fin lf
+        group by lf.tipo
+      ) t
+    ),
+    'distribucion_tipo', (
+      select coalesce(jsonb_agg(t.x order by (t.x ->> 'n')::int desc), '[]'::jsonb)
+      from (
+        select jsonb_build_object('tipo', p.tipo, 'n', count(*)) as x
+        from pf p
+        where p.created_at::date between v_desde and v_hasta
+        group by p.tipo
+      ) t
+    ),
+    'distribucion_instancia', (
+      select coalesce(jsonb_agg(t.x order by (t.x ->> 'n')::int desc), '[]'::jsonb)
+      from (
+        select jsonb_build_object('instancia', coalesce(p.instancia, 'sin_instancia'), 'n', count(*)) as x
+        from pf p
+        where p.created_at::date between v_desde and v_hasta
+        group by coalesce(p.instancia, 'sin_instancia')
+      ) t
+    ),
+    'top_tags', (
+      select coalesce(jsonb_agg(t.x order by (t.x ->> 'n')::int desc), '[]'::jsonb)
+      from (
+        select jsonb_build_object('tag', tg, 'n', count(*)) as x
+        from pf p, unnest(p.tags) tg
+        where p.created_at::date between v_desde and v_hasta
+        group by tg
+        order by count(*) desc
+        limit 8
+      ) t
+    ),
+    'estancados', (
+      select coalesce(jsonb_agg(t.x order by (t.x ->> 'dias')::int desc), '[]'::jsonb)
+      from (
+        select jsonb_build_object(
+          'id', u.id,
+          'asunto', u.asunto,
+          'dias', (current_date - u.ultimo::date),
+          'asignados', coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'user_id', pr.id, 'nombre', pr.full_name, 'avatar_color', pr.avatar_color
+            ))
+            from public.pedido_asignados pa
+            join public.profiles pr on pr.id = pa.user_id
+            where pa.pedido_id = u.id
+          ), '[]'::jsonb)
+        ) as x
+        from ult_mov u
+        where u.ultimo < now() - make_interval(days => p_dias_estancado)
+        order by u.ultimo asc
+        limit 10
+      ) t
+    ),
+    'reprogramaciones', jsonb_build_object(
+      'total', (select coalesce(sum(r.n), 0) from reprog r),
+      'top', (
+        select coalesce(jsonb_agg(t.x order by (t.x ->> 'n')::int desc), '[]'::jsonb)
+        from (
+          select jsonb_build_object('id', p.id, 'asunto', p.asunto, 'n', r.n) as x
+          from reprog r
+          join pf p on p.id = r.pedido_id
+          order by r.n desc
+          limit 5
+        ) t
+      )
+    )
+  )
+  into v_resultado;
+
+  return v_resultado;
+end;
+$$;
+
+revoke all on function public.estadisticas_periodo(date, date, text, text, uuid, int) from public;
+grant execute on function public.estadisticas_periodo(date, date, text, text, uuid, int) to authenticated;
