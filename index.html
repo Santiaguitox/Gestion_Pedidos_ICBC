@@ -64,6 +64,13 @@
         gap: 22px;
         background: #F4F5FA;
         z-index: 9999;
+        transition: opacity 350ms ease;
+      }
+      /* main.jsx agrega esta clase cuando se cumple el mínimo de
+         exhibición (2s) y remueve el nodo al terminar la transición. */
+      #app-splash.app-splash-out {
+        opacity: 0;
+        pointer-events: none;
       }
       html[data-theme="dark"] #app-splash { background: #0A1230; }
       .app-splash-wordmark {
@@ -111,16 +118,23 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root">
-      <div id="app-splash" aria-hidden="true">
-        <span class="app-splash-wordmark">TeamWorkHub<sup>.app</sup></span>
-        <div class="app-splash-iso">
-          <div class="app-splash-shape app-splash-shape-1"><div class="app-splash-shape-inner"></div></div>
-          <div class="app-splash-shape app-splash-shape-2"><div class="app-splash-shape-inner"></div></div>
-          <div class="app-splash-shape app-splash-shape-3"><div class="app-splash-shape-inner"></div></div>
-        </div>
+    <div id="root"></div>
+    <!-- El splash vive FUERA de #root a propósito: adentro, el
+         createRoot().render() de React lo pisaba apenas cargaba el
+         bundle y con caché duraba milisegundos — parecía un error
+         (flash que entra y sale). Afuera, React monta la app abajo
+         (el splash la tapa con su z-index 9999) y main.jsx lo retira
+         con fade recién cuando pasó el mínimo de exhibición (2s desde
+         window.__twhSplashStart, marcado acá mismo). -->
+    <div id="app-splash" aria-hidden="true">
+      <span class="app-splash-wordmark">TeamWorkHub<sup>.app</sup></span>
+      <div class="app-splash-iso">
+        <div class="app-splash-shape app-splash-shape-1"><div class="app-splash-shape-inner"></div></div>
+        <div class="app-splash-shape app-splash-shape-2"><div class="app-splash-shape-inner"></div></div>
+        <div class="app-splash-shape app-splash-shape-3"><div class="app-splash-shape-inner"></div></div>
       </div>
     </div>
+    <script>window.__twhSplashStart = Date.now()</script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

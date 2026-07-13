@@ -1137,7 +1137,10 @@
   position: fixed;
   inset: 0;
   background: rgba(17,17,17,0.6);
-  z-index: 100;
+  /* 200 = misma capa que .modal-overlay global. Con 100 empataba con
+     la .mobile-topbar (sticky, z-index:100) y el header del modal
+     quedaba abajo del nav en el celu. */
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -3808,11 +3808,17 @@ select:focus {
 }
 /* El contenido real de la página queda por encima de los isotipos de
    fondo (ver AppLayout.jsx: <AuthBrandBackdrop/> se renderiza acá
-   adentro, hermano de <Outlet/>) — position:relative en cada hijo
-   directo alcanza porque .auth-bg-iso ya tiene z-index:0 propio. */
+   adentro, hermano de <Outlet/>). OJO: acá NO va z-index — un z-index
+   numérico crea un stacking context en el root de cada página y eso
+   atrapa adentro a los modales con position:fixed (el preview de
+   EditorPiezas quedaba abajo de la topbar mobile, z-index:100, porque
+   toda la página pintaba en el nivel 1). Con position:relative solo
+   (z-index:auto) alcanza: los .auth-bg-iso tienen z-index:0 y ambos
+   estratos (0 y auto) pintan juntos en orden de DOM, y como el
+   backdrop se renderiza antes que <Outlet/>, el contenido queda
+   arriba igual — sin encerrar a nada. */
 .main-content > *:not(.auth-bg-iso) {
   position: relative;
-  z-index: 1;
 }
 
 /* ─── Papelera ────────────────────────────────────────────────────────────── */
