@@ -1102,7 +1102,16 @@ const AutoIframe = forwardRef(function AutoIframe({ srcDoc, title, className, he
     return () => ro.disconnect()
   }, [])
 
+  // sandbox sin allow-scripts: el HTML de las piezas puede venir de
+  // afuera (importar por URL/pegado) y un <script> ahí adentro correría
+  // con el origen de la app (srcDoc hereda origen) — con acceso a la
+  // sesión de Supabase en localStorage. Bloquear scripts no cambia el
+  // render (una pieza de email no puede depender de JS: los clientes
+  // de correo lo eliminan igual); allow-same-origin mantiene la
+  // medición de alto vía contentDocument, y allow-popups deja que los
+  // links target=_blank del preview sigan abriendo.
   return <iframe ref={ref} className={className} srcDoc={srcDoc} title={title}
+    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
     scrolling="no" style={{ height: height || 40, border: 'none', display: 'block', width: width || '100%', background: '#fff' }} />
 })
 
@@ -2581,7 +2590,7 @@ export default function EditorPiezas() {
             <div className={`ep-preview-iframe-wrap ${previewModo === 'mobile' ? 'modo-mobile' : ''}`}>
               {previewModo === 'desktop'
                 ? <AutoIframe className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" />
-                : <iframe className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" style={{ width: '375px' }} />}
+                : <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" className="ep-preview-iframe" srcDoc={previewSrcdoc} title="Vista previa completa" style={{ width: '375px' }} />}
             </div>
           </div>
         </div>
@@ -3449,7 +3458,7 @@ function EditorMobile(props) {
             </div>
           </div>
           <div className={`ep-m-preview-frame-wrap ${previewModo}`}>
-            <iframe title="preview" srcDoc={previewSrcdoc} className="ep-m-preview-iframe" />
+            <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="preview" srcDoc={previewSrcdoc} className="ep-m-preview-iframe" />
           </div>
         </div>
       )}

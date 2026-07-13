@@ -807,6 +807,7 @@ export default function RevisionEnvios() {
                       {previewHtml ? (
                         <iframe
                           ref={previewIframeRef}
+                          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                           srcDoc={previewHtml}
                           title="Vista previa de la pieza con los datos de prueba"
                           onLoad={handlePreviewIframeLoad}

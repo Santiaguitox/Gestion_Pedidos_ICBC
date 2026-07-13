@@ -279,6 +279,7 @@ export default function RevisionEmail() {
                 {htmlAnalizado ? (
                   <iframe
                     ref={iframeRef}
+                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                     srcDoc={htmlAnalizado}
                     title="Vista previa del email"
                     onLoad={handleIframeLoad}
