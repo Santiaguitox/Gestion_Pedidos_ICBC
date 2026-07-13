@@ -1,6 +1,6 @@
 # Gestión de Pedidos ICBC × icomm
 
-App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación y auditoría (BBDD, piezas HTML, campos de personalización, escaneo masivo de piezas) y un buscador global.
+App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación y auditoría (BBDD, piezas HTML, campos de personalización, escaneo masivo de piezas), un editor visual de piezas, comentarios internos por pedido con menciones y reacciones, una pantalla de estadísticas del equipo, notificaciones en tiempo real con Web Push (PWA) y un buscador global.
 
 ---
 
@@ -25,13 +25,23 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 - Crear, editar y eliminar pedidos con asunto, descripción, tipo, prioridad, instancia, tipo de envío, fecha límite y tags
 - Asignar pedidos a uno o más usuarios del equipo
 - Actualizar estados (en proceso, en revisión, finalizado, etc.) con historial de cambios — "Finalizado" es mutuamente excluyente con cualquier otro estado
-- Papelera con soft delete y restauración
+- Papelera con soft delete y restauración; borrado **definitivo** solo `super_admin`, vía RPC (`eliminar_pedido_definitivo`)
 - Búsqueda global (`Cmd/Ctrl+K`) por asunto, tag, pieza, o persona asignada — incluye navegación rápida a cualquier sección de la app
 
 ### Subtareas
 - Agregar subtareas a cada pedido con asignación por usuario
 - Marcar como completadas con timestamp
 - Registro automático en Google Sheets para tareas del área de Diseño
+
+### Comentarios internos (por pedido)
+- Conversación del equipo dentro del detalle de cada pedido, estilo Slack: menciones con autocomplete (`@usuario`), reacciones con emoji, picker de emojis en el composer
+- Detección automática de links e imágenes en el texto — preview y botón de copiar
+- El contenido del usuario **nunca** pasa por `dangerouslySetInnerHTML`: el render intercala spans de React, XSS imposible por construcción
+- Invisible para el rol `viewer` en tres capas: la UI no monta la sección, Realtime no suscribe, y RLS devuelve 0 filas (la barrera real está en la base)
+- Moderación vía RPC (`eliminar_comentario`), NULL-safe — el autor no puede "resucitar" un comentario moderado editándolo
+- Borrador persistente del composer por pedido, y menciones al **editar** notifican solo el diff (no re-notifica a todos)
+- Deep-link `?comentario=<id>` desde la campanita, el toast o el push: navega al pedido, scrollea hasta el comentario y lo resalta — marca leído solo ese ítem
+- Resiliente sin websocket: si Realtime no está disponible degrada con recarga, y el error de carga se muestra honesto (no una lista vacía)
 
 ### Piezas entregables
 - Cargar piezas con nombre y link online (link único por pedido)
@@ -61,11 +71,20 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 - En mobile siempre se usa timeline (sin grilla); en desktop se puede elegir
 - Filtros y navegación por mes
 
+### Estadísticas
+- KPIs del período con acento de color (pedidos, finalizados, reprogramaciones, etc.), gráfico de distribución (donut) y throughput por día
+- Filtros por mes y filtros globales (tipo, instancia, usuario)
+- Todo el cómputo pesado vive en la base: la RPC `estadisticas_periodo` devuelve KPIs y series ya calculados — el front solo pinta
+- Acceso restringido a `admin` y `super_admin`
+- Fondo de marca (isotipo en las esquinas) — el mismo recurso se aplicó después a toda la app (ver `AuthBrandBackdrop`)
+
 ### Notificaciones
-- Notificaciones en tiempo real via Supabase Realtime
-- Toast al recibir una nueva notificación
+- **Eventos inmutables agrupados por `grupo_key`** (patrón de apps grandes): cada evento es una fila individual que nunca se edita, y el colapso de casi-duplicados (ej. varios cambios de estado del mismo pedido) es 100% capa de presentación
+- Notificaciones en tiempo real via Supabase Realtime, con toast al recibir una nueva — las entradas agrupadas son clickeables individualmente, cada una navega a su deep-link y marca leído solo ese ítem
 - Sonido opcional configurable
 - Límite de 50 notificaciones (elimina las más viejas automáticamente)
+- **Web Push (PWA)**: notificaciones push reales en el dispositivo, con toggle por usuario. El service worker se registra temprano en `main.jsx` (idempotente y best-effort); el despacho lo hace el trigger `notif_despachar_push` invocando la Edge Function `enviar-push`, con colapso por `grupo_key` para no apilar avisos casi iguales. Suscripciones en la tabla `push_suscripciones`
+- Aviso a los `admin`/`super_admin` asignados cuando un `viewer` descarga piezas de un pedido — la descarga además queda registrada en el historial de actividad del pedido
 
 ### Usuarios
 - Invitar usuarios por email (Supabase invite)
@@ -76,6 +95,7 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 ### Configuración
 - Gestión de estados, tipos e instancias desde la UI (sin tocar código)
 - Colores personalizables por ítem
+- **Unificar y renombrar tags** en todos los pedidos de una sola vez (solo `super_admin`, RPC `unificar_tags`) — acompañado de normalización de tags en la base y validación de "tag pendiente" al guardar un pedido
 
 ### Herramientas
 
@@ -97,10 +117,16 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 - **Legales adicionales**: se pueden agregar varios bloques de texto legal sobre el legal fijo; opción "separar en secciones" (recomendada para Mall con legales largos).
 - **Firma institucional** (FCI — ICBC Investments / Sociedad Gerente-Depositaria): sección fija de 2 filas × 2 columnas (izq/der) con 4 campos editables, toggle on/off.
 - **Indicadores financieros**: filas de indicador (referencia, sigla, valor) agregables dinámicamente.
-- **Preview en vivo** con switch Desktop/Mobile.
+- **Preview en vivo** con switch Desktop/Mobile. Todos los previews del editor (y los de Revisión de emails/envíos) se renderizan en iframes con `sandbox` **sin** `allow-scripts`: el HTML de una pieza puede venir de afuera (importación por URL o pegado) y un `<script>` ahí adentro correría con el origen de la app — bloquearlo no cambia el render (los clientes de correo eliminan el JS igual) y de paso el preview se comporta más parecido a Gmail/Outlook.
+- **Versión mobile propia** (mismo componente, árbol de UI aparte decidido por `useIsMobile`): navegación por pantallas y bottom-sheets (canvas, biblioteca, edición de bloque, menú, importar) en lugar del layout de 3 columnas, con preview full-screen. Mientras un sheet está abierto, el scroll de fondo se congela (`useLockAppScroll`).
 - **Exportación**: "Descargar HTML" y "Copiar HTML" (al portapapeles, con feedback visual de 2s).
 - **Borrador automático** en `localStorage` con debounce de 500ms — persiste al cambiar de sección y se restaura al volver. Botón "Reiniciar" con confirmación borra el borrador y resetea todo el estado.
 - **Importación de piezas** (desde HTML pegado o URL): reconstruye el estado completo del editor a partir de una pieza ya exportada o de una pieza externa de la plataforma — ver sección dedicada más abajo.
+
+### Arranque y errores
+- **Splash de arranque** estático en `index.html`: CSS crítico embebido (pinta en el primer frame, sin esperar el bundle), isotipo armado 100% en CSS con animación "breathe". Vive **fuera** de `#root` para que React no lo pise al montar; `main.jsx` lo retira con fade garantizando un mínimo de exhibición de 2s (antes duraba lo que tardaba el bundle — con caché era un flash que parecía un error). La ruta `/PreviewDeCarga` (⚠️ temporal) permite verlo sin recargar.
+- **Fondo de marca en toda la app**: `AuthBrandBackdrop` (el isotipo asomando en dos esquinas, bien clarito) se renderiza una sola vez en `AppLayout` para todas las páginas, y también en Login/SetPassword/ErrorPage.
+- **ErrorBoundary + ErrorPage** de marca: si un chunk lazy quedó desactualizado tras un deploy, intenta **un** auto-reload (con bandera en `sessionStorage` para no loopear); si el error es otro, muestra la página de error con opción de recargar.
 
 ---
 
@@ -137,8 +163,12 @@ La suite (Vitest, `src/**/__tests__/*.test.js`, entorno node — sin DOM) cubre 
 - **Redes sociales**: detección por dominio y por `data-red`, reordenamiento estable, red desactivada que sigue siendo detectable.
 - **htmlUtils**: balance real de `<td>` anidados, wrapper que envuelve todo vs. parcial, vector de forma de tags.
 - **Revisión** (`lib/revision/generales.js`): `DetectarContenidoDuplicado` (incluyendo el descarte del `<style>` VML de la plataforma) y `DetectarInlineEnvolviendoOutlook`.
+- **Notificaciones** (`lib/notificaciones.js`): agrupamiento por `grupo_key` (colapso de no leídas, ruteo de deep-links).
+- **Comentarios** (`lib/comentarios.js`): formato de mención `@[Nombre](uuid)`, detección de links e imágenes.
+- **Fechas** (`lib/fechas.js`): el criterio único de "vencido" compartido por toda la app.
+- **Imágenes estructurales** (`lib/imagenesEstructurales.js`): el criterio compartido entre editor y revisión.
 
-La config vive en `vitest.config.js` (separada de `vite.config.js` para no cargar los plugins de React/Tailwind al testear). Al agregar lógica nueva a `lib/editor` o `lib/revision`, sumá el caso ahí — estas funciones se rompen en silencio al ajustar una regex, y la suite es lo único que lo hace visible.
+La config vive en `vitest.config.js` (separada de `vite.config.js` para no cargar los plugins de React/Tailwind al testear). Al agregar lógica nueva a `lib/editor`, `lib/revision` o cualquier módulo puro de `lib/` (notificaciones, comentarios, fechas…), sumá el caso ahí — estas funciones se rompen en silencio al ajustar una regex, y la suite es lo único que lo hace visible.
 
 ---
 
@@ -232,6 +262,8 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 | `colaborador` | ✅ | ❌ | ❌ | ❌ | ❌ |
 | `viewer` | ❌ | ❌ | ❌ | ❌ | ❌ |
 
+Matices por fuera de la tabla: el **borrado definitivo** desde la Papelera es solo `super_admin` (la tabla refleja el acceso a la sección); **unificar/renombrar tags** en Configuración es solo `super_admin`; los **comentarios internos** no existen para `viewer` (UI + Realtime + RLS); **Estadísticas** es visible para `admin` y `super_admin`.
+
 ---
 
 ## Estructura del proyecto
@@ -239,17 +271,20 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 ```
 src/
 ├── components/
+│   ├── ErrorBoundary.jsx           # Captura errores de render; auto-reload único si el chunk quedó viejo tras un deploy
 │   ├── auth/
 │   │   ├── ProtectedRoute.jsx
 │   │   ├── PerfilUsuario.jsx       # Modal de perfil del usuario logueado
-│   │   └── CambiarPassword.jsx     # Modal de cambio de contraseña (usado desde PerfilUsuario)
+│   │   ├── CambiarPassword.jsx     # Modal de cambio de contraseña (usado desde PerfilUsuario)
+│   │   └── AuthBrandBackdrop.jsx   # Isotipo de fondo en dos esquinas — Login/SetPassword/ErrorPage y toda la app vía AppLayout
 │   ├── layout/
 │   │   ├── AppLayout.jsx           # Sidebar, topbar mobile, toasts
 │   │   ├── BuscadorGlobal.jsx      # Command palette (Cmd/Ctrl+K)
-│   │   └── LogoRotator.jsx         # Splash inicial: rota logo icomm/ICBC con blur dissolve
+│   │   └── LogoRotator.jsx         # Rotador de logos icomm/ICBC (blur dissolve) del sidebar y la topbar mobile — el splash de arranque real vive en index.html
 │   ├── pedidos/
 │   │   ├── PedidoForm.jsx          # Modal crear/editar pedido
 │   │   ├── PedidoCard.jsx          # Card de pedido (avatar, colorAvatar, iniciales)
+│   │   ├── ComentariosSection.jsx  # Comentarios internos: menciones, reacciones, deep-link — nunca se monta para viewer
 │   │   ├── EntregablesSection.jsx  # Piezas + revisión automática integrada
 │   │   ├── BaseDatosSection.jsx    # Sección "Base de datos" — adjuntar base y verificar compatibilidad (ver Funcionalidades)
 │   │   ├── SubtareasTimeline.jsx   # Subtareas + flujo de registro en Sheet (Diseño)
@@ -281,12 +316,18 @@ src/
 │   ├── NotificacionesContext.jsx    # Notificaciones + sistema de toasts
 │   └── ThemeContext.jsx             # Dark / light mode
 ├── hooks/
+│   ├── createCachedResource.js      # Fábrica del patrón "fetch con cache compartido" que usan los hooks de catálogos
 │   ├── useActividad.js              # Registro de actividad en pedidos
+│   ├── useComentarios.js            # Comentarios internos: carga, realtime, reacciones, borrador persistente
+│   ├── useDocumentTitle.js          # Título del documento por página
+│   ├── useEstadisticas.js           # Datos de la pantalla Estadísticas (RPC estadisticas_periodo)
 │   ├── useEstados.js                # Estados (con cache)
 │   ├── useInstancias.js             # Instancias (con cache)
 │   ├── useIsMobile.js               # Hook reactivo de breakpoint (resize listener, no solo lectura una vez)
 │   ├── useLocalStorage.js           # Lectura lazy + escritura con try/catch (usado por el borrador del Editor de Piezas)
-│   ├── usePedidos.js                # CRUD de pedidos + realtime + paginación
+│   ├── useLockAppScroll.js          # Congela el scroll de fondo mientras hay overlays mobile abiertos (drawer, sheets del editor)
+│   ├── usePedidos.js                # CRUD de pedidos + realtime + paginación + lock optimista contra updates perdidos
+│   ├── usePush.js                   # Suscripción/desuscripción a Web Push (toggle por usuario)
 │   ├── useTagsDisponibles.js        # Tags únicos de TODOS los pedidos, sin paginar (para el selector de filtro)
 │   ├── useTipos.js                  # Tipos (con cache)
 │   └── useUsuarios.js               # Usuarios (con cache compartido entre instancias del hook)
@@ -299,9 +340,17 @@ src/
 │           ├── Botones/             # Bloques de botones/CTA — idem
 │           └── Modulos_Obsoletos.html
 ├── lib/
+│   ├── __tests__/                   # Suite de Vitest (ver sección Tests)
 │   ├── constants.js                 # Roles, prioridades, colores
 │   ├── supabase.js                  # Cliente Supabase
 │   ├── supabaseHelper.js            # Helpers runSupabase / runSupabaseSilent
+│   ├── avatares.js                  # Iniciales y colores de avatar (antes vivía en PedidoCard)
+│   ├── comentarios.js               # Lógica pura de comentarios (parseo de menciones, links, imágenes)
+│   ├── fechas.js                    # Criterio único de "vencido" compartido por toda la app
+│   ├── imagenesEstructurales.js     # Criterio compartido de imágenes/separadores estructurales (editor + revisión)
+│   ├── notificaciones.js            # Agrupado por grupo_key y ruteo de deep-links de la campanita
+│   ├── push.js                      # Registro del service worker + helpers de suscripción Web Push
+│   ├── severidad.js                 # Escala de severidad compartida (antes vivía en PedidoCard)
 │   ├── descargarPiezas.js           # Descarga de piezas (ZIP o individual) con validación de estructura previa
 │   ├── auditoria/                   # Lógica de Auditoría de Piezas
 │   │   └── ejecutarAuditoria.js
@@ -322,11 +371,14 @@ src/
 │   ├── Calendario.jsx
 │   ├── Configuracion.jsx
 │   ├── Dashboard.jsx
+│   ├── ErrorPage.jsx                # Página de error de marca (usada por ErrorBoundary)
+│   ├── Estadisticas.jsx             # Pantalla de Estadísticas (admin + super_admin)
 │   ├── Login.jsx
 │   ├── Notificaciones.jsx
 │   ├── Papelera.jsx
 │   ├── PedidoDetalle.jsx
 │   ├── Pedidos.jsx
+│   ├── PreviewCarga.jsx             # ⚠️ TEMPORAL — preview del splash de arranque, borrar al aprobarlo definitivamente
 │   ├── RevisionEmail.jsx            # Revisión de emails
 │   ├── RevisionBase.jsx             # Revisión de BBDD
 │   ├── RevisionEnvios.jsx           # Revisión de envíos
@@ -344,7 +396,8 @@ src/
     ├── RevisionBase.css             # Aislado, propio de esa herramienta
     ├── RevisionEnvios.css           # Aislado, propio de esa herramienta
     ├── AuditoriaPiezas.css          # Aislado, propio de esa herramienta
-    └── EditorPiezas.css             # Aislado, propio de esa herramienta
+    ├── EditorPiezas.css             # Aislado, propio de esa herramienta
+    └── Estadisticas.css             # Aislado, propio de esa pantalla
 ```
 
 ---
@@ -356,7 +409,8 @@ src/
 | `invite-user` | Invita un usuario nuevo vía Supabase Auth |
 | `delete-user` | Elimina un usuario de Auth y su perfil |
 | `reset-user-password` | Fuerza el reset de contraseña de otro usuario — solo `super_admin` |
-| `escribir-sheet` | Escribe una fila en Google Sheets (hoja pedidos o diseño) |
+| `escribir-sheet` | Escribe una fila en Google Sheets (hoja pedidos o diseño) — soporta repeticiones de día/horario al registrar |
+| `enviar-push` | Envía las notificaciones Web Push (VAPID) a las suscripciones del usuario — invocada por el trigger `notif_despachar_push`, con colapso por `grupo_key` |
 
 ---
 
@@ -365,6 +419,11 @@ src/
 | Función | Descripción |
 |---------|-------------|
 | `listar_pedidos` | RPC central de listado/búsqueda/paginación de pedidos. Modos: `normal` (paginado, excluye finalizados por defecto), `historico`, `vencimiento` (sin límite de antigüedad, incluye finalizados — usado por Calendario), `dashboard`. Con búsqueda de texto, indica además en qué campo coincidió (`coincidencia_en`: asunto/tag/pieza/persona), usado por el buscador global. |
+| `estadisticas_periodo` | Cómputo completo de la pantalla Estadísticas en la base (KPIs + series), con filtros de fechas, tipo, instancia y usuario — el front no calcula nada. |
+| `eliminar_pedido_definitivo` | Borrado definitivo desde la Papelera — solo `super_admin`. |
+| `unificar_tags` | Unificar/renombrar un tag en todos los pedidos (Configuración) — solo `super_admin`. |
+| `eliminar_comentario` | Moderación de comentarios internos (NULL-safe; el autor no puede resucitar un comentario moderado). |
+| Familia `notif_*` | Triggers que crean los eventos de notificación: `notif_asignacion`, `notif_cambio_estado`, `notif_aprobacion`, `notif_vencimientos`, `notif_comentario_nuevo`/`_editado`, `notificar_descarga_pieza` y `notif_despachar_push` (el que dispara la Edge Function de push). Todos escriben eventos inmutables con `grupo_key`. |
 
 ---
 
@@ -398,4 +457,4 @@ El proyecto se deploya automáticamente en Vercel al hacer push a `main`. Las va
 
 ## Tema
 
-La app soporta modo oscuro y claro. El tema se guarda en `localStorage` y se aplica via `data-theme` en el `<html>`. Las variables CSS están definidas en `global.css` bajo `[data-theme="dark"]` y `[data-theme="light"]`. Las 5 herramientas (4 de revisión/auditoría + Editor de Piezas) tienen su propio CSS aislado, con sus propias variables semánticas mapeadas a las del tema general (no usan `global.css` directamente, para evitar colisiones de nombres de clase).
+La app soporta modo oscuro y claro. El tema se guarda en `localStorage` y se aplica via `data-theme` en el `<html>`. Las variables CSS están definidas en `global.css` bajo `[data-theme="dark"]` y `[data-theme="light"]`. Las secciones con CSS propio (4 herramientas de revisión/auditoría + Editor de Piezas + Estadísticas) tienen su hoja aislada, con sus propias variables semánticas mapeadas a las del tema general (no usan `global.css` directamente, para evitar colisiones de nombres de clase).
