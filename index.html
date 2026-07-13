@@ -11,6 +11,98 @@
     <meta name="theme-color" content="#2457F1" />
     <title>WorkHub</title>
 
+    <!-- Detección de tema ANTES del primer paint (mismo criterio que
+         ThemeContext.jsx: localStorage 'theme', default 'light') — sin
+         esto, el splash de abajo no sabría si pintarse claro u oscuro
+         hasta que cargue React, y el color quedaría fijo/incorrecto
+         para quien usa dark mode. Bloqueante a propósito: es un script
+         chiquito, corre antes de que el navegador pinte cualquier cosa. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme')
+          document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light')
+        } catch (e) {}
+      })()
+    </script>
+
+    <!-- Poppins para el wordmark "TeamWorkHub" del splash (mismo font
+         que usa .wordmark en Login/SetPassword, ver global.css). Se
+         pide en paralelo, no bloquea el primer paint del splash (el
+         texto pinta con el fallback sans-serif y hace swap apenas
+         llega la fuente — con la vida tan corta del splash puede que
+         ni se note el cambio). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap" rel="stylesheet">
+
+    <!-- Splash estático de arranque (ver #app-splash en <body>): CSS
+         crítico embebido (no depende de que cargue Estadisticas.css ni
+         global.css) para que pinte en el primer frame posible, sin
+         esperar el bundle de JS ni ningún asset de imagen — el
+         isotipo "1c — Abanico central" está armado 100% en CSS (3
+         divs con color/rotación fija + sombra tipo vidrio), calcado
+         de la propuesta de la IA de diseño (loader con animación
+         "breathe": escala + brillo, delay escalonado por aspa).
+         Fondo: azul oscuro en dark (#0A1230, el mismo que usa esa
+         propuesta para mostrar el loader), gris clarito en light
+         (#F4F5FA, el --bg-base de siempre — coincide con
+         background_color del manifest, así no hay salto de color
+         contra el splash nativo del SO que se ve un instante antes).
+         Wordmark "TeamWorkHub" arriba del iso, mismo tratamiento que
+         .wordmark de Login (degradado institucional, --wm-grad de
+         global.css calcado a mano en hex fijos porque este bloque
+         corre antes de que ese CSS cargue). -->
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: #F4F5FA;
+        z-index: 9999;
+      }
+      html[data-theme="dark"] #app-splash { background: #0A1230; }
+      .app-splash-wordmark {
+        font-family: 'Poppins', 'DM Sans', -apple-system, sans-serif;
+        font-weight: 600;
+        font-size: 1.5rem;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        white-space: nowrap;
+        color: #2457F1;
+      }
+      html[data-theme="dark"] .app-splash-wordmark { color: #5B85FF; }
+      .app-splash-wordmark sup {
+        font-size: 0.42em;
+        font-weight: 600;
+        color: #47BDDF;
+        vertical-align: super;
+      }
+      .app-splash-iso { position: relative; width: 120px; height: 120px; }
+      .app-splash-shape { position: absolute; }
+      .app-splash-shape-inner {
+        width: 100%;
+        height: 100%;
+        border-radius: 30%;
+        box-shadow: 0 10px 22px rgba(6,14,40,0.30), inset 0 1px 1px rgba(255,255,255,0.35), inset 0 -7px 12px rgba(0,0,10,0.16);
+        animation: app-splash-breathe 2.1s ease-in-out infinite;
+      }
+      .app-splash-shape-1 { top: 26%; left: 16%; width: 54%; height: 54%; transform: rotate(-18deg); }
+      .app-splash-shape-2 { top: 20%; left: 26%; width: 58%; height: 58%; }
+      .app-splash-shape-3 { top: 26%; left: 36%; width: 54%; height: 54%; transform: rotate(18deg); }
+      .app-splash-shape-1 .app-splash-shape-inner { background: #0039D1; animation-delay: 0s; }
+      .app-splash-shape-2 .app-splash-shape-inner { background: #3364FF; animation-delay: 0.16s; }
+      .app-splash-shape-3 .app-splash-shape-inner { background: #47BDDF; animation-delay: 0.32s; }
+      @keyframes app-splash-breathe {
+        0%, 100% { transform: scale(1);     filter: brightness(1); }
+        50%      { transform: scale(1.055); filter: brightness(1.12); }
+      }
+    </style>
+
     <meta property="og:title" content="WorkHub" />
     <meta property="og:description" content="Una aplicación diseñada para gestionar pedidos, optimizar procesos y potenciar la calidad del trabajo." />
     <meta property="og:image" content="https://teamworkhub.app/TeamWorkHubApp.jpg" />
@@ -19,7 +111,16 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-splash" aria-hidden="true">
+        <span class="app-splash-wordmark">TeamWorkHub<sup>.app</sup></span>
+        <div class="app-splash-iso">
+          <div class="app-splash-shape app-splash-shape-1"><div class="app-splash-shape-inner"></div></div>
+          <div class="app-splash-shape app-splash-shape-2"><div class="app-splash-shape-inner"></div></div>
+          <div class="app-splash-shape app-splash-shape-3"><div class="app-splash-shape-inner"></div></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

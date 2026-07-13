@@ -3800,9 +3800,19 @@ select:focus {
 }
 
 .main-content {
+  position: relative;
   padding: 1.75rem 2rem;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+/* El contenido real de la página queda por encima de los isotipos de
+   fondo (ver AppLayout.jsx: <AuthBrandBackdrop/> se renderiza acá
+   adentro, hermano de <Outlet/>) — position:relative en cada hijo
+   directo alcanza porque .auth-bg-iso ya tiene z-index:0 propio. */
+.main-content > *:not(.auth-bg-iso) {
+  position: relative;
+  z-index: 1;
 }
 
 /* ─── Papelera ────────────────────────────────────────────────────────────── */

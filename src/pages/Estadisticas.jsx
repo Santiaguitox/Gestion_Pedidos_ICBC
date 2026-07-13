@@ -16,7 +16,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useEstadisticas, rangoDeMes, labelMes, mesesDisponibles } from '@/hooks/useEstadisticas'
 import { colorAvatar, iniciales } from '@/lib/avatares'
-import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
+import icommLogo from '@/assets/Icomm_Logo.png'
 import '@/styles/Estadisticas.css'
 
 const PALETA_FALLBACK = ['#1A2EE6', '#5B4EE8', '#10B981', '#F59E0B', '#EC4899', '#14B8A6', '#F97316', '#6B7280']
@@ -46,9 +46,9 @@ function colorDePersona(userId, avatarColor) {
 
 // ── Sistema de cards ──────────────────────────────────────────────────────
 
-function Card({ titulo, ayuda, span = 6, footer, children, headerExtra }) {
+function Card({ titulo, ayuda, span = 6, footer, children, headerExtra, className = '' }) {
   return (
-    <div className="est-card" style={{ gridColumn: `span ${span}` }}>
+    <div className={`est-card ${className}`} style={{ gridColumn: `span ${span}` }}>
       <div className="est-card-header">
         <div className="est-card-header-left">
           <span className="est-card-titulo">{titulo}</span>
@@ -375,46 +375,66 @@ export default function Estadisticas() {
   const reprogSinHistorico = config?.reprog_desde && rango?.desde && rango.desde < config.reprog_desde
   const hayReprogramaciones = (data?.reprogramaciones?.total ?? 0) > 0
 
-  function exportarCSV() {
+  // "Exportar PDF" ya no genera el archivo con jsPDF/html2canvas (dos
+  // vueltas rotas: vectorial con tipografía/alineación distintas a la
+  // pantalla, después screenshot con CSS Grid mal resuelto) — ahora usa
+  // la impresión nativa del navegador, que SÍ tiene el motor de layout
+  // real (nada de reimplementar CSS a mano). El usuario elige "Guardar
+  // como PDF" en el diálogo de impresión, que en todos los sistemas
+  // operativos modernos es una opción de destino estándar. El CSS de
+  // impresión (qué se oculta, tamaño de página) vive en
+  // Estadisticas.css, bloque @media print al final del archivo.
+  function exportarPDF() {
     if (!data) return
-    const m = data.meta
-    const filas = [
-      ['Estadísticas Gestión de Pedidos ICBC'],
-      ['Período', `${m.desde} a ${m.hasta}`],
-      [],
-      ['KPI', 'Valor'],
-      ['Pedidos creados', kpis.creados],
-      ['Pedidos finalizados', kpis.finalizados],
-      ['Lead time promedio (días)', kpis.lead_promedio ?? ''],
-      ['Lead time mediana (días)', kpis.lead_mediana ?? ''],
-      ['% entregado a tiempo', kpis.pct_a_tiempo ?? ''],
-      ['Pedidos activos al cierre del período', kpis.activos_hoy],
-      [],
-      ['Creados vs finalizados', 'Creados', 'Finalizados'],
-      ...data.throughput.map(s => [s.bucket, s.creados, s.finalizados]),
-      [],
-      ['Tiempo promedio por tipo', 'Total (d)', 'Interno (d)', 'Espera (d)', 'N'],
-      ...data.lead_por_tipo.map(t => [labelTipo(t.tipo), t.total, t.interno, t.espera, t.n]),
-    ]
-    const csv = filas.map(f => f.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n')
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `estadisticas_${m.desde}_${m.hasta}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+    window.print()
   }
 
   return (
-    <div className="page-root est-page-con-fondo">
-      {/* Mismo isotipo de fondo que Login/SetPassword (AuthBrandBackdrop,
-          compartido) — se pidió a propósito para esta pantalla: mientras
-          esté en pulido, un fondo distinto la marca como "especial"
-          dentro de la app. .est-page-con-fondo es lo que le da el
-          position:relative + overflow:hidden que necesita el
-          posicionamiento absoluto de los isotipos — page-root en el
-          resto de las páginas no lleva esta clase, así que no las afecta. */}
-      <AuthBrandBackdrop />
+    <div className="page-root">
+      {/* Portada de impresión — invisible en pantalla (.est-print-portada
+          tiene display:none fuera de @media print), primera página del
+          PDF. Reusa el mismo lenguaje visual de TeamWorkHubApp.jpg (blobs
+          suaves, isotipo + wordmark, pill "Powered by icomm") pero
+          reordenado vertical en vez de horizontal como está pensada esa
+          imagen — apilado (isotipo abajo del wordmark, calcado del
+          splash de arranque) rinde mejor centrado en una página. */}
+      <div className="est-print-portada">
+        <img src="/icon-512.png" alt="" aria-hidden="true" className="est-print-portada-iso-bg est-print-portada-iso-bg-tr" />
+        <img src="/icon-512.png" alt="" aria-hidden="true" className="est-print-portada-iso-bg est-print-portada-iso-bg-bl" />
+        <div className="est-print-portada-contenido">
+          <span className="est-print-portada-wordmark">TeamWorkHub<sup>.app</sup></span>
+          <div className="est-print-portada-iso">
+            <div className="est-print-portada-shape est-print-portada-shape-1"><div /></div>
+            <div className="est-print-portada-shape est-print-portada-shape-2"><div /></div>
+            <div className="est-print-portada-shape est-print-portada-shape-3"><div /></div>
+          </div>
+          <h1 className="est-print-portada-titulo">Estadísticas</h1>
+          <p className="est-print-portada-periodo">
+            Rendimiento del equipo{rango ? ` · ${fmtDia(rango.desde)} – ${fmtDia(rango.hasta)}` : ''}
+          </p>
+          <p className="est-print-portada-generado">
+            Generado el {format(new Date(), "d 'de' MMMM 'de' yyyy", { locale: es })}
+          </p>
+        </div>
+        <div className="est-print-portada-pill">
+          Powered by <img src={icommLogo} alt="icomm" />
+        </div>
+      </div>
+
+      {/* .est-print-page: en pantalla es un div transparente sin efecto
+          (no tiene reglas fuera de @media print) — en impresión se
+          vuelve un contenedor de exactamente un alto de página con
+          flex centrado verticalmente, para que el contenido de cada
+          página quede centrado en vez de pegado arriba con aire
+          abajo. Arranca ACÁ (antes del título) a propósito — si el
+          wrapper solo envolvía KPIs+gráfico y el título quedaba
+          afuera, el centrado no contemplaba el alto real del título y
+          el resultado quedaba desparejo (título arriba pegado, aire
+          solo abajo). Con el título adentro, el bloque que se centra
+          es el mismo que realmente ocupa la página 2 completa —
+          filtros incluido (queda igual, siempre oculto en impresión,
+          .est-print-page en sí no cambia nada en pantalla). */}
+      <div className="est-print-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Estadísticas</h1>
@@ -422,8 +442,8 @@ export default function Estadisticas() {
             Rendimiento del equipo{rango ? ` · ${fmtDia(rango.desde)} – ${fmtDia(rango.hasta)}` : ''}
           </p>
         </div>
-        <button onClick={exportarCSV} disabled={!data} className="btn-header-action">
-          <Download size={15} />Exportar
+        <button onClick={exportarPDF} disabled={!data} className="btn-header-action">
+          <Download size={15} />Exportar PDF
         </button>
       </div>
 
@@ -590,7 +610,13 @@ export default function Estadisticas() {
             ayuda="Compara, período a período, cuántos pedidos se crearon contra cuántos se finalizaron. No se muestran sábados ni domingos (no se generan pedidos esos días).">
             <ThroughputChart serie={data.throughput} />
           </Card>
+        </div>
+      )}
+      </div>
 
+      {!loading && !error && data && (
+      <div className="est-print-page est-print-break">
+        <div className="est-grid">
           {/* Fila 2: 5/4/3 — la última (donut, 25%) queda alineada con
               "Ranking de tags" de la fila 3, que también es 25% siempre
               (ver fila 3: ya no cambia de ancho según haya o no
@@ -653,7 +679,13 @@ export default function Estadisticas() {
               </div>
             )}
           </Card>
+        </div>
+      </div>
+      )}
 
+      {!loading && !error && data && (
+      <div className="est-print-page est-print-break">
+        <div className="est-grid">
           <Card span={12} titulo="Pedidos sin actividad"
             ayuda="Pedidos activos sin ningún movimiento (actividad ni comentarios) hace más de 7 días. Click para abrir el pedido.">
             {data.estancados.length === 0
@@ -672,6 +704,7 @@ export default function Estadisticas() {
               ))}
           </Card>
         </div>
+      </div>
       )}
     </div>
   )

@@ -7,6 +7,7 @@ import { LayoutGrid, ListTodo, CalendarDays, BarChart2, Bell, Users, LogOut, Sun
 import { ROLES } from '@/lib/constants'
 import { rutaDeNotificacion } from '@/lib/notificaciones'
 import PerfilUsuario from '@/components/auth/PerfilUsuario'
+import { AuthBrandBackdrop } from '@/components/auth/AuthBrandBackdrop'
 import BuscadorGlobal from '@/components/layout/BuscadorGlobal'
 import { LogoRotator } from '@/components/layout/LogoRotator'
 
@@ -101,18 +102,16 @@ function SidebarContent({ collapsed, onNavClick, onPerfil }) {
           </NavLink>
         ))}
 
-        {/* Estadísticas va acá (entre Calendario y Notificaciones) pero
-            solo para super_admin — a propósito más restrictivo que
-            Usuarios/Configuración (esos sí son admin+): mientras esta
-            pantalla esté en pulido, que solo el equipo core la vea.
-            ⚠️ Esto es SOLO ocultamiento de UI, no una barrera de
-            seguridad: a pedido explícito, la función de base
-            (estadisticas_periodo) sigue aceptando admin+super_admin sin
-            cambios — un admin que llamara al RPC a mano igual podría
-            traer los datos. Si en algún momento se quiere que sea una
-            restricción real, hay que sumar el chequeo en la función SQL
-            también (hoy deliberadamente no está). */}
-        {isSuperAdmin && (
+        {/* Estadísticas va acá (entre Calendario y Notificaciones).
+            Arrancó restringida solo a super_admin mientras estaba en
+            pulido (2026-07-12/13, varias rondas de ajuste al export
+            PDF) — Santi la dio por terminada y la habilitó también
+            para admin (2026-07-13), en línea con el resto de las
+            pantallas de gestión (Usuarios/Configuración). La función
+            de base (estadisticas_periodo) ya aceptaba admin+super_admin
+            desde el principio, así que esto solo destapa la UI que
+            faltaba. */}
+        {(isSuperAdmin || role === ROLES.ADMIN) && (
           <NavLink to="/estadisticas" onClick={onNavClick}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? 'Estadísticas' : undefined}>
@@ -301,7 +300,7 @@ export default function AppLayout() {
       </aside>
 
       {/* Contenido */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="content-column flex flex-col flex-1 overflow-hidden">
 
         {/* Topbar mobile */}
         <div className="mobile-topbar">
@@ -322,6 +321,13 @@ export default function AppLayout() {
         </div>
 
         <main className="main-content">
+          {/* Antes esto era exclusivo de Estadísticas (.est-page-con-fondo,
+              a propósito, para marcarla "especial" mientras estaba en
+              pulido) — Santi pidió aplicarlo a toda la app. Un solo
+              render acá alcanza para todas las páginas, en vez de que
+              cada página lo importe y repita el hack de cancelar/
+              reaplicar el padding de .main-content. */}
+          <AuthBrandBackdrop />
           <Suspense fallback={<div className="page-loading"><div className="page-loading-spinner" /></div>}>
             <Outlet />
           </Suspense>

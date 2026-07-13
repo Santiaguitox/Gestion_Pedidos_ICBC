@@ -3,35 +3,6 @@
    Todo el color sale de las variables del tema (light/dark automático).
    ============================================================================ */
 
-/* Fondo de marca (mismo AuthBrandBackdrop que Login/SetPassword): esta
-   clase SOLO se aplica acá, combinada con .page-root — no toca el resto
-   de las páginas.
-
-   El problema real que resolvía esto: .page-root no tiene padding
-   propio, pero vive DENTRO de <main class="main-content"> (AppLayout),
-   que sí tiene `padding: 1.75rem 2rem`. Los isotipos del backdrop usan
-   offsets negativos (top:-110px, right:-130px, etc.) pensados para un
-   contenedor que llega hasta el borde real de la pantalla — pero acá
-   arrancaban recortados 28px/32px para adentro por ese padding ajeno,
-   así que se veían con un margen raro en vez de pegados al borde.
-
-   Fix: margen negativo exactamente igual al padding de .main-content
-   (lo "cancela"), y el mismo padding puesto de nuevo ACÁ ADENTRO — así
-   la caja de esta clase (donde anclan los isotipos) llega de verdad
-   hasta el borde real del área de contenido, pero el contenido visual
-   (header, filtros, cards) queda con el mismo margen de siempre, sin
-   ningún cambio. */
-.est-page-con-fondo {
-  position: relative;
-  overflow: hidden;
-  margin: -1.75rem -2rem;
-  padding: 1.75rem 2rem;
-}
-.est-page-con-fondo > *:not(.auth-bg-iso) {
-  position: relative;
-  z-index: 1;
-}
-
 .est-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -338,6 +309,7 @@
   font: 600 0.875rem var(--font-body);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: var(--transition);
 }
@@ -782,24 +754,10 @@
 }
 
 /* ── Responsive ── */
-@media (max-width: 1100px) {
+@media screen and (max-width: 1100px) {
   .est-card { grid-column: span 12 !important; }
 }
 @media (max-width: 640px) {
-  /* Fix del "arrastre" de toda la pantalla en mobile: .est-page-con-fondo
-     cancela el padding de .main-content con márgenes negativos fijos
-     (-1.75rem -2rem, los valores de DESKTOP) — pero en mobile
-     .main-content pasa a padding:1rem. Con los márgenes negativos de
-     escritorio, la caja quedaba más ancha que el viewport real (main-content
-     solo tiene overflow-y:auto, sin overflow-x), y eso volvía toda la
-     pantalla horizontalmente paneable, como si el contenido entero fuera
-     una capa que se puede correr con el dedo. Estos valores cancelan el
-     padding real de mobile, igual que hace la regla de arriba con el de
-     desktop. */
-  .est-page-con-fondo {
-    margin: -1rem;
-    padding: 1rem;
-  }
   .est-grid { gap: 12px; }
   .est-kpis-row { grid-template-columns: repeat(2, 1fr); }
   .est-presets-row { gap: 6px; }
@@ -817,4 +775,267 @@
      150px comiéndose ancho — apilado, número arriba y lista abajo. */
   .est-reprog-layout { flex-direction: column; gap: 14px; }
   .est-reprog-total-big { width: auto; }
+}
+
+/* ── Impresión / "Exportar PDF" ──────────────────────────────────────
+   window.print() con el navegador eligiendo "Guardar como PDF" como
+   destino — mucho más simple y confiable que reimplementar el layout
+   a mano (jsPDF vectorial) o capturarlo con html2canvas (que resuelve
+   mal el CSS Grid que usa .est-grid/.est-kpis-row): esto usa el motor
+   de layout REAL del navegador, así que respeta grid, gradientes,
+   fuentes, todo — es exactamente lo que ya se ve en pantalla.
+
+   Técnica: ocultar TODO (sidebar, topbar, cualquier otra cosa fuera de
+   esta página) y volver a mostrar solo .page-root y sus descendientes
+   — funciona sin importar en qué parte del árbol del DOM esté cada
+   cosa, no depende de un ref ni de envolver nada especial. Los
+   isotipos de fondo (AuthBrandBackdrop, renderizados en AppLayout,
+   hermanos de .page-root dentro de .main-content) quedan afuera de
+   este subárbol, así que ni hace falta taparlos a mano — nunca
+   entran en la regla de "volver a mostrar". */
+@media print {
+  /* La causa real de "una sola página" y "portada corrida/angosta":
+     .page-root vivía con position:absolute — eso saca el contenido del
+     flujo normal del documento, y el motor de paginado de impresión
+     necesita flujo normal para partir contenido largo en varias
+     páginas (una caja absolutely-positioned se trata como un bloque
+     único, no se pagina). Encima, al ser position:relative
+     .main-content (agregado para el fondo con isotipos global), ese
+     position:absolute pasó a anclarse contra el ANCHO ANGOSTO de
+     main-content (le resta el sidebar) en vez de la página completa —
+     de ahí que se viera corrida a la derecha y no ocupara el 100%.
+
+     Fix de raíz: .page-root queda en flujo normal (nada de position/
+     inset). Para que sea lo único visible, se ocultan con
+     display:none (no visibility — así no dejan hueco reservado) el
+     sidebar, el topbar mobile, el drawer y el botón de colapsar. Y se
+     neutraliza la cadena de ancestros pensada para pantalla (altura
+     fija h-screen + overflow:hidden en varios niveles, para que solo
+     .main-content scrollee) — en impresión hace falta lo contrario:
+     alto automático y overflow visible en TODA la cadena, para que el
+     contenido fluya y el navegador pueda paginarlo de verdad. */
+  .sidebar-desktop,
+  .sidebar-collapse-toggle,
+  .drawer-overlay,
+  .sidebar-drawer,
+  .mobile-topbar,
+  .auth-bg-iso {
+    display: none !important;
+  }
+  html, body {
+    height: auto !important;
+  }
+  .app-shell {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .content-column {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .main-content {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .page-root {
+    margin: 0;
+    /* gap:0 acá a propósito — .page-root en pantalla usa gap:2rem
+       para separar sus secciones, pero en impresión sus hijos directos
+       ya no son "secciones sueltas" sino bloques de una página física
+       entera cada uno (.est-print-portada y los .est-print-page) —
+       agregarles el gap de pantalla entre ellos sumaba un resto de
+       alto (~8mm) que no encajaba limpio en ninguna página y generaba
+       una página casi vacía de más entre la portada y el contenido. */
+    gap: 0;
+  }
+  /* El margen del contenido y el centrado vertical por página viven
+     en CADA .est-print-page (ver más abajo, regla base) en vez de en
+     .page-root — así cada wrapper representa una página física
+     completa por sí solo, sin depender de que el navegador reparta
+     bien un padding entre fragmentos de una caja más grande (probado:
+     box-decoration-break:clone no lo resolvía de forma confiable acá,
+     a pesar de ser la propiedad "correcta" en teoría — Chrome no
+     parece respetarla en paginado de impresión). */
+  .est-print-page {
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 210mm;
+    padding: 12mm;
+  }
+  /* Controles de UI sin sentido en un PDF: no se puede clickear nada
+     ahí — el botón de exportar, el panel de filtros colapsable, y el
+     switch de período actual/anterior de los KPIs (interactivo en
+     pantalla, decorativo y confuso en papel). */
+  .btn-header-action,
+  .panel,
+  .est-periodo-tabs {
+    display: none !important;
+  }
+  /* Los navegadores no imprimen background-color/gradientes por
+     default (para ahorrar tinta) — sin esto, las tarjetas de KPI
+     pastel, el donut y los badges de color saldrían en blanco. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Paginado explícito a pedido de Santi — sin esto el navegador corta
+     páginas donde le queda más prolijo el alto, no donde tiene sentido
+     de contenido (a mitad de una fila de cards, por ejemplo). Página 1:
+     KPIs + Creados vs. finalizados (quedan arriba, sin marca, entran
+     solas). Página 2: la fila de tiempo por tipo/instancia/donut +
+     la de reprogramaciones/tags, juntas. Página 3: Pedidos sin
+     actividad, sola. */
+  .est-print-break {
+    break-before: page;
+  }
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+}
+
+/* .est-print-page es el wrapper de cada página de impresión (ver
+   Estadisticas.jsx). Fuera de impresión NO debería cambiar nada
+   visualmente — pero necesita este gap:2rem acá para que, al mover
+   título/filtros/KPIs/gráfico adentro de un mismo wrapper (para poder
+   centrarlos juntos en el PDF), sigan viéndose separados en pantalla
+   igual que antes, cuando eran hijos sueltos de .page-root (que es
+   quien les daba ese mismo gap:2rem). Sin esto, quedaban pegados sin
+   espacio en la pantalla normal — regresión real que hubo que
+   corregir. display:flex/flex-direction acá (no solo en @media print)
+   por la misma razón: tienen que estar activos siempre para que el
+   gap tenga efecto. */
+.est-print-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ── Portada de impresión ──────────────────────────────────────────
+   Oculta en pantalla siempre (display:none acá afuera); solo existe
+   para el PDF, como primera página, con break-after:page para que el
+   resto del contenido arranque en la página 2. Fondo con el isotipo
+   real (icon-512.png, mismo AuthBrandBackdrop que ya usa toda la app
+   — grande arriba a la derecha, chico abajo a la izquierda, bien
+   tenue) — la primera versión probó blobs de degradado imitando
+   TeamWorkHubApp.jpg, pero no se leían como isotipos, así que se
+   volvió al isotipo real. Wordmark + isotipo animado (calcado del
+   splash de arranque) apilados verticalmente, centrados en la
+   página. Colores en hex fijos (no var(--...)) a propósito: el PDF
+   sale siempre en paleta clara, sin importar el tema activo en
+   pantalla. */
+.est-print-portada { display: none; }
+
+@media print {
+  .est-print-portada {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    /* .page-root ya no tiene padding en impresión (se movió a cada
+       .est-print-page individual) — la portada arranca directo en el
+       borde real de la hoja, sin necesidad de cancelar nada. */
+    width: 100%;
+    height: 210mm;
+    background: #F4F5FA;
+    break-after: page;
+  }
+  .est-print-portada-iso-bg {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0.16;
+  }
+  .est-print-portada-iso-bg-tr {
+    top: -32mm;
+    right: -36mm;
+    width: 130mm;
+    height: 130mm;
+  }
+  .est-print-portada-iso-bg-bl {
+    bottom: -24mm;
+    left: -28mm;
+    width: 85mm;
+    height: 85mm;
+  }
+  .est-print-portada-contenido {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .est-print-portada-wordmark {
+    font-family: 'Poppins', 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 34px;
+    letter-spacing: -0.02em;
+    color: #2457F1;
+    margin-bottom: 14px;
+  }
+  .est-print-portada-wordmark sup {
+    font-size: 0.42em;
+    font-weight: 600;
+    color: #47BDDF;
+    vertical-align: super;
+  }
+  .est-print-portada-iso {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin-bottom: 22px;
+  }
+  .est-print-portada-shape { position: absolute; }
+  .est-print-portada-shape > div {
+    width: 100%;
+    height: 100%;
+    border-radius: 30%;
+    box-shadow: 0 8px 18px rgba(6,14,40,0.22), inset 0 1px 1px rgba(255,255,255,0.35);
+  }
+  .est-print-portada-shape-1 { top: 26%; left: 16%; width: 54%; height: 54%; transform: rotate(-18deg); }
+  .est-print-portada-shape-1 > div { background: #0039D1; }
+  .est-print-portada-shape-2 { top: 20%; left: 26%; width: 58%; height: 58%; }
+  .est-print-portada-shape-2 > div { background: #3364FF; }
+  .est-print-portada-shape-3 { top: 26%; left: 36%; width: 54%; height: 54%; transform: rotate(18deg); }
+  .est-print-portada-shape-3 > div { background: #47BDDF; }
+  .est-print-portada-titulo {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: #0D0F20;
+    margin: 0;
+  }
+  .est-print-portada-periodo {
+    font: 500 15px 'Inter', sans-serif;
+    color: #5A5F7A;
+    margin: 10px 0 0;
+  }
+  .est-print-portada-generado {
+    font: 500 12px 'Inter', sans-serif;
+    color: #9EA3BE;
+    margin: 4px 0 0;
+  }
+  .est-print-portada-pill {
+    position: absolute;
+    z-index: 1;
+    bottom: 14mm;
+    right: 14mm;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: #FFFFFF;
+    border: 1px solid #E2E5F0;
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #5A5F7A;
+  }
+  .est-print-portada-pill img { height: 14px; width: auto; }
 }

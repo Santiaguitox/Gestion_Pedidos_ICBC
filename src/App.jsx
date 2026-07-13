@@ -9,6 +9,9 @@ import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import SetPassword from '@/pages/SetPassword'
+// ⚠️ TEMPORAL — ver comentario completo en PreviewCarga.jsx. Borrar
+// este import + la ruta de abajo una vez aprobado el splash.
+import PreviewCarga from '@/pages/PreviewCarga'
 import { ROLES } from '@/lib/constants'
 import '@/styles/global.css'
 
@@ -57,6 +60,9 @@ export default function App() {
             <ErrorBoundary>
             <Routes>
               <Route path="/login" element={<Login />} />
+              {/* ⚠️ TEMPORAL — borrar junto con PreviewCarga.jsx una vez
+                  aprobado el splash de arranque (ver index.html). */}
+              <Route path="/PreviewDeCarga" element={<PreviewCarga />} />
               <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route index element={<Dashboard />} />
                 <Route path="pedidos" element={<Pedidos />} />
@@ -93,7 +99,7 @@ export default function App() {
                   </ProtectedRoute>
                 } />
                 <Route path="estadisticas" element={
-                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN]}>
+                  <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
                     <Estadisticas />
                   </ProtectedRoute>
                 } />
