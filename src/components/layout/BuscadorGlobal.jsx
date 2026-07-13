@@ -4,11 +4,14 @@ import { supabase } from '@/lib/supabase'
 import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
 import { useTipos } from '@/hooks/useTipos'
+import { useTheme } from '@/context/ThemeContext'
+import { useAuth } from '@/context/AuthContext'
 import { Badge } from '@/components/ui/Badge'
 import { colorAvatar, iniciales } from '@/lib/avatares'
 import {
   Search, CornerDownLeft, ArrowUp, ArrowDown, Tag, Link2, X,
   LayoutGrid, ListTodo, CalendarDays, Bell, Users, Settings, Trash2, FileSearch, Database, MailCheck,
+  BarChart2, Plus, Sun, Moon, LogOut, History,
 } from 'lucide-react'
 
 // Debounce simple: espera a que la persona deje de tipear antes de
@@ -22,7 +25,7 @@ function useDebounced(value, delay) {
   return debounced
 }
 
-// Mismas 9 secciones y rutas que el sidebar (AppLayout.jsx) — 'rol'
+// Mismas secciones y rutas que el sidebar (AppLayout.jsx) — 'rol'
 // es el mínimo necesario para verla, replicando exactamente isAdminOrAbove
 // / isSuperAdmin de ahí, así el buscador nunca ofrece navegar a algo que
 // el usuario no vería tampoco en su menú lateral.
@@ -30,6 +33,9 @@ const SECCIONES = [
   { label: 'Dashboard', to: '/', icon: LayoutGrid },
   { label: 'Pedidos', to: '/pedidos', icon: ListTodo },
   { label: 'Calendario', to: '/calendario', icon: CalendarDays },
+  // Mismo gate que el link del nav (isSuperAdmin || role === ADMIN) y
+  // misma posición que en el sidebar (entre Calendario y Notificaciones).
+  { label: 'Estadísticas', to: '/estadisticas', icon: BarChart2, rol: 'admin' },
   { label: 'Notificaciones', to: '/notificaciones', icon: Bell, sinViewer: true },
   { label: 'Usuarios', to: '/usuarios', icon: Users, rol: 'admin' },
   { label: 'Configuración', to: '/configuracion', icon: Settings, rol: 'admin' },
@@ -43,11 +49,11 @@ const SECCIONES = [
   { label: 'Revisión de envíos', to: '/revision-envios', icon: MailCheck, sinViewer: true },
 ]
 
-function puedeVerSeccion(seccion, role) {
-  if (seccion.sinViewer && role === ROLES.VIEWER) return false
-  if (!seccion.rol) return true
-  if (seccion.rol === 'admin') return role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
-  if (seccion.rol === 'super_admin') return role === ROLES.SUPER_ADMIN
+function puedeVer(item, role) {
+  if (item.sinViewer && role === ROLES.VIEWER) return false
+  if (!item.rol) return true
+  if (item.rol === 'admin') return role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN
+  if (item.rol === 'super_admin') return role === ROLES.SUPER_ADMIN
   return true
 }
 
@@ -55,15 +61,46 @@ function norm(s) {
   return (s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+// ─── Pedidos recientes (localStorage) ─────────────────────────────────
+// Últimos pedidos ABIERTOS DESDE EL BUSCADOR (no todo lo navegado en la
+// app — eso sería otro alcance). Se muestran con el input vacío: la
+// mayoría de las veces uno busca lo mismo que ayer. Solo id + asunto —
+// el asunto puede quedar desactualizado si alguien lo edita, pero es un
+// atajo best-effort, al hacer click siempre se navega al pedido real.
+const LS_RECIENTES = 'twh_buscador_recientes'
+const MAX_RECIENTES = 5
+
+function leerRecientes() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LS_RECIENTES) || '[]')
+    if (!Array.isArray(arr)) return []
+    return arr.filter(r => r && r.id && r.asunto).slice(0, MAX_RECIENTES)
+  } catch {
+    return []
+  }
+}
+
+function guardarReciente({ id, asunto }) {
+  try {
+    const sinEste = leerRecientes().filter(r => r.id !== id)
+    localStorage.setItem(LS_RECIENTES, JSON.stringify([{ id, asunto }, ...sinEste].slice(0, MAX_RECIENTES)))
+  } catch {
+    // localStorage lleno o bloqueado (modo privado): el atajo de
+    // recientes simplemente no persiste, nada que romper.
+  }
+}
+
 const ICONO_COINCIDENCIA = { tag: Tag, pieza: Link2 }
 
-function FilaNavegacion({ seccion, activo, onClick, onHover }) {
-  const Icon = seccion.icon
+// Fila genérica para todo lo que no es un pedido buscado: secciones
+// ("Ir a X"), acciones ("Nuevo pedido") y pedidos recientes. Misma
+// anatomía visual (tile + label + tag), reusa las clases existentes.
+function FilaSimple({ icon: Icon, label, tag, activo, onClick, onHover }) {
   return (
     <button className={`busqueda-global-fila-nav ${activo ? 'activo' : ''}`} onClick={onClick} onMouseEnter={onHover}>
       <span className="busqueda-global-tile-nav"><Icon size={16} /></span>
-      <span className="busqueda-global-nav-label">Ir a {seccion.label}</span>
-      <span className="busqueda-global-nav-tag">Sección</span>
+      <span className="busqueda-global-nav-label">{label}</span>
+      <span className="busqueda-global-nav-tag">{tag}</span>
       {activo && <CornerDownLeft size={14} className="busqueda-global-fila-enter" />}
     </button>
   )
@@ -147,70 +184,176 @@ export default function BuscadorGlobal({ open, onClose, role }) {
   const location = useLocation()
   const { estados } = useEstados()
   const { tipos } = useTipos()
+  const { theme, toggle: toggleTema } = useTheme()
+  const { signOut } = useAuth()
   const [query, setQuery] = useState('')
   const [resultadosPedidos, setResultadosPedidos] = useState([])
-  const [cargando, setCargando] = useState(false)
+  // Query cuya respuesta del RPC es la que está en resultadosPedidos —
+  // "cargando" y "qué resultados mostrar" se DERIVAN de comparar esto
+  // contra la query actual, en vez de setear flags sincrónicos dentro
+  // del efecto (que era el último set-state-in-effect del archivo).
+  const [queryRespondida, setQueryRespondida] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef(null)
   const debouncedQuery = useDebounced(query, 300)
 
-  const seccionesVisibles = useMemo(() => SECCIONES.filter(s => puedeVerSeccion(s, role)), [role])
+  // Reset al ABRIR con el patrón adjust-during-render (comparar prev
+  // state) en vez de un useEffect([open]) — mismo resultado, sin el
+  // error react-hooks/set-state-in-effect que tenía la versión anterior.
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) {
+      setQuery('')
+      setResultadosPedidos([])
+      setQueryRespondida('')
+      setActiveIndex(0)
+    }
+  }
 
+  // El autofocus sí queda en un efecto: es un side effect de DOM
+  // (permitido), no un setState.
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => inputRef.current?.focus(), 50)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  const hayQuery = query.trim() !== ''
+  // Derivados del ciclo query -> debounce -> RPC (sin flags manuales):
+  // hay carga pendiente si lo tipeado todavía no coincide con lo último
+  // respondido (cubre la ventana del debounce Y la del request en vuelo).
+  const cargando = hayQuery && query.trim() !== queryRespondida
+  // Los pedidos solo se muestran si corresponden a la query vigente —
+  // evita listar resultados viejos de otra búsqueda mientras llega la
+  // nueva respuesta (si la query se repite, se muestran al instante y
+  // el refetch de fondo los refresca solo). Memoizado para que el []
+  // del caso vacío sea referencia estable (es dep del useMemo de grupos).
+  const pedidosVisibles = useMemo(
+    () => ((hayQuery && queryRespondida === debouncedQuery.trim()) ? resultadosPedidos : []),
+    [hayQuery, queryRespondida, debouncedQuery, resultadosPedidos]
+  )
+
+  // Recargar los recientes cada vez que el panel se abre — useMemo
+  // sobre `open` en vez de estado + efecto: si otro tab agregó
+  // recientes, se ven en la próxima apertura.
+  const recientes = useMemo(() => (open ? leerRecientes() : []), [open])
+
+  const seccionesVisibles = useMemo(() => SECCIONES.filter(s => puedeVer(s, role)), [role])
+
+  // ─── Acciones ejecutables ────────────────────────────────────────
+  // A diferencia de las secciones (que navegan), cada acción tiene un
+  // run() propio. Mismo esquema de gates por rol que SECCIONES.
+  const acciones = useMemo(() => {
+    const lista = [
+      {
+        id: 'nuevo-pedido',
+        label: 'Nuevo pedido',
+        icon: Plus,
+        // Viewer no puede crear pedidos (mismo gate que el botón de
+        // PedidosList.jsx).
+        sinViewer: true,
+        // Pedidos.jsx lee state.abrirNuevo y abre el modal del form —
+        // funciona desde cualquier pantalla, incluso estando ya parado
+        // en /pedidos (el location.key nuevo de cada navigate() es lo
+        // que Pedidos.jsx usa para no re-disparar de más).
+        run: () => navigate('/pedidos', { state: { abrirNuevo: true } }),
+      },
+      {
+        id: 'toggle-tema',
+        label: theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro',
+        icon: theme === 'dark' ? Sun : Moon,
+        run: toggleTema,
+      },
+      {
+        id: 'cerrar-sesion',
+        label: 'Cerrar sesión',
+        icon: LogOut,
+        run: signOut,
+      },
+    ]
+    return lista.filter(a => puedeVer(a, role))
+  }, [theme, role, navigate, toggleTema, signOut])
+
+  // ─── Listas visibles según haya query o no ───────────────────────
+  // Con el input VACÍO el panel ya no muestra un placeholder: lista
+  // recientes + acciones + secciones (estilo Linear) — sirve de menú
+  // y de descubrimiento de las acciones. Con query, cada lista se
+  // filtra por texto y se suman los pedidos del RPC.
   const resultadosNav = useMemo(() => {
-    const q = query.trim()
-    if (!q) return []
-    const nq = norm(q)
+    if (!hayQuery) return seccionesVisibles
+    const nq = norm(query.trim())
     return seccionesVisibles.filter(s => norm(s.label).includes(nq))
-  }, [query, seccionesVisibles])
+  }, [hayQuery, query, seccionesVisibles])
 
-  // Lista combinada (navegación primero, después pedidos) — es sobre
-  // esta lista plana que se mueve la selección con flechas, aunque
-  // se rendericen agrupadas visualmente en dos secciones.
-  const itemsCombinados = useMemo(() => [
-    ...resultadosNav.map(s => ({ kind: 'nav', seccion: s })),
-    ...resultadosPedidos.map(p => ({ kind: 'pedido', pedido: p })),
-  ], [resultadosNav, resultadosPedidos])
+  const resultadosAcciones = useMemo(() => {
+    if (!hayQuery) return acciones
+    const nq = norm(query.trim())
+    return acciones.filter(a => norm(a.label).includes(nq))
+  }, [hayQuery, query, acciones])
+
+  // Grupos en el orden en que se renderizan + lista plana combinada —
+  // es sobre la lista plana que se mueve la selección con flechas.
+  // Cada grupo lleva su offset (índice global de su primer item) para
+  // que el render no tenga que hacer aritmética de índices a mano.
+  const { grupos, itemsCombinados } = useMemo(() => {
+    const g = []
+    if (!hayQuery && recientes.length > 0) {
+      g.push({ label: 'Recientes', items: recientes.map(r => ({ kind: 'reciente', reciente: r })) })
+    }
+    if (resultadosAcciones.length > 0) {
+      g.push({ label: 'Acciones', items: resultadosAcciones.map(a => ({ kind: 'accion', accion: a })) })
+    }
+    if (resultadosNav.length > 0) {
+      g.push({ label: 'Ir a', items: resultadosNav.map(s => ({ kind: 'nav', seccion: s })) })
+    }
+    if (pedidosVisibles.length > 0) {
+      g.push({ label: 'Pedidos', items: pedidosVisibles.map(p => ({ kind: 'pedido', pedido: p })) })
+    }
+    let acc = 0
+    for (const grupo of g) {
+      grupo.offset = acc
+      acc += grupo.items.length
+    }
+    return { grupos: g, itemsCombinados: g.flatMap(x => x.items) }
+  }, [hayQuery, recientes, resultadosAcciones, resultadosNav, pedidosVisibles])
+
+  // Índice activo DERIVADO con clamp en render (reemplaza al useEffect
+  // que recortaba activeIndex cuando la lista se achicaba — otro
+  // set-state-in-effect menos). Si la lista encoge, el índice efectivo
+  // se recorta solo; el estado crudo se corrige recién en la próxima
+  // interacción de teclado, que ya parte del valor efectivo.
+  const indexActivo = Math.min(activeIndex, Math.max(0, itemsCombinados.length - 1))
 
   // Reusa exactamente el RPC listar_pedidos que ya usa toda la app
   // (usePedidos.js) — la búsqueda por asunto/tags/piezas/persona
   // asignada ya vive del lado de la base de datos.
   useEffect(() => {
-    if (!debouncedQuery.trim()) { setResultadosPedidos([]); return }
+    const q = debouncedQuery.trim()
+    if (!q) return
     let cancelado = false
-    setCargando(true)
     supabase.rpc('listar_pedidos', {
       p_modo: 'normal', p_dias_normal: 30,
       p_vence_desde: null, p_vence_hasta: null,
-      p_busqueda: debouncedQuery.trim(),
+      p_busqueda: q,
       p_prioridad: null, p_tipo: null, p_estado: null, p_tag: null, p_usuario_id: null,
       p_mostrar_finalizados: true,
       p_pagina: 0, p_pagina_size: 8,
       p_solo_id: null,
     }).then(({ data, error }) => {
       if (cancelado) return
-      setCargando(false)
-      if (error) { setResultadosPedidos([]); return }
-      setResultadosPedidos(data?.[0]?.pedidos ?? [])
+      // Marcar la query respondida SIEMPRE (incluso con error, en cuyo
+      // caso la lista queda vacía) — es lo que apaga el spinner derivado.
+      setQueryRespondida(q)
+      setResultadosPedidos(error ? [] : (data?.[0]?.pedidos ?? []))
       setActiveIndex(0)
     })
     return () => { cancelado = true }
   }, [debouncedQuery])
 
-  useEffect(() => {
-    if (open) {
-      setQuery(''); setResultadosPedidos([]); setActiveIndex(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
-
-  // Al cambiar la lista combinada (nav+pedidos), si el índice activo
-  // quedó fuera de rango, lo recorta — evita seleccionar "nada" si la
-  // navegación encuentra menos secciones que antes.
-  useEffect(() => {
-    setActiveIndex(i => Math.min(i, Math.max(0, itemsCombinados.length - 1)))
-  }, [itemsCombinados.length])
-
   const irAPedido = useCallback((pedido) => {
+    guardarReciente({ id: pedido.id, asunto: pedido.asunto })
     navigate(`/pedidos/${pedido.id}`, { state: { from: location.pathname } })
     onClose()
   }, [navigate, onClose, location.pathname])
@@ -220,22 +363,29 @@ export default function BuscadorGlobal({ open, onClose, role }) {
     onClose()
   }, [navigate, onClose])
 
+  const ejecutarAccion = useCallback((accion) => {
+    accion.run()
+    onClose()
+  }, [onClose])
+
   function abrirItem(item) {
     if (item.kind === 'nav') irASeccion(item.seccion)
+    else if (item.kind === 'accion') ejecutarAccion(item.accion)
+    else if (item.kind === 'reciente') irAPedido(item.reciente)
     else irAPedido(item.pedido)
   }
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') { onClose(); return }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, itemsCombinados.length - 1)); return }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)); return }
-    if (e.key === 'Enter' && itemsCombinados[activeIndex]) { e.preventDefault(); abrirItem(itemsCombinados[activeIndex]) }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(Math.min(indexActivo + 1, itemsCombinados.length - 1)); return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(Math.max(indexActivo - 1, 0)); return }
+    if (e.key === 'Enter' && itemsCombinados[indexActivo]) { e.preventDefault(); abrirItem(itemsCombinados[indexActivo]) }
   }
 
   if (!open) return null
 
-  const hayQuery = query.trim() !== ''
   const hayResultados = itemsCombinados.length > 0
+  const mostrandoSpinner = cargando && !hayResultados
 
   return (
     <div className="modal-overlay busqueda-global-overlay" onClick={onClose}>
@@ -249,7 +399,7 @@ export default function BuscadorGlobal({ open, onClose, role }) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar pedidos, personas o secciones…"
+            placeholder="Buscar pedidos, acciones o secciones…"
             className="busqueda-global-input"
           />
           {query && (
@@ -261,14 +411,7 @@ export default function BuscadorGlobal({ open, onClose, role }) {
         </div>
 
         <div className="busqueda-global-results">
-          {!hayQuery && (
-            <div className="busqueda-global-empty">
-              <Search size={22} />
-              <p>Buscá pedidos, personas, o saltá a una sección</p>
-            </div>
-          )}
-
-          {hayQuery && cargando && (
+          {mostrandoSpinner && (
             <div className="busqueda-global-empty">
               <div className="busqueda-global-spinner" />
             </div>
@@ -277,49 +420,72 @@ export default function BuscadorGlobal({ open, onClose, role }) {
           {hayQuery && !cargando && !hayResultados && (
             <div className="busqueda-global-empty">
               <p>Sin resultados para "{query.trim()}"</p>
-              <span className="busqueda-global-empty-hint">Probá con otra palabra o el nombre de una sección</span>
+              <span className="busqueda-global-empty-hint">Probá con otra palabra, una acción o el nombre de una sección</span>
             </div>
           )}
 
-          {hayQuery && !cargando && hayResultados && (
-            <>
-              {resultadosNav.length > 0 && (
-                <>
-                  <div className="busqueda-global-group-label">Ir a</div>
-                  {resultadosNav.map((s, i) => (
-                    <FilaNavegacion
-                      key={s.to}
-                      seccion={s}
-                      activo={i === activeIndex}
-                      onClick={() => irASeccion(s)}
-                      onHover={() => setActiveIndex(i)}
+          {hayResultados && grupos.map(grupo => (
+            <div key={grupo.label}>
+              <div className="busqueda-global-group-label">{grupo.label}</div>
+              {grupo.items.map((item, i) => {
+                const idx = grupo.offset + i
+                const activo = idx === indexActivo
+                const onHover = () => setActiveIndex(idx)
+                if (item.kind === 'nav') {
+                  return (
+                    <FilaSimple
+                      key={item.seccion.to}
+                      icon={item.seccion.icon}
+                      label={`Ir a ${item.seccion.label}`}
+                      tag="Sección"
+                      activo={activo}
+                      onClick={() => irASeccion(item.seccion)}
+                      onHover={onHover}
                     />
-                  ))}
-                </>
-              )}
-              {resultadosPedidos.length > 0 && (
-                <>
-                  <div className="busqueda-global-group-label">Pedidos</div>
-                  {resultadosPedidos.map((p, i) => {
-                    const idx = resultadosNav.length + i
-                    return (
-                      <FilaPedido
-                        key={p.id}
-                        pedido={p}
-                        estados={estados}
-                        tipos={tipos}
-                        activo={idx === activeIndex}
-                        orden={i + 1}
-                        query={debouncedQuery}
-                        onClick={() => irAPedido(p)}
-                        onHover={() => setActiveIndex(idx)}
-                      />
-                    )
-                  })}
-                </>
-              )}
-            </>
-          )}
+                  )
+                }
+                if (item.kind === 'accion') {
+                  return (
+                    <FilaSimple
+                      key={item.accion.id}
+                      icon={item.accion.icon}
+                      label={item.accion.label}
+                      tag="Acción"
+                      activo={activo}
+                      onClick={() => ejecutarAccion(item.accion)}
+                      onHover={onHover}
+                    />
+                  )
+                }
+                if (item.kind === 'reciente') {
+                  return (
+                    <FilaSimple
+                      key={item.reciente.id}
+                      icon={History}
+                      label={item.reciente.asunto}
+                      tag="Reciente"
+                      activo={activo}
+                      onClick={() => irAPedido(item.reciente)}
+                      onHover={onHover}
+                    />
+                  )
+                }
+                return (
+                  <FilaPedido
+                    key={item.pedido.id}
+                    pedido={item.pedido}
+                    estados={estados}
+                    tipos={tipos}
+                    activo={activo}
+                    orden={i + 1}
+                    query={debouncedQuery}
+                    onClick={() => irAPedido(item.pedido)}
+                    onHover={onHover}
+                  />
+                )
+              })}
+            </div>
+          ))}
         </div>
 
         <div className="busqueda-global-footer">
