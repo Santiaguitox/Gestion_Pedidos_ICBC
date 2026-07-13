@@ -150,6 +150,73 @@ async function fetchSeguro(urlString, opciones, saltos = 0) {
   return response
 }
 
+// ─── Dimensiones de imagen desde los bytes ──────────────────────────
+// Parsers mínimos de header por formato. La regla común: leer SOLO
+// posiciones que la especificación de cada formato garantiza, jamás
+// escanear el archivo buscando patrones de bytes sueltos.
+
+function detectarFormato(bytes) {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'png'
+  if (bytes.length >= 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'jpeg'
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'gif'
+  return null
+}
+
+// JPEG: caminar los segmentos saltando cada payload por su longitud
+// declarada hasta llegar a un SOF. NUNCA escanear linealmente buscando
+// FF C0 (la versión anterior de este parser): esa secuencia aparece
+// como dato crudo dentro de segmentos EXIF/XMP/ICC/thumbnails de un
+// JPEG legítimo — y dentro de cualquier binario que NO sea JPEG — y el
+// primer falso positivo se lee como dimensiones basura.
+function dimensionesJpeg(bytes) {
+  let i = 2 // después del SOI (FF D8)
+  while (i + 9 < bytes.length) {
+    if (bytes[i] !== 0xFF) return null // stream corrupto — mejor null que basura
+    let marker = bytes[i + 1]
+    // Puede haber bytes FF de relleno antes del marker real
+    while (marker === 0xFF && i + 2 < bytes.length) { i++; marker = bytes[i + 1] }
+    i += 2
+    // Markers standalone (sin payload): TEM y RST0-RST7
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) continue
+    // EOI o SOS sin haber visto un SOF: no hay dimensiones que leer
+    if (marker === 0xD9 || marker === 0xDA) return null
+    if (i + 1 >= bytes.length) return null
+    const len = (bytes[i] << 8) | bytes[i + 1]
+    if (len < 2) return null
+    // SOF0-SOF15, excepto DHT (C4), JPG (C8) y DAC (CC) que comparten
+    // el rango C0-CF pero no son Start Of Frame. Cubre baseline (C0),
+    // progresivo (C2) y todas las variantes menos comunes.
+    if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+      if (i + 6 >= bytes.length) return null
+      // Layout del SOF: len(2) precisión(1) alto(2) ancho(2) ...
+      return { height: (bytes[i + 3] << 8) | bytes[i + 4], width: (bytes[i + 5] << 8) | bytes[i + 6] }
+    }
+    i += len // len incluye sus propios 2 bytes
+  }
+  return null
+}
+
+// PNG: la especificación obliga a que IHDR sea el primer chunk después
+// de la firma de 8 bytes, así que ancho y alto viven SIEMPRE en los
+// offsets 16-23 (big endian). El >>> 0 fuerza unsigned.
+function dimensionesPng(bytes) {
+  if (bytes.length < 24) return null
+  return {
+    width: ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0,
+    height: ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0,
+  }
+}
+
+// GIF: ancho y alto del Logical Screen Descriptor, offsets 6-9
+// (little endian), fijos para GIF87a y GIF89a.
+function dimensionesGif(bytes) {
+  if (bytes.length < 10) return null
+  return {
+    width: bytes[6] | (bytes[7] << 8),
+    height: bytes[8] | (bytes[9] << 8),
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -167,34 +234,21 @@ export default async function handler(req, res) {
       const peso = buffer.byteLength
       const bytes = new Uint8Array(buffer)
 
-      // Detectar dimensiones desde los bytes del header de la imagen
-      let width = null, height = null
-      const contentType = response.headers.get('content-type') || ''
+      // El formato se detecta por la FIRMA del archivo (magic bytes),
+      // NUNCA por content-type ni extensión: los servers suelen derivar
+      // el content-type de la extensión, y una pieza puede traer (caso
+      // real que motivó este fix) un PNG renombrado a .jpg — el
+      // content-type mentía "jpeg" y los bytes PNG parseados como JPEG
+      // daban dimensiones basura (14521x41510 para una imagen de
+      // 1200x850). `formato` viaja en la respuesta para que el
+      // validador pueda avisar del mismatch extensión/formato.
+      const formato = detectarFormato(bytes)
+      let dim = null
+      if (formato === 'jpeg') dim = dimensionesJpeg(bytes)
+      else if (formato === 'png') dim = dimensionesPng(bytes)
+      else if (formato === 'gif') dim = dimensionesGif(bytes)
 
-      if (contentType.includes('jpeg') || contentType.includes('jpg')) {
-        // JPEG: buscar marcador SOF
-        for (let i = 0; i < bytes.length - 8; i++) {
-          if (bytes[i] === 0xFF && (bytes[i+1] === 0xC0 || bytes[i+1] === 0xC2)) {
-            height = (bytes[i+5] << 8) | bytes[i+6]
-            width  = (bytes[i+7] << 8) | bytes[i+8]
-            break
-          }
-        }
-      } else if (contentType.includes('png')) {
-        // PNG: ancho y alto en bytes 16-23
-        if (bytes.length > 24) {
-          width  = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]
-          height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]
-        }
-      } else if (contentType.includes('gif')) {
-        // GIF: ancho y alto en bytes 6-9 (little endian)
-        if (bytes.length > 10) {
-          width  = bytes[6] | (bytes[7] << 8)
-          height = bytes[8] | (bytes[9] << 8)
-        }
-      }
-
-      res.status(200).json({ peso, width, height })
+      res.status(200).json({ peso, width: dim?.width ?? null, height: dim?.height ?? null, formato })
     } else {
       // Modo HTML: obtener el HTML de la URL
       const response = await fetchSeguro(url, {

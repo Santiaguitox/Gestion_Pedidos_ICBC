@@ -5,6 +5,16 @@ function parsearMedida(valor) {
   return parseInt(valor.replace('px', '').trim())
 }
 
+// Extensión del nombre de archivo, ignorando querystring/hash
+// (banner.jpg?v=3 → jpg). Solo para comparar contra el formato real.
+function extensionDe(nombre) {
+  const limpio = nombre.split('?')[0].split('#')[0]
+  const punto = limpio.lastIndexOf('.')
+  return punto === -1 ? null : limpio.slice(punto + 1).toLowerCase()
+}
+
+const FORMATO_DE_EXTENSION = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif' }
+
 function extraerMedidaStyle(style, propiedad) {
   if (!style) return null
   const regex = new RegExp(`${propiedad}\\s*:\\s*([\\d.]+)px`, 'i')
@@ -16,6 +26,9 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
   const imagenes = [...doc.querySelectorAll('img')]
   const problemas = []
   const advertencias = []
+  // Dedupe del aviso de extensión: el mismo src puede aparecer en
+  // varios <img> de la pieza y con avisar una vez alcanza.
+  const srcConMismatch = new Set()
   const TOLERANCIA = 0.02
 
   for (let idx = 0; idx < imagenes.length; idx++) {
@@ -39,8 +52,27 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
     const anchoDec = anchoAtrib ?? anchoStyle
     const altoDec = altoAtrib ?? altoStyle
 
+    const real = src ? (cacheDatos[src] || null) : null
+
+    // Extensión que dice una cosa, bytes que dicen otra (típico PNG
+    // renombrado a .jpg en el circuito de diseño). No es un error —
+    // los clientes de correo miran los bytes, no el nombre, así que
+    // se ve bien — pero un PNG fotográfico pesa bastante más que su
+    // JPEG equivalente, vale la pena que quien revisa lo sepa. Fue
+    // además la causa del bug de dimensiones basura (el proxy elegía
+    // parser por content-type, que el server deriva de la extensión).
+    if (real && !real.error && real.formato) {
+      const ext = extensionDe(nombre)
+      const formatoSegunExt = ext ? FORMATO_DE_EXTENSION[ext] : null
+      if (formatoSegunExt && formatoSegunExt !== real.formato && !srcConMismatch.has(src)) {
+        srcConMismatch.add(src)
+        advertencias.push({
+          detalle: `${nombre}: la extensión dice .${ext} pero el archivo es ${real.formato.toUpperCase()} — se ve bien igual, pero revisar el peso (un PNG fotográfico pesa más que su JPEG equivalente)`
+        })
+      }
+    }
+
     if (anchoDec && altoDec && src) {
-      const real = cacheDatos[src] || null
       if (real && !real.error) {
         const ratioReal = real.width / real.height
         const ratioDec = anchoDec / altoDec
