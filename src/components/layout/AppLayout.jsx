@@ -1,4 +1,5 @@
 import { useState, useEffect, Suspense } from 'react'
+import { useLockAppScroll } from '@/hooks/useLockAppScroll'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -224,6 +225,10 @@ export default function AppLayout() {
   const { role } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Congela .main-content mientras el drawer está abierto — sin esto,
+  // el gesto de scroll sobre el drawer/overlay arrastraba el contenido
+  // de atrás (solo mobile; ver useLockAppScroll).
+  useLockAppScroll(drawerOpen)
   const [showPerfil, setShowPerfil] = useState(false)
   const [showBuscador, setShowBuscador] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()

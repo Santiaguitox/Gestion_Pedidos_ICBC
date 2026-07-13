@@ -1,4 +1,5 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { useLockAppScroll } from '@/hooks/useLockAppScroll'
 import { useState, useRef, useEffect, forwardRef } from 'react'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -2896,6 +2897,14 @@ function EditorMobile(props) {
   // acordeones dentro del canvas, ver zonasAbiertas más abajo)
   const [screen, setScreen] = useState('canvas')
   const [reorderMode, setReorderMode] = useState(false)
+  // Congela .main-content (el scroller real de la app) mientras hay un
+  // sheet, pantalla o preview abierto encima del canvas. Los sheets son
+  // hijos DOM de esta página, o sea que viven adentro del subtree de
+  // .main-content: al llegar el scroll interno del sheet a su tope, el
+  // gesto se encadenaba y movía el canvas de atrás (solo touch/mobile
+  // — este componente solo se monta en mobile, así que no hay efecto
+  // en desktop; ver useLockAppScroll).
+  useLockAppScroll(screen !== 'canvas' || props.showPreview)
   const [busquedaLib, setBusquedaLib] = useState('')
   const [catAbierta, setCatAbierta] = useState({ Header: false, Contenido: false, Botones: false })
   // Edición del nombre de la pieza — mismo patrón que ep-nombre-pieza-*

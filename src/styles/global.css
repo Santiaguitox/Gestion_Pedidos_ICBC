@@ -3821,6 +3821,20 @@ select:focus {
   position: relative;
 }
 
+/* ─── Scroll lock para overlays (mobile) ──────────────────────────────────
+   Acompaña a useLockAppScroll (src/hooks/useLockAppScroll.js): mientras
+   un overlay está abierto (drawer del nav, sheets del editor, preview
+   full), el hook pone esta clase en <body> y acá se congela el scroller
+   real de la app para que el gesto no "sangre" al contenido de atrás.
+   Scopeado a mobile a propósito: en desktop no hay bleed-through (el
+   wheel no encadena igual que el touch) y ocultar el overflow ahí solo
+   causaría un salto de layout por la scrollbar. */
+@media (max-width: 768px) {
+  body.twh-scroll-lock .main-content {
+    overflow: hidden;
+  }
+}
+
 /* ─── Papelera ────────────────────────────────────────────────────────────── */
 .papelera-item {
   background: var(--bg-surface);
@@ -6277,6 +6291,15 @@ select:focus {
 
   .sidebar-drawer.open {
     transform: translateX(0);
+  }
+
+  /* El nav del drawer scrollea propio si hay muchas secciones — contain
+     evita que, al llegar al tope, el gesto siga hacia el viewport
+     (rubber-band de iOS que arrastra lo de atrás). Scopeado al drawer:
+     el .sidebar-nav del sidebar desktop no se toca. */
+  .sidebar-drawer .sidebar-nav {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Overlay oscuro */
