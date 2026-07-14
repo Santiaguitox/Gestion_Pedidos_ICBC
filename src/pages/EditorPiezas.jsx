@@ -34,6 +34,7 @@ import {
   importarHeuristico,
   marcarBloquesNoReconocidosParaPreview,
   marcarEstructurasObsoletasParaPreview,
+  convertirEstructurasObsoletasEnCanvas,
   tituloYDetalleDeAviso,
 } from '@/lib/editor/importar.js'
 
@@ -1950,7 +1951,16 @@ export default function EditorPiezas() {
     // ícono de red social terminaba con las 4 redes del header
     // agregadas de la nada).
     setRedesOrden(r.redesOrden ?? [])
-    setCanvas(r.canvas)
+    // La detección/aviso de "estructura de layout obsoleta" sigue
+    // pasando en el análisis (importarHeuristico) SIN tocar el HTML —
+    // el preview de la pantalla de resumen la sigue marcando en rojo
+    // igual que siempre. La CONVERSIÓN real a class="top"/"bottom"
+    // recién se aplica acá, en el momento en que se decide efectivamente
+    // importar la pieza (este botón), sobre el canvas ya clasificado —
+    // a propósito, para no alterar la lógica de análisis/preview que
+    // ya funcionaba bien. Ver convertirEstructurasObsoletasEnCanvas.
+    const { canvas: canvasConvertido } = convertirEstructurasObsoletasEnCanvas(r.canvas)
+    setCanvas(canvasConvertido)
     setSelectedId(null)
     setImgPrincipal(r.imgPrincipal)
     setImgFooter(r.imgFooter)

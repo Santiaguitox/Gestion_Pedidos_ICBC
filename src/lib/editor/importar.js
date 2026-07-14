@@ -395,6 +395,265 @@ export function encontrarTdsConDivInlineBlock(html) {
 }
 
 
+// ─── Conversión de estructuras obsoletas al formato actual ─────────────
+// Convierte el patrón de dos columnas con <div inline-block> (piezas
+// históricas) a la estructura actual de dos <td class="top"/"bottom">
+// — la misma mecánica del bloque aprobado Modulo_Doble_Clasico. Las
+// reglas NO son inventadas: salen 1:1 de la adaptación de referencia
+// armada y aprobada por el equipo sobre una pieza real (Seguro
+// Protección en Cajeros, marzo 2021):
+//   1. Se reemplaza el <tr> COMPLETO que envuelve a la estructura (las
+//      capas intermedias de tables/tds wrapper se colapsan), no solo
+//      el <td> que contiene los divs.
+//   2. El % del max-width de cada div pasa al width del <td> nuevo
+//      (ej. 40%/60%). Sin % declarado no se convierte.
+//   3. valign="top" en ambas columnas (el del template aprobado) — el
+//      vertical-align original de los divs NO se preserva, decisión
+//      explícita de la referencia aprobada.
+//   4. La tabla interna de cada div se re-tagea con el tag canónico
+//      (pierde su max-width y su class img-max — el ancho ahora lo
+//      maneja el td, y el apilado mobile lo manejan .top/.bottom) y
+//      su contenido interno queda VERBATIM.
+// Todo caso que no calce exactamente (1 div, 3+, sin % en el div, más
+// de una tabla por div, contenido suelto junto a los divs, contenido
+// real en las capas wrapper) se deja SIN convertir — queda marcado
+// como obsoleto igual que antes, preferimos consultar con el ejemplo
+// en la mano antes que forzar una conversión dudosa.
+
+// Rangos de TODOS los <tr> del documento (a cualquier profundidad),
+// con balance de tags — para poder elegir el ancestro correcto de un
+// <td> obsoleto. Tolera cierres desbalanceados descartando el tag.
+function encontrarRangosDeTr(html) {
+  const tagRegex = /<\/?tr\b[^>]*>/gi
+  const pila = []
+  const rangos = []
+  let m
+  while ((m = tagRegex.exec(html)) !== null) {
+    if (!m[0].startsWith('</')) {
+      pila.push(m.index)
+    } else if (pila.length > 0) {
+      rangos.push({ inicio: pila.pop(), fin: m.index + m[0].length })
+    }
+  }
+  return rangos
+}
+
+// Divs de primer nivel (no anidados en otro div) de un fragmento, con
+// balance de tags de <div>. Devuelve null si el fragmento tiene divs
+// desbalanceados — señal de HTML roto, mejor no convertir.
+function extraerDivsDePrimerNivel(fragmento) {
+  const divRegex = /<\/?div\b[^>]*>/gi
+  const divs = []
+  let profundidad = 0
+  let inicio = -1
+  let finApertura = -1
+  let m
+  while ((m = divRegex.exec(fragmento)) !== null) {
+    if (!m[0].startsWith('</')) {
+      if (profundidad === 0) { inicio = m.index; finApertura = m.index + m[0].length }
+      profundidad++
+    } else {
+      profundidad--
+      if (profundidad < 0) return null
+      if (profundidad === 0 && inicio >= 0) {
+        divs.push({
+          inicio,
+          fin: m.index + m[0].length,
+          finApertura,
+          finInterior: m.index,
+          tagApertura: fragmento.slice(inicio, finApertura),
+          interior: fragmento.slice(finApertura, m.index),
+        })
+        inicio = -1
+      }
+    }
+  }
+  return profundidad === 0 ? divs : null
+}
+
+// ¿El fragmento tiene contenido que se VE? Comentarios (incluidos los
+// condicionales MSO) y tags no cuentan; una imagen o texto real sí.
+// Es el criterio para decidir si una capa wrapper se puede colapsar
+// sin perder nada.
+function tieneContenidoVisible(fragmento) {
+  const sinComentarios = fragmento.replace(/<!--[\s\S]*?-->/g, '')
+  if (/<(img|video|iframe)\b/i.test(sinComentarios)) return true
+  const soloTexto = sinComentarios.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ')
+  return soloTexto.trim() !== ''
+}
+
+// Del interior de un div, ubica su ÚNICA tabla de primer nivel y
+// devuelve los índices RELATIVOS { desde, hasta } de su contenido
+// interno (el <tbody>...</tbody> con las filas reales) — índices, no
+// el string, para que quien llama pueda cortar del html real aunque
+// esta función haya trabajado sobre la máscara sin comentarios.
+// Devuelve null si no hay tabla, hay más de una, o hay contenido
+// visible suelto fuera de ella.
+function interiorDeTablaUnica(interiorDiv) {
+  const apertura = interiorDiv.match(/<table\b[^>]*>/i)
+  if (!apertura) return null
+  const inicioTabla = interiorDiv.indexOf(apertura[0])
+  const tagRegex = /<\/?table\b[^>]*>/gi
+  tagRegex.lastIndex = inicioTabla
+  let profundidad = 0
+  let m
+  while ((m = tagRegex.exec(interiorDiv)) !== null) {
+    if (!m[0].startsWith('</')) profundidad++
+    else {
+      profundidad--
+      if (profundidad === 0) {
+        const finContenido = m.index
+        const finTabla = m.index + m[0].length
+        const fuera = interiorDiv.slice(0, inicioTabla) + interiorDiv.slice(finTabla)
+        // Otra <table> hermana o contenido suelto → no es el patrón
+        if (/<table\b/i.test(fuera) || tieneContenidoVisible(fuera)) return null
+        return { desde: inicioTabla + apertura[0].length, hasta: finContenido }
+      }
+    }
+  }
+  return null
+}
+
+// Esqueleto de la fila moderna — copiado VERBATIM de la adaptación de
+// referencia aprobada (que a su vez es el esqueleto del template
+// Modulo_Doble_Clasico con los width parametrizados). Lo único que
+// varía por conversión: los dos width (% de los divs originales) y el
+// contenido interno de cada tabla.
+function filaModernaTopBottom(col1, col2) {
+  return `<tr>
+    <td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center">
+        <table align="center" cellpadding="0" cellspacing="0" border="0" role="presentation">
+            <tbody>
+                <tr>
+                    <td class="top" align="center" valign="top" width="${col1.width}">
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center">${col1.interior}</table>
+                    </td>
+                    <td class="bottom" align="center" valign="top" width="${col2.width}">
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center">${col2.interior}</table>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </td>
+</tr>`
+}
+
+export function convertirEstructurasObsoletas(html) {
+  // Los comentarios HTML (incluidos los condicionales MSO del patrón
+  // viejo, que traen tags de <table>/<tr>/<td> ADENTRO) se enmascaran
+  // con espacios del MISMO largo: todos los índices calculados sobre
+  // la máscara valen 1:1 sobre el html real, pero los tags fantasma de
+  // los comentarios ya no confunden ni al detector ni al balance de
+  // tr/td/table (bug real: el detector encontraba los <td> de los
+  // condicionales MSO como si fueran los obsoletos). El contenido que
+  // se CONSERVA se corta siempre del html real, nunca de la máscara —
+  // por si una pieza trajera comentarios significativos dentro de las
+  // columnas (ej. <!--[if !mso]><!--> con contenido alternativo).
+  const mascara = html.replace(/<!--[\s\S]*?-->/g, (m) => ' '.repeat(m.length))
+
+  const tdsObsoletos = encontrarTdsConDivInlineBlock(mascara)
+  if (tdsObsoletos.length === 0) return { html, convertidas: 0 }
+
+  const rangosTr = encontrarRangosDeTr(mascara)
+  const reemplazos = []
+
+  for (const td of tdsObsoletos) {
+    const tdMask = mascara.slice(td.inicio, td.fin)
+    const aperturaTd = tdMask.match(/^<td\b[^>]*>/i)
+    const cierreTd = tdMask.match(/<\/td\s*>$/i)
+    if (!aperturaTd || !cierreTd) continue
+    // Offset absoluto donde arranca el contenido del td — para mapear
+    // los índices relativos de los helpers al html real.
+    const baseContenido = td.inicio + aperturaTd[0].length
+    const contenidoMask = mascara.slice(baseContenido, td.fin - cierreTd[0].length)
+
+    // ── Regla: exactamente 2 divs, y nada visible fuera de ellos ──
+    const divs = extraerDivsDePrimerNivel(contenidoMask)
+    if (!divs || divs.length !== 2) continue
+    const fueraDeDivs = contenidoMask.slice(0, divs[0].inicio)
+      + contenidoMask.slice(divs[0].fin, divs[1].inicio)
+      + contenidoMask.slice(divs[1].fin)
+    if (tieneContenidoVisible(fueraDeDivs)) continue
+
+    // ── Regla: cada div aporta su % de max-width y su única tabla ──
+    const columnas = []
+    for (const div of divs) {
+      const pct = div.tagApertura.match(/max-width\s*:\s*([\d.]+%)/i)
+      const rango = interiorDeTablaUnica(div.interior)
+      if (!pct || rango === null) { columnas.length = 0; break }
+      // Corte del html REAL: base del contenido + inicio del interior
+      // del div + rango relativo de la tabla.
+      const desdeReal = baseContenido + div.finApertura + rango.desde
+      const hastaReal = baseContenido + div.finApertura + rango.hasta
+      columnas.push({ width: pct[1], interior: html.slice(desdeReal, hastaReal) })
+    }
+    if (columnas.length !== 2) continue
+
+    // ── Elegir el <tr> a reemplazar: el ancestro MÁS EXTERNO cuyo
+    // contenido, sacando el td obsoleto, es puro wrapper (sin nada
+    // visible). Subir de más está protegido por el chequeo de
+    // contenido: el tr que además trae otro módulo, el header o los
+    // legales nunca califica. ──
+    const ancestros = rangosTr
+      .filter(r => r.inicio < td.inicio && r.fin > td.fin)
+      .sort((a, b) => a.inicio - b.inicio)
+    let trElegido = null
+    for (const tr of ancestros) {
+      const fuera = mascara.slice(tr.inicio, td.inicio) + mascara.slice(td.fin, tr.fin)
+      if (!tieneContenidoVisible(fuera)) { trElegido = tr; break }
+    }
+    if (!trElegido) continue
+
+    reemplazos.push({
+      inicio: trElegido.inicio,
+      fin: trElegido.fin,
+      nuevo: filaModernaTopBottom(columnas[0], columnas[1]),
+    })
+  }
+
+  // Aplicar de atrás para adelante para no invalidar índices; el
+  // control de solapamiento es defensivo (dos tds obsoletos nunca
+  // deberían resolver al mismo tr, pero mejor saltear que duplicar).
+  reemplazos.sort((a, b) => b.inicio - a.inicio)
+  let resultado = html
+  let convertidas = 0
+  let inicioAnterior = Infinity
+  for (const r of reemplazos) {
+    if (r.fin > inicioAnterior) continue
+    resultado = resultado.slice(0, r.inicio) + r.nuevo + resultado.slice(r.fin)
+    inicioAnterior = r.inicio
+    convertidas++
+  }
+  return { html: resultado, convertidas }
+}
+
+// Aplica convertirEstructurasObsoletas SOBRE EL CANVAS YA CLASIFICADO
+// (no sobre el HTML crudo de la pieza) — a propósito, para no tocar
+// el flujo de detección/preview de importarHeuristico: la pieza se
+// analiza y se avisa igual que siempre (marcarEstructurasObsoletasParaPreview
+// sigue marcando en rojo lo que encuentra), y recién cuando se
+// confirma la importación (se decide efectivamente cargarla en el
+// editor) se convierte lo que la pieza terminó trayendo a cada bloque
+// del canvas. Cada bloque de un patrón obsoleto de 2 columnas entra
+// como "Código personalizado" (no matchea contra ningún template real,
+// ver importarHeuristico) con su htmlEditado = la fila obsoleta
+// verbatim — convertirEstructurasObsoletas ya sabe operar sobre un
+// fragmento de un solo <tr> (es como está probado en el test dorado),
+// así que alcanza con corrérselo a cada bloque de forma independiente.
+export function convertirEstructurasObsoletasEnCanvas(canvas) {
+  let convertidas = 0
+  const nuevoCanvas = canvas.map(bloque => {
+    const htmlOriginal = bloque.htmlEditado ?? bloque.html
+    if (!htmlOriginal) return bloque
+    const conversion = convertirEstructurasObsoletas(htmlOriginal)
+    if (conversion.convertidas === 0) return bloque
+    convertidas += conversion.convertidas
+    return { ...bloque, htmlEditado: conversion.html }
+  })
+  return { canvas: nuevoCanvas, convertidas }
+}
+
+
 export function marcarEstructurasObsoletasParaPreview(html) {
   const tds = encontrarTdsConDivInlineBlock(html)
   if (tds.length === 0) return html
