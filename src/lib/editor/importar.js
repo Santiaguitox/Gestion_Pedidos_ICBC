@@ -396,8 +396,8 @@ export function encontrarTdsConDivInlineBlock(html) {
 
 
 // ─── Conversión de estructuras obsoletas al formato actual ─────────────
-// Convierte el patrón de dos columnas con <div inline-block> (piezas
-// históricas) a la estructura actual de dos <td class="top"/"bottom">
+// Convierte el patrón de columnas con <div inline-block> (piezas
+// históricas) a la estructura actual con <td class="top"/"bottom">
 // — la misma mecánica del bloque aprobado Modulo_Doble_Clasico. Las
 // reglas NO son inventadas: salen 1:1 de la adaptación de referencia
 // armada y aprobada por el equipo sobre una pieza real (Seguro
@@ -407,14 +407,23 @@ export function encontrarTdsConDivInlineBlock(html) {
 //      el <td> que contiene los divs.
 //   2. El % del max-width de cada div pasa al width del <td> nuevo
 //      (ej. 40%/60%). Sin % declarado no se convierte.
-//   3. valign="top" en ambas columnas (el del template aprobado) — el
-//      vertical-align original de los divs NO se preserva, decisión
+//   3. valign="top" en todas las columnas (el del template aprobado) —
+//      el vertical-align original de los divs NO se preserva, decisión
 //      explícita de la referencia aprobada.
 //   4. La tabla interna de cada div se re-tagea con el tag canónico
 //      (pierde su max-width y su class img-max — el ancho ahora lo
 //      maneja el td, y el apilado mobile lo manejan .top/.bottom) y
 //      su contenido interno queda VERBATIM.
-// Todo caso que no calce exactamente (1 div, 3+, sin % en el div, más
+// Además del patrón de 2 columnas (class="top" + class="bottom"), se
+// admite el mismo patrón con UN SOLO div — un único módulo armado como
+// <div inline-block> en vez de dos. Mismo mecanismo exacto (regla 1-4
+// de arriba), pero produce solo el <td class="top">, sin un "bottom"
+// inventado ni un segundo td vacío: caso real aportado sobre una pieza
+// con un único ícono, sin la capa extra de wrapper table+role
+// "presentation" que sí lleva la variante de 2 columnas (esa capa
+// existe ahí para alinear ambas columnas entre sí; con una sola
+// columna no cumple ningún propósito y se omite).
+// Todo caso que no calce exactamente (3+ divs, sin % en algún div, más
 // de una tabla por div, contenido suelto junto a los divs, contenido
 // real en las capas wrapper) se deja SIN convertir — queda marcado
 // como obsoleto igual que antes, preferimos consultar con el ejemplo
@@ -486,9 +495,23 @@ function tieneContenidoVisible(fragmento) {
 // devuelve los índices RELATIVOS { desde, hasta } de su contenido
 // interno (el <tbody>...</tbody> con las filas reales) — índices, no
 // el string, para que quien llama pueda cortar del html real aunque
-// esta función haya trabajado sobre la máscara sin comentarios.
+// esta función haya trabajado sobre la máscara sin comentarios. También
+// devuelve colorFondo: el bgcolor/background-color declarado en el tag
+// de apertura de ESA tabla (la que se descarta al re-tagear, ver regla
+// 4 de convertirEstructurasObsoletas) — se propaga a la tabla nueva
+// para no perder el fondo que le daba a toda la columna. Caso real: un
+// módulo de ícono con fondo negro pierde ese fondo en la conversión
+// porque la tabla que lo llevaba es justamente la que se reemplaza por
+// el tag canónico; el resto de sus atributos (max-width, class
+// img-max) se sigue descartando a propósito, pero el color no.
 // Devuelve null si no hay tabla, hay más de una, o hay contenido
 // visible suelto fuera de ella.
+function colorDeTabla(aperturaTag) {
+  const style = aperturaTag.match(/background-color\s*:\s*(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)/i)
+  if (style) return style[1]
+  const attr = aperturaTag.match(/\bbgcolor\s*=\s*["']?(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)["']?/i)
+  return attr ? attr[1] : null
+}
 function interiorDeTablaUnica(interiorDiv) {
   const apertura = interiorDiv.match(/<table\b[^>]*>/i)
   if (!apertura) return null
@@ -507,10 +530,11 @@ function interiorDeTablaUnica(interiorDiv) {
         const fuera = interiorDiv.slice(0, inicioTabla) + interiorDiv.slice(finTabla)
         // Otra <table> hermana o contenido suelto → no es el patrón
         if (/<table\b/i.test(fuera) || tieneContenidoVisible(fuera)) return null
-        return { desde: inicioTabla + apertura[0].length, hasta: finContenido }
+        return { desde: inicioTabla + apertura[0].length, hasta: finContenido, colorFondo: colorDeTabla(apertura[0]) }
       }
     }
   }
+
   return null
 }
 
@@ -519,6 +543,12 @@ function interiorDeTablaUnica(interiorDiv) {
 // Modulo_Doble_Clasico con los width parametrizados). Lo único que
 // varía por conversión: los dos width (% de los divs originales) y el
 // contenido interno de cada tabla.
+// Atributos de color a inyectar en la tabla nueva cuando la tabla
+// descartada traía uno propio — ver comentario en interiorDeTablaUnica.
+function atributosColor(colorFondo) {
+  return colorFondo ? ` bgcolor="${colorFondo}" style="background-color:${colorFondo};"` : ''
+}
+
 function filaModernaTopBottom(col1, col2) {
   return `<tr>
     <td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center">
@@ -526,14 +556,27 @@ function filaModernaTopBottom(col1, col2) {
             <tbody>
                 <tr>
                     <td class="top" align="center" valign="top" width="${col1.width}">
-                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center">${col1.interior}</table>
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center"${atributosColor(col1.colorFondo)}>${col1.interior}</table>
                     </td>
                     <td class="bottom" align="center" valign="top" width="${col2.width}">
-                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center">${col2.interior}</table>
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center"${atributosColor(col2.colorFondo)}>${col2.interior}</table>
                     </td>
                 </tr>
             </tbody>
         </table>
+    </td>
+</tr>`
+}
+
+// Variante de una sola columna — mismo mecanismo, sin la capa extra
+// de wrapper table (esa capa solo existe para alinear dos columnas
+// entre sí; con una sola no cumple ningún propósito). El <td
+// class="top"> queda directo bajo el <tr>, igual al ejemplo real
+// aportado para este caso.
+function filaModernaSoloTop(col1) {
+  return `<tr>
+    <td class="top" align="center" valign="top" width="${col1.width}">
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center"${atributosColor(col1.colorFondo)}>${col1.interior}</table>
     </td>
 </tr>`
 }
@@ -567,12 +610,16 @@ export function convertirEstructurasObsoletas(html) {
     const baseContenido = td.inicio + aperturaTd[0].length
     const contenidoMask = mascara.slice(baseContenido, td.fin - cierreTd[0].length)
 
-    // ── Regla: exactamente 2 divs, y nada visible fuera de ellos ──
+    // ── Regla: 1 o 2 divs, y nada visible fuera de ellos ──
+    // 1 div = mismo patrón con una sola columna (ver filaModernaSoloTop);
+    // 2 divs = el patrón clásico top/bottom. 3+ no matchea ninguno.
     const divs = extraerDivsDePrimerNivel(contenidoMask)
-    if (!divs || divs.length !== 2) continue
-    const fueraDeDivs = contenidoMask.slice(0, divs[0].inicio)
-      + contenidoMask.slice(divs[0].fin, divs[1].inicio)
-      + contenidoMask.slice(divs[1].fin)
+    if (!divs || (divs.length !== 1 && divs.length !== 2)) continue
+    const fueraDeDivs = divs.length === 2
+      ? contenidoMask.slice(0, divs[0].inicio)
+        + contenidoMask.slice(divs[0].fin, divs[1].inicio)
+        + contenidoMask.slice(divs[1].fin)
+      : contenidoMask.slice(0, divs[0].inicio) + contenidoMask.slice(divs[0].fin)
     if (tieneContenidoVisible(fueraDeDivs)) continue
 
     // ── Regla: cada div aporta su % de max-width y su única tabla ──
@@ -585,9 +632,9 @@ export function convertirEstructurasObsoletas(html) {
       // del div + rango relativo de la tabla.
       const desdeReal = baseContenido + div.finApertura + rango.desde
       const hastaReal = baseContenido + div.finApertura + rango.hasta
-      columnas.push({ width: pct[1], interior: html.slice(desdeReal, hastaReal) })
+      columnas.push({ width: pct[1], interior: html.slice(desdeReal, hastaReal), colorFondo: rango.colorFondo })
     }
-    if (columnas.length !== 2) continue
+    if (columnas.length !== divs.length) continue
 
     // ── Elegir el <tr> a reemplazar: el ancestro MÁS EXTERNO cuyo
     // contenido, sacando el td obsoleto, es puro wrapper (sin nada
@@ -607,7 +654,9 @@ export function convertirEstructurasObsoletas(html) {
     reemplazos.push({
       inicio: trElegido.inicio,
       fin: trElegido.fin,
-      nuevo: filaModernaTopBottom(columnas[0], columnas[1]),
+      nuevo: columnas.length === 2
+        ? filaModernaTopBottom(columnas[0], columnas[1])
+        : filaModernaSoloTop(columnas[0]),
     })
   }
 

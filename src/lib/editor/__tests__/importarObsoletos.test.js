@@ -118,17 +118,175 @@ describe('convertirEstructurasObsoletas — referencia dorada', () => {
   })
 })
 
-describe('convertirEstructurasObsoletas — casos que NO se convierten (quedan marcados)', () => {
-  it('un solo div: no calza con el patrón de 2 columnas', () => {
-    const unDiv = `<tr><td><table><tbody><tr><td style="font-size: 0;">
-      <div style="display: inline-block; max-width: 40%;" class="img-max"><table><tbody><tr><td><img src="x.jpg"></td></tr></tbody></table></div>
-    </td></tr></tbody></table></td></tr>`
-    const { convertidas } = convertirEstructurasObsoletas(unDiv)
-    expect(convertidas).toBe(0)
-    expect(encontrarTdsConDivInlineBlock(unDiv)).toHaveLength(1)
+// ─── Referencia dorada — 1 sola columna ─────────────────────────────
+// ENTRADA: caso real aportado (pieza histórica con un único módulo de
+// íconos armado como <div inline-block>, sin segunda columna).
+// SALIDA ESPERADA: misma mecánica que la referencia de 2 columnas,
+// pero solo <td class="top">, sin envoltorio extra de table
+// role="presentation" (esa capa solo sirve para alinear 2 columnas
+// entre sí, con una sola no cumple ningún propósito).
+const FILA_OBSOLETA_UNA_COLUMNA = `<tr>
+				<td style="font-size: 0; padding: 0; margin: 0; width: 530px;" width="530" valign="top" align="center">
+								<!--[if (gte mso 9)|(IE)]>                                                                <table align='center' border='0' cellspacing='0' cellpadding='0' width='530'>                                                                    <tr>                                                                        <td align='center' valign='top' width='265'>                                                                            <![endif]-->
+								<div style="display: inline-block; max-width: 50%; min-width: 265px; vertical-align: top; width: 100%; height: 128px; max-height: 128px; min-height: 128px; overflow: hidden;" class="mobile-wrapper">
+												<table style="max-width: 265px;" class="max-width" width="100%" cellspacing="0" cellpadding="0" border="0">
+																<tbody>
+																	<tr>
+																		<td style="font-family: Open Sans, Helvetica, Arial, sans-serif;" valign="top" align="center">
+																			<table style="width: 265px;" width="265px" cellspacing="0" cellpadding="0" border="0">
+																				<tbody>
+																					<tr>
+																						<td style="width: 265px;" width="265px" valign="top" align="center">
+																							<table width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#c4161c">
+																								<tbody>
+																									<tr>
+																										<td style="width: 265px;" width="265px" valign="top" align="center">
+																											<table style="width: 265px;" width="265px" cellspacing="0" cellpadding="0" border="0">
+																												<tbody>
+																													<tr>
+																														<td style="width: 2px; font-size: 0;" width="2px"> </td>
+																														<!-- INICIO MODULO 1 -->
+																														<td style="text-align: left; width: 128px; height: 128px; max-height: 128px; overflow: hidden;" width="128px" valign="top" bgcolor="#c4161c"><img src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/ico-deco-128px-b.png" alt="DECO" style="display: block; width: 128px; height: 128px; color: #ffffff;" width="128px" height="128px"></td>
+																														<!-- FIN MODULO 1 -->
+																														<td style="width: 2px; font-size: 0;" width="2px"> </td>
+																														<!-- INICIO SEPARADOR PUNTEADO 1 -->
+																														<td style="width: 2px; height: 128px;" width="2px" valign="top" height="128" bgcolor="#c4161c"><img style="display: block; border: 0px; width: 2px; height: 128px;" src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/puntos-128-blanco.png" alt="ICBC" width="2px" height="128px"></td>
+																														<!-- FIN SEPARADOR PUNTEADO 1 --> <!-- INICIO MODULO 2 -->
+																														<td style="text-align: left; width: 128px; height: 128px; max-height: 128px; overflow: hidden;" width="128px" valign="top" bgcolor="#c4161c"><img src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/ico-pintureria-128px-b.png" alt="PINTURERIA" style="display: block; width: 128px; height: 128px; color: #ffffff;" width="128px" height="128px"></td>
+																														<!-- FIN MODULO 4 -->
+																														<td style="width: 3px; font-size: 0;" width="3px"> </td>
+																													</tr>
+																												</tbody>
+																											</table>
+																										</td>
+																									</tr>
+																								</tbody>
+																							</table>
+																						</td>
+																					</tr>
+																				</tbody>
+																			</table>
+																		</td>
+																	</tr>
+																</tbody>
+												</table>
+								</div>
+								<!--[if (gte mso 9)|(IE)]>                                                                        </td>                                                                    </tr>                                                                </table>                                                            <![endif]-->
+				</td>
+</tr>`
+
+const FILA_MODERNA_UNA_COLUMNA_APROBADA = `<tr>
+    <td class="top" align="center" valign="top" width="50%">
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center">
+            <tbody>
+                <tr>
+                    <td style="font-family: Open Sans, Helvetica, Arial, sans-serif;" valign="top" align="center">
+                        <table style="width: 265px;" width="265px" cellspacing="0" cellpadding="0" border="0">
+                            <tbody>
+                                <tr>
+                                    <td style="width: 265px;" width="265px" valign="top" align="center">
+                                        <table width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#c4161c">
+                                            <tbody>
+                                                <tr>
+                                                    <td style="width: 265px;" width="265px" valign="top" align="center">
+                                                        <table style="width: 265px;" width="265px" cellspacing="0" cellpadding="0" border="0">
+                                                            <tbody>
+                                                                <tr>
+                                                                    <td style="width: 2px; font-size: 0;" width="2px"> </td>
+                                                                    <!-- INICIO MODULO 1 -->
+                                                                    <td style="text-align: left; width: 128px; height: 128px; max-height: 128px; overflow: hidden;" width="128px" valign="top" bgcolor="#c4161c"><img src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/ico-deco-128px-b.png" alt="DECO" style="display: block; width: 128px; height: 128px; color: #ffffff;" width="128px" height="128px"></td>
+                                                                    <!-- FIN MODULO 1 -->
+                                                                    <td style="width: 2px; font-size: 0;" width="2px"> </td>
+                                                                    <!-- INICIO SEPARADOR PUNTEADO 1 -->
+                                                                    <td style="width: 2px; height: 128px;" width="2px" valign="top" height="128" bgcolor="#c4161c"><img style="display: block; border: 0px; width: 2px; height: 128px;" src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/puntos-128-blanco.png" alt="ICBC" width="2px" height="128px"></td>
+                                                                    <!-- FIN SEPARADOR PUNTEADO 1 --> <!-- INICIO MODULO 2 -->
+                                                                    <td style="text-align: left; width: 128px; height: 128px; max-height: 128px; overflow: hidden;" width="128px" valign="top" bgcolor="#c4161c"><img src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos128/ico-pintureria-128px-b.png" alt="PINTURERIA" style="display: block; width: 128px; height: 128px; color: #ffffff;" width="128px" height="128px"></td>
+                                                                    <!-- FIN MODULO 4 -->
+                                                                    <td style="width: 3px; font-size: 0;" width="3px"> </td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </td>
+</tr>`
+
+describe('convertirEstructurasObsoletas — referencia dorada (1 columna)', () => {
+  it('convierte la fila obsoleta de una sola columna a class="top" sin envoltorio extra', () => {
+    const { html, convertidas } = convertirEstructurasObsoletas(FILA_OBSOLETA_UNA_COLUMNA)
+    expect(convertidas).toBe(1)
+    expect(normalizar(html)).toBe(normalizar(FILA_MODERNA_UNA_COLUMNA_APROBADA))
   })
 
-  it('tres divs: el patrón top/bottom es estrictamente de a dos', () => {
+  it('la salida ya no tiene estructuras obsoletas ni "bottom" inventado', () => {
+    const { html } = convertirEstructurasObsoletas(FILA_OBSOLETA_UNA_COLUMNA)
+    expect(encontrarTdsConDivInlineBlock(html)).toHaveLength(0)
+    expect(html).toContain('class="top"')
+    expect(html).not.toContain('class="bottom"')
+    expect(html).not.toContain('role="presentation"')
+  })
+})
+
+describe('convertirEstructurasObsoletas — propagación de color de fondo', () => {
+  // Caso real reportado: la tabla que se descarta al re-tagear (la
+  // que vive directo dentro del div) traía su propio bgcolor/
+  // background-color — perderlo dejaba la columna nueva sin el fondo
+  // que tenía en la pieza original.
+  const DIV_CON_FONDO = `<div style="display: inline-block; max-width: 50%; min-width: 265px; vertical-align: top; width: 100%; height: 128px; max-height: 128px; min-height: 128px; overflow: hidden;" class="max-width">
+    <table style="max-width: 265px;" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#000000" align="center">
+      <tbody><tr><td style="font-family: Open Sans, Helvetica, Arial, sans-serif; padding-bottom: 14px;" bgcolor="#000000" valign="top" align="center">
+        <table width="265" cellspacing="0" cellpadding="0" border="0">
+          <tbody><tr><td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center"><img src="icono-super.png" width="265" height="128"></td></tr></tbody>
+        </table>
+      </td></tr></tbody>
+    </table>
+  </div>`
+  const DIV_SIN_FONDO = DIV_CON_FONDO
+    .replace(' bgcolor="#000000" align="center"', ' align="center"')
+    .replace('icono-super.png', 'icono-deposita.png')
+
+  it('propaga el bgcolor de la tabla descartada a la tabla nueva', () => {
+    const fila = `<tr><td style="font-size: 0;" valign="middle" align="center">${DIV_CON_FONDO}${DIV_SIN_FONDO}</td></tr>`
+    const { html, convertidas } = convertirEstructurasObsoletas(fila)
+    expect(convertidas).toBe(1)
+    // Primera columna: la tabla original tenía bgcolor="#000000" en el
+    // tag que se descarta — debe aparecer en la tabla nueva.
+    const primeraTabla = html.match(/<td class="top"[^>]*>\s*<table[^>]*>/)[0]
+    expect(primeraTabla).toContain('bgcolor="#000000"')
+    expect(primeraTabla).toContain('background-color:#000000')
+    // Segunda columna: no tenía color propio en la tabla descartada —
+    // no se inventa ninguno.
+    const segundaTabla = html.match(/<td class="bottom"[^>]*>\s*<table[^>]*>/)[0]
+    expect(segundaTabla).not.toContain('bgcolor')
+    // El contenido interno (que sí traía su propio bgcolor en el td
+    // más profundo) sigue intacto en ambas columnas, sin duplicar ni
+    // perder nada.
+    expect(html).toContain('icono-super.png')
+    expect(html).toContain('icono-deposita.png')
+  })
+
+  it('background-color en style (no solo atributo bgcolor) también se propaga', () => {
+    const divConStyle = DIV_CON_FONDO.replace('bgcolor="#000000" align="center"', 'style="background-color: #635843;" align="center"')
+    const otroDiv = DIV_SIN_FONDO
+    const fila = `<tr><td style="font-size: 0;" valign="middle" align="center">${divConStyle}${otroDiv}</td></tr>`
+    const { html } = convertirEstructurasObsoletas(fila)
+    const primeraTabla = html.match(/<td class="top"[^>]*>\s*<table[^>]*>/)[0]
+    expect(primeraTabla).toContain('#635843')
+  })
+})
+
+describe('convertirEstructurasObsoletas — casos que NO se convierten (quedan marcados)', () => {
+  it('tres divs: el patrón top/bottom es estrictamente de a uno o dos', () => {
     const div = (w) => `<div style="display: inline-block; max-width: ${w}%;"><table><tbody><tr><td>col</td></tr></tbody></table></div>`
     const tresDivs = `<tr><td style="font-size: 0;">${div(30)}${div(30)}${div(40)}</td></tr>`
     expect(convertirEstructurasObsoletas(tresDivs).convertidas).toBe(0)
