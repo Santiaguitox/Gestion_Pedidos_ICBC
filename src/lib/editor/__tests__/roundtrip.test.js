@@ -82,7 +82,7 @@ describe('roundtrip export → import (marcadores)', () => {
   })
 
   it('reconstruye imagen principal y footer con todos sus campos', () => {
-    expect(resultado.imgPrincipal).toEqual({ activo: true, src: 'https://cdn/principal.png', alt: 'Alt principal', title: 'Title principal', link: 'https://promo.icbc.com.ar/destino' })
+    expect(resultado.imgPrincipal).toEqual({ activo: true, src: 'https://cdn/principal.png', alt: 'Alt principal', title: 'Title principal', link: 'https://promo.icbc.com.ar/destino', alto: 425 })
     expect(resultado.imgFooter).toEqual({ activo: true, src: 'https://cdn/footer.png', alt: 'Alt footer', link: 'https://promo.icbc.com.ar/footer' })
   })
 
@@ -159,5 +159,59 @@ describe('importarDesdeHtml — fail soft', () => {
     expect(resultado).toBeNull()
     expect(avisos).toHaveLength(1)
     expect(avisos[0].tipo).toBe('general')
+  })
+})
+
+describe('generarExport — comillas dobles en atributos de imagen', () => {
+  it('escapa comillas dobles en alt/title/link de Imagen principal y footer', () => {
+    const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
+    const html = generarExport({
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      imgPrincipal: { activo: true, src: 'https://x.com/a.png', alt: 'Promo "Hot Sale" 50%', title: 'Título "con comillas"', link: 'https://x.com?a="1"' },
+      imgFooter: { activo: true, src: 'https://x.com/f.png', alt: 'Footer "x"', title: '', link: '' },
+      canvas: [{ ...bloque, instanceId: 'x' }],
+      indicadores: [],
+    })
+    // Ningún atributo debería cortarse antes de tiempo por una
+    // comilla suelta — se verifica que <img no aparezca partido
+    // buscando el par completo alt="...&quot;...&quot;..."
+    expect(html).toContain('alt="Promo &quot;Hot Sale&quot; 50%"')
+    expect(html).toContain('title="Título &quot;con comillas&quot;"')
+    expect(html).toContain('href="https://x.com?a=&quot;1&quot;"')
+    expect(html).toContain('alt="Footer &quot;x&quot;"')
+    // El HTML sigue siendo importable después del escape (no rompió el roundtrip)
+    const { resultado, avisos } = importarDesdeHtml(html)
+    expect(avisos).toEqual([])
+    expect(resultado.imgPrincipal.activo).toBe(true)
+  })
+})
+
+describe('generarExport — alto real de Imagen principal (no forzado a 425)', () => {
+  it('exporta el alto medido en vez de 425 fijo, y lo reimporta sin perderlo', () => {
+    const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
+    const html = generarExport({
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      imgPrincipal: { activo: true, src: 'https://x.com/vertical.png', alt: '', title: '', link: '', alto: 900 },
+      imgFooter: { activo: false, src: '' },
+      canvas: [{ ...bloque, instanceId: 'x' }],
+      indicadores: [],
+    })
+    expect(html).toContain('height: 900px')
+    expect(html).toContain('height="900"')
+    expect(html).not.toContain('height="425"')
+    const { resultado } = importarDesdeHtml(html)
+    expect(resultado.imgPrincipal.alto).toBe(900)
+  })
+
+  it('sin alto especificado, sigue exportando 425 (compatibilidad hacia atrás)', () => {
+    const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
+    const html = generarExport({
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      imgPrincipal: { activo: true, src: 'https://x.com/a.png', alt: '', title: '', link: '' }, // sin alto
+      imgFooter: { activo: false, src: '' },
+      canvas: [{ ...bloque, instanceId: 'x' }],
+      indicadores: [],
+    })
+    expect(html).toContain('height="425"')
   })
 })

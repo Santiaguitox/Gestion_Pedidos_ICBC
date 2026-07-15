@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DetectarContenidoDuplicado, DetectarInlineEnvolviendoOutlook } from '@/lib/revision/generales.js'
+import { DetectarContenidoDuplicado, DetectarInlineEnvolviendoOutlook, DetectarFragmentoHtmlCrudoEnTexto } from '@/lib/revision/generales.js'
 import { generarExport } from '@/lib/editor/exportar.js'
 import { BLOQUES_HEADER, BLOQUES_CONTENIDO } from '@/lib/editor/bloques.js'
 
@@ -70,5 +70,77 @@ describe('DetectarInlineEnvolviendoOutlook', () => {
     // apertura ni el cierre del tag — no es el patrón de riesgo.
     const html = `<span>antes <!--[if mso]>x<![endif]--> después</span>`
     expect(DetectarInlineEnvolviendoOutlook(html)).toEqual([])
+  })
+})
+
+describe('DetectarFragmentoHtmlCrudoEnTexto', () => {
+  it('detecta el caso real reportado: un <a> cortado pegado como texto', () => {
+    const textoPegado = 'style="color: #333333; text-decoration: underline;" href="https://www.beneficios.icbc.com.ar/" data-label="LinkRef4_2" data-btnid="MjA0ODE2NDI%3d" target="_blank"&gt;https://www.beneficios.icbc.com.ar/'
+    const html = `<td>${textoPegado}</td>`
+    const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
+    expect(problemas).toHaveLength(1)
+    expect(problemas[0].detalle).toContain('href=')
+  })
+
+  it('detecta el mismo fragmento SIN el cierre ">" del tag — bug real reportado (Señal B)', () => {
+    // Variante real reportada por segunda vez: el fragmento se cortó
+    // ANTES del cierre del tag, así que nunca hay ningún < / > de por
+    // medio (nada que el navegador escape a entidad) — la Señal A
+    // (basada en &lt;/&gt;) no tiene nada para agarrarse acá. La
+    // Señal B (2+ pares atributo="valor" en el mismo texto) sí lo
+    // cubre, sin depender de ninguna entidad.
+    const textoPegado = 'style="color: #333333; text-decoration: underline;" href="https://www.beneficios.icbc.com.ar/" data-label="LinkRef4_2" data-btnid="MjA0ODE2NDI%3d" target="_blank"'
+    const html = `<td>${textoPegado}</td>`
+    const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
+    expect(problemas).toHaveLength(1)
+    expect(problemas[0].snippet).toContain('target="_blank"')
+  })
+
+  it('un solo atributo="valor" suelto en texto normal NO dispara (la Señal B exige 2 o más)', () => {
+    // Un legal real puede perfectamente mencionar algo como
+    // 'configurado con style="dark"' una sola vez sin que sea un bug
+    // — se necesitan 2+ pares para que la señal se active.
+    const html = `<td>Este producto viene configurado con style="dark" por defecto.</td>`
+    expect(DetectarFragmentoHtmlCrudoEnTexto(html)).toEqual([])
+  })
+
+  it('una pieza sana (el propio export del editor) no dispara nada', () => {
+    const html = generarExport({
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      imgPrincipal: { activo: false, src: '', alt: '', title: '', link: '' },
+      imgFooter: { activo: false, src: '', alt: '', link: '' },
+      canvas: [{ ...BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base'), instanceId: 'x' }],
+      indicadores: [],
+    })
+    expect(DetectarFragmentoHtmlCrudoEnTexto(html)).toEqual([])
+  })
+
+  it('un texto legítimo con un > suelto (ej. una comparación) no dispara si no hay atributos cerca', () => {
+    const html = `<td>La tasa es mayor &gt; que el 5% anual, referencia general.</td>`
+    expect(DetectarFragmentoHtmlCrudoEnTexto(html)).toEqual([])
+  })
+
+  it('un tag real (con < y > literales, no escapados) no dispara', () => {
+    const html = `<td><a href="https://x.com" target="_blank" style="color:red;">texto real</a></td>`
+    expect(DetectarFragmentoHtmlCrudoEnTexto(html)).toEqual([])
+  })
+
+  it('un alt="&gt;" legítimo describiendo un ícono (bullet tipo flecha) no dispara — bug real reportado', () => {
+    // Caso real: alt="&gt;" vive DENTRO del atributo de un <img> real,
+    // rodeado de los OTROS atributos de ESE MISMO tag (src, style,
+    // width, height) — antes del fix, esos atributos "vecinos" caían
+    // en la ventana de análisis alrededor de la entidad y disparaban
+    // un falso positivo, aunque la entidad nunca estuvo en texto
+    // visible sino dentro de un atributo de un tag real.
+    const html = `<td align="left"><img src="https://cdn/bullets/bullet-super-rojo-der.png" alt="&gt;" style="display: inline; margin-bottom: -3px;" width="20" height="20"> Por ser cliente ICBC, tenés un descuento.</td>`
+    expect(DetectarFragmentoHtmlCrudoEnTexto(html)).toEqual([])
+  })
+
+  it('agrupa varias entidades cercanas del mismo fragmento en un solo aviso', () => {
+    // < y > ambos escapados (el fragmento completo de un <a ...> pegado como texto)
+    const textoPegado = '&lt;a href="https://x.com" style="color:red;" target="_blank"&gt;texto&lt;/a&gt;'
+    const html = `<td>${textoPegado}</td>`
+    const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
+    expect(problemas).toHaveLength(1)
   })
 })

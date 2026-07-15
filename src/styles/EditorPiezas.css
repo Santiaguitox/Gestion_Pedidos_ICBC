@@ -389,6 +389,7 @@
   white-space: nowrap;
 }
 .ep-menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ep-menu-item:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
 /* ─── Botón Reiniciar — hover en rojo, igual criterio que cualquier
    acción destructiva del editor. Vuelve a ser un botón directo en la
@@ -1512,7 +1513,7 @@
   display: block;
 }
 
-/* Acciones de bloque en canvas (espaciador + eliminar) */
+/* Acciones de bloque en canvas (espaciador + duplicar + eliminar) */
 .ep-canvas-bloque-actions {
   display: flex;
   flex-direction: column;
@@ -1523,7 +1524,7 @@
 }
 .ep-canvas-bloque-espaciador {
   width: 28px;
-  height: 50%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1538,9 +1539,26 @@
   color: var(--icomm-violet);
   background: rgba(91,78,232,0.05);
 }
+.ep-canvas-bloque-duplicar {
+  width: 28px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 1px solid var(--border);
+  transition: color 150ms, background 150ms;
+}
+.ep-canvas-bloque-duplicar:hover {
+  color: var(--icomm-violet);
+  background: rgba(91,78,232,0.05);
+}
 .ep-canvas-bloque-del {
   width: 28px;
-  height: 50%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2589,3 +2607,202 @@ input[autocomplete="off"] { }
      dispara el auto-zoom si su font-size es menor a 16px. */
   .ep-rich-content { font-size: 16px; }
 }
+
+/* ── Toast de deshacer (eliminar bloque) ──────────────────────────────
+   Propio del editor, no el feedback global de NotificacionesContext
+   (ese no tiene botón de acción). z-index alto a propósito: por más
+   que en el flujo normal no se elimina un bloque con un modal abierto
+   encima, esto asegura que el toast siempre gane si llegara a
+   coexistir con cualquier overlay del editor (400 es el más alto que
+   ya existe, acá se deja margen arriba). */
+.ep-deshacer-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-elevated, #1a1c2e);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  padding: 0.625rem 0.75rem 0.625rem 1rem;
+  font-size: 0.8125rem;
+  animation: ep-deshacer-toast-in 180ms ease-out;
+  max-width: calc(100vw - 32px);
+}
+@keyframes ep-deshacer-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.ep-deshacer-toast-texto {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-deshacer-toast-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  background: var(--icomm-violet);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.ep-deshacer-toast-btn:hover { filter: brightness(1.12); }
+.ep-deshacer-toast-cerrar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 150ms, background 150ms;
+}
+.ep-deshacer-toast-cerrar:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+/* Mobile: no queda centrado flotando sobre el FAB (+) — se sube un
+   poco y se angosta el texto vía ellipsis (ya cubierto arriba) para
+   convivir con la topbar/FAB de EditorMobile. */
+.ep-m-deshacer-toast {
+  bottom: 84px;
+  left: 12px;
+  right: 12px;
+  transform: none;
+  max-width: none;
+}
+@keyframes ep-m-deshacer-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ep-m-deshacer-toast { animation: ep-m-deshacer-toast-in 180ms ease-out; }
+
+/* Aviso en vivo del RichEditor — fragmento de HTML pegado como texto
+   visible (ver DetectarFragmentoHtmlCrudoEnTexto). Mismo criterio de
+   color que .ep-dim-alert (ámbar de advertencia, no rojo de error:
+   no rompe la pieza, pero conviene revisarlo). */
+.ep-rich-aviso-fragmento {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border-top: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.ep-rich-aviso-fragmento svg { flex-shrink: 0; margin-top: 1px; color: #F59E0B; }
+.ep-rich-aviso-fragmento-snippet {
+  margin-top: 4px;
+  padding: 4px 6px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+  color: var(--text-primary);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* ── Modal "Mis piezas" (guardado multi-pieza en Supabase) ── */
+.ep-mispiezas-modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ep-mispiezas-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.ep-mispiezas-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+.ep-mispiezas-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.ep-mispiezas-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ep-mispiezas-item-nombre {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-mispiezas-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+.ep-mispiezas-item-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(91,78,232,0.1);
+  color: var(--icomm-violet);
+  font-weight: 600;
+}
+.ep-mispiezas-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.ep-mispiezas-item-del {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 150ms, background 150ms;
+}
+.ep-mispiezas-item-del:hover { color: var(--icbc-red); background: rgba(208,17,27,0.08); }

@@ -73,6 +73,13 @@
         pointer-events: none;
       }
       html[data-theme="dark"] #app-splash { background: #0A1230; }
+      /* Degradado institucional calcado de --wm-grad (global.css) en hex
+         fijos — este bloque corre antes de que ese CSS cargue. En dark NO
+         se reusa el mismo degradé: el primer tramo (#0533C9) se pierde
+         contra el fondo oscuro (mismo motivo por el que global.css define
+         un --wm-grad aparte para dark — fue lo que en su momento hizo
+         aplanar este texto a color sólido; la salida correcta es la
+         variante clara del degradé, no sacarlo). */
       .app-splash-wordmark {
         font-family: 'Poppins', 'DM Sans', -apple-system, sans-serif;
         font-weight: 600;
@@ -80,13 +87,21 @@
         letter-spacing: -0.02em;
         line-height: 1;
         white-space: nowrap;
-        color: #2457F1;
+        background: linear-gradient(92deg, #0533C9 0%, #2457F1 42%, #3C94ED 72%, #47BDDF 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
       }
-      html[data-theme="dark"] .app-splash-wordmark { color: #5B85FF; }
+      html[data-theme="dark"] .app-splash-wordmark {
+        background: linear-gradient(92deg, #4A72FF 0%, #5B85FF 40%, #4BA6F2 70%, #55CBEC 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
       .app-splash-wordmark sup {
         font-size: 0.42em;
         font-weight: 600;
-        color: #47BDDF;
+        background: none;
+        -webkit-text-fill-color: #47BDDF;
         vertical-align: super;
       }
       .app-splash-iso { position: relative; width: 120px; height: 120px; }
@@ -108,6 +123,30 @@
         0%, 100% { transform: scale(1);     filter: brightness(1); }
         50%      { transform: scale(1.055); filter: brightness(1.12); }
       }
+      /* Isotipo asomando en dos esquinas, calcado de .auth-bg-iso
+         (global.css / AuthBrandBackdrop): mismo asset /icon-512.png,
+         misma opacidad y mismas medidas, con los mismos overrides
+         mobile. Es decorativo: si la imagen llega después del primer
+         paint no pasa nada, el splash ya pintó sin depender de ella.
+         Wordmark e iso central van con position relative + z-index 1
+         para quedar arriba de estas imágenes (que son positioned y si
+         no, pintarían por encima del contenido no posicionado). */
+      .app-splash-bg-iso {
+        pointer-events: none;
+        position: absolute;
+        opacity: 0.14;
+        z-index: 0;
+      }
+      .app-splash-bg-iso-tr { top: -110px; right: -130px; width: 460px; height: 460px; }
+      .app-splash-bg-iso-bl { bottom: -90px; left: -110px; width: 300px; height: 300px; }
+      @media (max-width: 768px) {
+        .app-splash-bg-iso-tr { width: 260px; height: 260px; top: -70px; right: -80px; }
+        .app-splash-bg-iso-bl { width: 180px; height: 180px; bottom: -50px; left: -60px; }
+      }
+      .app-splash-wordmark, .app-splash-iso {
+        position: relative;
+        z-index: 1;
+      }
     </style>
 
     <meta property="og:title" content="WorkHub" />
@@ -127,6 +166,8 @@
          con fade recién cuando pasó el mínimo de exhibición (2s desde
          window.__twhSplashStart, marcado acá mismo). -->
     <div id="app-splash" aria-hidden="true">
+      <img src="/icon-512.png" alt="" class="app-splash-bg-iso app-splash-bg-iso-tr" />
+      <img src="/icon-512.png" alt="" class="app-splash-bg-iso app-splash-bg-iso-bl" />
       <span class="app-splash-wordmark">TeamWorkHub<sup>.app</sup></span>
       <div class="app-splash-iso">
         <div class="app-splash-shape app-splash-shape-1"><div class="app-splash-shape-inner"></div></div>

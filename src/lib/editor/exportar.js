@@ -7,6 +7,22 @@ import { LEGAL_FIJO_HTML, TEMAS, TEMA_DEFAULT, colorPorPrefijoHeader } from './c
 import { limpiarHtmlExport, quitarWrapperSiEnvuelveTodo } from './htmlUtils.js'
 import { reordenarRedesSociales } from './redesSociales.js'
 
+// Sanea un valor antes de interpolarlo DENTRO de un atributo HTML con
+// comillas dobles — mismo criterio que linkSeguro en
+// PanelEditor/commitImagenLibre (EditorPiezas.jsx): una comilla doble
+// literal en el valor (alt, title, link, o los campos de texto libre
+// de indicadores/firma) corta el atributo ahí mismo y deforma el HTML
+// exportado. Bug real: un Alt como 'Promo "Hot Sale" 50%' generaba
+// alt="Promo "Hot Sale" 50%" — el navegador/cliente de correo ve tres
+// atributos rotos en vez de uno. Esta función centraliza el mismo
+// reemplazo para los puntos de generarExport que interpolan directo
+// en vez de pasar por commitImagenLibre (que ya lo hacía bien, solo
+// para Imagen Libre). No toca el resto del HTML, solo el valor puntual
+// antes de que quede envuelto en comillas.
+export function escaparAtributo(valor) {
+  return (valor ?? '').replaceAll('"', '&quot;')
+}
+
 // ─── Estilos del email — EXACTOS al canvas entregado ───────────────────────
 // Función en vez de string fijo: permite sumar estilos custom de los
 // bloques de "código personalizado" del canvas (ver
@@ -132,15 +148,26 @@ export function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, le
     .map(b => b.estilosMobile)
     .join('\n')
 
+  // Alto real de Imagen principal — antes estaba fijo en 425px sin
+  // importar la proporción de la imagen pegada, deformándola si no
+  // era exactamente 600×425. imgPrincipal.alto se calcula al cambiar
+  // la URL (ver onImgPrincipalSrcBlur en EditorPiezas.jsx) manteniendo
+  // el ancho de 600px fijo (ese sí no cambia, es el ancho real del
+  // cuerpo del email) y recalculando el alto según la proporción real
+  // de la imagen. El fallback a 425 es por compatibilidad: piezas
+  // guardadas o importadas de ANTES de este cambio no traen el campo
+  // `alto`, y 425 es exactamente el valor que siempre se usó, así que
+  // el comportamiento para esas piezas viejas no cambia.
+  const alturaImgPrincipal = imgPrincipal.alto || 425
   const imgPrincipalContenido = imgPrincipal.activo && imgPrincipal.src
-    ? `<img src="${imgPrincipal.src}" alt="${imgPrincipal.alt || ''}"${imgPrincipal.title ? ` title="${imgPrincipal.title}"` : ''} class="img-max" style="width: 600px; height: 425px; display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: #c4161c;" width="600" height="425" />`
+    ? `<img src="${escaparAtributo(imgPrincipal.src)}" alt="${escaparAtributo(imgPrincipal.alt)}"${imgPrincipal.title ? ` title="${escaparAtributo(imgPrincipal.title)}"` : ''} class="img-max" style="width: 600px; height: ${alturaImgPrincipal}px; display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: #c4161c;" width="600" height="${alturaImgPrincipal}" />`
     : null
   const imgPrincipalHtml = imgPrincipalContenido
-    ? `<!--IMG_PRINCIPAL-->\n<tr>\n<td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center">${imgPrincipal.link ? `<a href="${imgPrincipal.link}" target="_blank" style="border-style: none !important;">${imgPrincipalContenido}</a>` : imgPrincipalContenido}</td>\n</tr>\n<!--/IMG_PRINCIPAL-->`
+    ? `<!--IMG_PRINCIPAL-->\n<tr>\n<td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center">${imgPrincipal.link ? `<a href="${escaparAtributo(imgPrincipal.link)}" target="_blank" style="border-style: none !important;">${imgPrincipalContenido}</a>` : imgPrincipalContenido}</td>\n</tr>\n<!--/IMG_PRINCIPAL-->`
     : ''
 
   const imgFooterHtml = imgFooter.activo && imgFooter.src
-    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center">${imgFooter.link ? `<a href="${imgFooter.link}" target="_blank">` : ''}<img src="${imgFooter.src}" alt="${imgFooter.alt || ''}"${imgFooter.title ? ` title="${imgFooter.title}"` : ''} class="img-max" width="600" border="0" />${imgFooter.link ? '</a>' : ''}</td>\n</tr>\n<!--/IMG_FOOTER-->`
+    ? `<!--IMG_FOOTER-->\n<tr>\n<td colspan="3" style="font-size: 0;" valign="middle" align="center">${imgFooter.link ? `<a href="${escaparAtributo(imgFooter.link)}" target="_blank">` : ''}<img src="${escaparAtributo(imgFooter.src)}" alt="${escaparAtributo(imgFooter.alt)}"${imgFooter.title ? ` title="${escaparAtributo(imgFooter.title)}"` : ''} class="img-max" width="600" border="0" />${imgFooter.link ? '</a>' : ''}</td>\n</tr>\n<!--/IMG_FOOTER-->`
     : ''
 
   // Dos modos de concatenar los legales adicionales (el legal FIJO

@@ -1,11 +1,13 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useLockAppScroll } from '@/hooks/useLockAppScroll'
 import { useState, useRef, useEffect, forwardRef } from 'react'
-import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info } from 'lucide-react'
+import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info, Save, FolderOpen, User } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado } from '@/lib/revision/generales'
+import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado, DetectarFragmentoHtmlCrudoEnTexto } from '@/lib/revision/generales'
 import '@/styles/EditorPiezas.css'
 import {
   FIRMA_INSTITUCIONAL_DEFAULT,
@@ -145,6 +147,39 @@ const REDES_ICONOS = {
 
 // ─── Mini editor rich text ──────────────────────────────────────────────────
 
+// ─── Envolver una selección en un elemento, con fallback ───────────
+// range.surroundContents(el) tira excepción si la selección no
+// respeta los límites de los nodos que atraviesa — el caso típico es
+// arrancar la selección DENTRO de un span ya formateado (ej. una
+// palabra en rojo) y terminarla afuera: el rango "parcialmente
+// selecciona" ese nodo, algo que el spec de Range no permite envolver
+// directo. Bug real: al tocar esto, el click en Negrita/Cursiva/Link
+// no hacía nada — el catch silencioso de antes devolvía sin avisar,
+// y quien lo usaba no tenía forma de saber que su click "no sirvió".
+// Range.extractContents() SÍ soporta selecciones parciales (el
+// navegador clona/parte los nodos de borde automáticamente), así que
+// el fallback saca el contenido seleccionado, lo mete adentro del
+// wrapper nuevo, y reinserta el wrapper en el mismo lugar — mismo
+// resultado visual que surroundContents, pero sin la restricción.
+// Devuelve true si se pudo aplicar (por cualquiera de los dos
+// caminos), false solo en el caso ya extremo de que ni extractContents
+// funcione (rango vacío/inválido).
+function envolverSeleccion(range, wrapper) {
+  try {
+    range.surroundContents(wrapper)
+    return true
+  } catch {
+    try {
+      const fragmento = range.extractContents()
+      wrapper.appendChild(fragmento)
+      range.insertNode(wrapper)
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
 function RichEditor({ value, onChange }) {
   const ref = useRef(null)
   const [showLink, setShowLink] = useState(false)
@@ -152,6 +187,12 @@ function RichEditor({ value, onChange }) {
   const [linkColor, setLinkColor] = useState('#c4161c')
   const savedRange = useRef(null)
   const isInternalChange = useRef(false)
+  // Solo para el caso extremo en que ni siquiera el fallback de
+  // envolverSeleccion pudo aplicar el formato — antes esto fallaba
+  // en silencio (el catch de surroundContents devolvía sin avisar),
+  // dejando al usuario sin ningún feedback de por qué su click no
+  // hizo nada.
+  const { showError } = useNotificaciones()
 
   useEffect(() => {
     if (ref.current && !isInternalChange.current) {
@@ -178,7 +219,7 @@ function RichEditor({ value, onChange }) {
     } else {
       const span = document.createElement('span')
       Object.entries(propiedades).forEach(([k, v]) => { span.style[k] = v })
-      try { range.surroundContents(span) } catch { return }
+      if (!envolverSeleccion(range, span)) { showError('No se pudo aplicar el formato a esta selección. Probá seleccionar un tramo de texto más simple.'); return }
     }
     isInternalChange.current = true
     onChange(limpiarHtmlEditor(ref.current.innerHTML))
@@ -191,7 +232,7 @@ function RichEditor({ value, onChange }) {
     const range = sel.getRangeAt(0)
     const sup = document.createElement('sup')
     sup.style.fontSize = '8px'
-    try { range.surroundContents(sup) } catch { return }
+    if (!envolverSeleccion(range, sup)) { showError('No se pudo aplicar superíndice a esta selección. Probá seleccionar un tramo de texto más simple.'); return }
     isInternalChange.current = true
     onChange(limpiarHtmlEditor(ref.current.innerHTML))
   }
@@ -208,7 +249,7 @@ function RichEditor({ value, onChange }) {
     a.target = '_blank'
     a.style.color = linkColor
     a.style.textDecoration = 'underline'
-    try { range.surroundContents(a) } catch { return }
+    if (!envolverSeleccion(range, a)) { showError('No se pudo aplicar el link a esta selección. Probá seleccionar un tramo de texto más simple.'); setShowLink(false); return }
     isInternalChange.current = true
     onChange(limpiarHtmlEditor(ref.current.innerHTML))
     setShowLink(false); setLinkUrl('')
@@ -289,8 +330,7 @@ function RichEditor({ value, onChange }) {
         <div className="ep-rich-link-popup">
           <input className="ep-rich-link-input" autoComplete="off" placeholder="https://..." value={linkUrl}
             onChange={e => setLinkUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && aplicarLink()} autoFocus
-            autoComplete="off" />
+            onKeyDown={e => e.key === 'Enter' && aplicarLink()} autoFocus />
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>Color link:</span>
             <button type="button"
@@ -309,6 +349,29 @@ function RichEditor({ value, onChange }) {
       )}
       <div ref={ref} className="ep-rich-content" contentEditable suppressContentEditableWarning
         onInput={onInput} onKeyDown={onKeyDown} onPaste={onPaste} />
+      {/* Aviso en vivo — se deriva directo de `value` en cada render,
+          sin estado propio: la detección es una regex liviana, no hay
+          necesidad de memoizarla para un campo de texto de este
+          tamaño. Solo dispara con la huella específica de un tag
+          real cortado pegado como texto (ver comentario de la
+          función); nunca con formato real aplicado desde esta misma
+          toolbar (negrita/color/link generan tags reales, no
+          entidades escapadas). */}
+      {(() => {
+        const avisosFragmento = DetectarFragmentoHtmlCrudoEnTexto(value || '')
+        if (avisosFragmento.length === 0) return null
+        return (
+          <div className="ep-rich-aviso-fragmento">
+            <AlertCircle size={13} />
+            <div>
+              <span>Parece que pegaste un fragmento de HTML como texto (no como código) — probablemente iba a ser un link. Revisá y corregilo, o pegalo en un bloque de "Código personalizado" si es HTML real.</span>
+              {avisosFragmento.map((a, i) => (
+                <div key={i} className="ep-rich-aviso-fragmento-snippet">…{a.snippet}</div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1222,6 +1285,77 @@ function ContextCardEditor({ bloque }) {
   )
 }
 
+// Formato corto es-AR para el "última edición" de cada pieza guardada
+// — mismo locale que ya usa el resto del proyecto (ver RevisionBase.jsx,
+// toLocaleString('es-AR')). No hace falta un helper compartido en
+// lib/fechas.js para un solo uso puntual como este.
+function formatearFechaPieza(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+    ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
+// ─── Modal "Mis piezas" — guardado multi-pieza en Supabase ─────────────────
+// Compartido entre desktop y mobile (se renderiza una vez en cada árbol,
+// con el mismo estado/handlers pasados por props desde EditorPiezas) —
+// evita duplicar esta lista relativamente larga en los dos lugares.
+function ModalMisPiezas({ open, piezas, cargando, userId, onCerrar, onAbrir, onDuplicar, onEliminar }) {
+  if (!open) return null
+  const propias = piezas.filter(p => p.user_id === userId).length
+  return (
+    <div className="ep-preview-overlay" onClick={onCerrar}>
+      <div className="ep-mispiezas-modal" onClick={e => e.stopPropagation()}>
+        <div className="ep-preview-header">
+          <div className="ep-preview-titulo-wrap">
+            <span className="ep-preview-titulo">Mis piezas</span>
+            <span className="ep-preview-subtitulo">
+              {cargando
+                ? 'Cargando…'
+                : `${propias}/${PIEZAS_GUARDADAS_LIMITE} propias${piezas.length > propias ? ` · ${piezas.length - propias} del equipo` : ''}`}
+            </span>
+          </div>
+          <button className="ep-preview-close" onClick={onCerrar}><X size={16} /></button>
+        </div>
+        <div className="ep-mispiezas-body">
+          {cargando && (
+            <div className="ep-mispiezas-loading"><Loader2 size={20} className="ep-spin" /></div>
+          )}
+          {!cargando && piezas.length === 0 && (
+            <div className="ep-editor-empty">
+              <FolderOpen size={28} style={{ color: 'var(--border)' }} />
+              <span>Todavía no guardaste ninguna pieza. Usá el botón "Guardar" en la barra superior.</span>
+            </div>
+          )}
+          {!cargando && piezas.map(p => {
+            const esPropia = p.user_id === userId
+            return (
+              <div key={p.id} className="ep-mispiezas-item">
+                <div className="ep-mispiezas-item-info">
+                  <span className="ep-mispiezas-item-nombre">{p.nombre}</span>
+                  <span className="ep-mispiezas-item-meta">
+                    {formatearFechaPieza(p.updated_at)}
+                    {!esPropia && (
+                      <span className="ep-mispiezas-item-badge"><User size={10} /> {p.profiles?.full_name || 'Otro usuario'}</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ep-mispiezas-item-actions">
+                  <button className="ep-btn ep-btn-ghost" onClick={() => onAbrir(p)} title="Abrir en el editor"><FolderOpen size={13} /> Abrir</button>
+                  <button className="ep-btn ep-btn-ghost" onClick={() => onDuplicar(p)} title="Guardar una copia propia"><Copy size={13} /> Duplicar</button>
+                  {esPropia && (
+                    <button className="ep-mispiezas-item-del" onClick={() => onEliminar(p)} title="Eliminar"><Trash2 size={14} /></button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Componente principal ───────────────────────────────────────────────────
 // Reconstruye el objeto bandaHeader completo a partir del slug guardado
 // — localStorage solo guarda el slug (string liviano), no el HTML
@@ -1231,11 +1365,51 @@ function headerDesdeSlag(slug) {
   return BLOQUES_HEADER.find(b => b.slug === slug) ?? BLOQUES_HEADER[0] ?? null
 }
 
+// Reconstruye el html original de cada bloque desde BLOQUES — no se
+// guarda ni en localStorage ni en la columna `data` de
+// piezas_borradores (solo htmlEditado y metadata viajan), así que hay
+// que cruzarlo de vuelta con la fuente real. Compartido entre el
+// borrador local (useState de canvas) y cargarPiezaGuardada (piezas
+// guardadas en Supabase) — mismo shape en los dos casos.
+function reconstruirCanvasDesdeGuardado(canvasGuardado) {
+  if (!canvasGuardado) return []
+  return canvasGuardado.map(b => {
+    const original = BLOQUES.find(x => x.id === b.id)
+    return original ? { ...b, html: original.html } : b
+  }).filter(b => b.html != null) // descartar bloques cuyo template ya no existe
+}
+
+// Límite de piezas guardadas por usuario — tiene que coincidir con el
+// límite real que aplica el trigger piezas_borradores_limitar en la
+// migración (20). Vive acá SOLO para mostrar el contador en la UI
+// ("X/20") antes de llegar al límite; el límite real y no eludible
+// vive en la base, este número es puramente informativo — si algún
+// día se cambia el de la base, hay que actualizar este también para
+// que el contador no mienta.
+const PIEZAS_GUARDADAS_LIMITE = 20
+
+function mensajeAvisoFragmentos(aviso) {
+  if (!aviso) return null
+  const { problemas } = aviso
+  const intro = `Se ${problemas.length === 1 ? 'detectó 1 fragmento' : `detectaron ${problemas.length} fragmentos`} que parece${problemas.length === 1 ? '' : 'n'} HTML pegado como texto visible (no como código) en algún campo editable — probablemente iba a ser un link. No rompe la pieza, pero el destinatario lo va a ver como texto crudo en el mail.`
+  return (
+    <>
+      {intro}
+      {problemas.map((p, i) => (
+        <span key={i} style={{ display: 'block', fontFamily: "'Courier New', monospace", fontSize: '0.7rem', background: 'rgba(0,0,0,0.06)', padding: '4px 6px', borderRadius: 4, marginTop: 6, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>
+          …{p.snippet}
+        </span>
+      ))}
+    </>
+  )
+}
+
 export default function EditorPiezas() {
   useDocumentTitle('Editor de Piezas')
   const isMobile = useIsMobileLadoCorto()
 
-  const { showSuccess } = useNotificaciones()
+  const { showSuccess, showError } = useNotificaciones()
+  const { user } = useAuth()
   const [busqueda, setBusqueda] = useState('')
   // Pestaña activa del selector CG/EB/Pay dentro de "Header" en la
   // biblioteca — no es parte del borrador persistido, es solo un
@@ -1282,17 +1456,7 @@ export default function EditorPiezas() {
       return arr
     })
   }
-  const [canvas, setCanvas] = useState(() => {
-    const guardado = borrador?.canvas
-    if (!guardado) return []
-    // Reconstruir el html original de cada bloque desde BLOQUES —
-    // no se guarda en localStorage (solo htmlEditado y metadata),
-    // así que hay que cruzarlo de vuelta con la fuente real.
-    return guardado.map(b => {
-      const original = BLOQUES.find(x => x.id === b.id)
-      return original ? { ...b, html: original.html } : b
-    }).filter(b => b.html != null) // descartar bloques cuyo template ya no existe
-  })
+  const [canvas, setCanvas] = useState(() => reconstruirCanvasDesdeGuardado(borrador?.canvas))
   const [selectedId, setSelectedId] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   // Desktop (600px, ancho real del email) / Mobile (375px) — angostar
@@ -1308,7 +1472,31 @@ export default function EditorPiezas() {
   const [dragOverId, setDragOverId] = useState(null) // { id, posicion: 'arriba'|'abajo' }
   const [dragOverZona, setDragOverZona] = useState(false)
   const [dragOverHeader, setDragOverHeader] = useState(false)
-  const [imgPrincipal, setImgPrincipal] = useState(() => borrador?.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '' })
+  const [imgPrincipal, setImgPrincipal] = useState(() => borrador?.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '', alto: 425 })
+  // Imagen principal siempre ocupa los 600px de ancho del cuerpo del
+  // email (eso no varía, es el ancho fijo de la pieza) — lo que antes
+  // estaba MAL era forzar también el ALTO a 425px sin importar la
+  // proporción real de la imagen que se pegara, deformándola en
+  // cualquier cliente de correo si no era exactamente 600×425. Al
+  // cambiar la URL, se mide la imagen real y se recalcula el alto
+  // manteniendo el ancho fijo — mismo cálculo que ya usa CampoImagen
+  // (aceptarSugerencia) para las imágenes de bloques, aplicado acá sin
+  // el paso de confirmación manual (CampoImagen pregunta porque
+  // compara contra una medida ESPERADA fija del template; acá no hay
+  // "esperado" más que la proporción real de la imagen que se pegó,
+  // así que no hace falta pedir confirmación, se aplica directo). Si
+  // la imagen no carga (URL rota o vacía) se conserva el último alto
+  // conocido — no hay nada que recalcular todavía.
+  function onImgPrincipalSrcBlur(nuevoSrc) {
+    if (!nuevoSrc) { setImgPrincipal(p => ({ ...p, src: nuevoSrc })); return }
+    const img = new window.Image()
+    img.onload = () => {
+      const alto = Math.round(600 / (img.naturalWidth / img.naturalHeight))
+      setImgPrincipal(p => ({ ...p, src: nuevoSrc, alto }))
+    }
+    img.onerror = () => setImgPrincipal(p => ({ ...p, src: nuevoSrc }))
+    img.src = nuevoSrc
+  }
   const [imgFooter, setImgFooter] = useState(() => borrador?.imgFooter ?? { activo: false, src: '', alt: '', title: '', link: '' })
   // Array de legales adicionales — mismo patrón que indicadores (cada
   // uno con su id, botón Agregar, eliminar individual). Disponible en
@@ -1354,6 +1542,49 @@ export default function EditorPiezas() {
     setConfirmando(prev => ({ ...prev, [key]: true }))
     setTimeout(() => setConfirmando(prev => ({ ...prev, [key]: false })), 400)
   }
+  // Deshacer eliminación de bloque — un misclick en el tacho de basura
+  // podía tirar minutos de edición sin ninguna red, y el autosave ya
+  // guardaba el canvas sin ese bloque a los 500ms. El feedback global
+  // (showSuccess/showError de NotificacionesContext) no soporta un
+  // botón de acción, así que esto es un toast propio y acotado del
+  // editor — no toca el sistema de notificaciones compartido con el
+  // resto de la app. Solo guarda UN bloque eliminado a la vez: si se
+  // borra otro mientras el toast anterior sigue visible, el anterior
+  // se descarta en silencio (mismo criterio que el "Archivado —
+  // Deshacer" de Gmail) — no tiene sentido acumular una pila de
+  // varios niveles de deshacer para algo pensado como red de
+  // seguridad ante un click accidental, no como historial completo.
+  const [bloqueEliminado, setBloqueEliminado] = useState(null) // { bloque, idx } | null
+  const deshacerTimerRef = useRef(null)
+  function eliminarBloqueConDeshacer(instanceId) {
+    const idx = canvas.findIndex(b => b.instanceId === instanceId)
+    if (idx === -1) return
+    clearTimeout(deshacerTimerRef.current)
+    setBloqueEliminado({ bloque: canvas[idx], idx })
+    deshacerTimerRef.current = setTimeout(() => setBloqueEliminado(null), 5000)
+    eliminarBloque(instanceId)
+  }
+  function deshacerEliminarBloque() {
+    if (!bloqueEliminado) return
+    clearTimeout(deshacerTimerRef.current)
+    setCanvas(prev => {
+      const arr = [...prev]
+      // Clamp al largo actual: si de por medio se agregaron/borraron
+      // otros bloques, el índice original puede quedar más allá del
+      // final del array — splice con un índice fuera de rango igual
+      // inserta al final, así que esto no rompe, pero clamp explícito
+      // deja la intención clara.
+      const at = Math.min(bloqueEliminado.idx, arr.length)
+      arr.splice(at, 0, bloqueEliminado.bloque)
+      return arr
+    })
+    setSelectedId(bloqueEliminado.bloque.instanceId)
+    setBloqueEliminado(null)
+  }
+  // Limpiar el timer si el componente se desmonta con el toast todavía
+  // visible (navegación fuera del editor) — evita un setState huérfano
+  // sobre un componente ya desmontado.
+  useEffect(() => () => clearTimeout(deshacerTimerRef.current), [])
   // Qué alto de espaciador se está arrastrando desde el FAB flotante
   // (7/14/28, o null si no hay ningún drag de spacer en curso) — se
   // setea en el dragStart de cada opción del FAB y se consume en el
@@ -1378,24 +1609,47 @@ export default function EditorPiezas() {
   // no escribir en cada keystroke sino cuando el usuario para un momento.
   // El html original de cada bloque no se guarda — se reconstruye
   // desde BLOQUES al cargar (ver inicialización de canvas más arriba).
+  function construirBorrador() {
+    return {
+      nombre,
+      tema,
+      bandaHeaderSlug: bandaHeader?.slug ?? null,
+      redesOrden,
+      canvas: canvas.map(b => ({ ...b, html: undefined })),
+      imgPrincipal,
+      imgFooter,
+      legalesAdicionales,
+      legalesSeparados,
+      firmaInstitucional,
+      indicadores,
+    }
+  }
   useEffect(() => {
-    const t = setTimeout(() => {
-      setBorrador({
-        nombre,
-        tema,
-        bandaHeaderSlug: bandaHeader?.slug ?? null,
-        redesOrden,
-        canvas: canvas.map(b => ({ ...b, html: undefined })),
-        imgPrincipal,
-        imgFooter,
-        legalesAdicionales,
-        legalesSeparados,
-        firmaInstitucional,
-        indicadores,
-      })
-    }, 500)
+    const t = setTimeout(() => { setBorrador(construirBorrador()) }, 500)
     return () => clearTimeout(t)
   }, [nombre, tema, bandaHeader, redesOrden, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores])
+
+  // Ref con el borrador de ESTE render — se reasigna en cada render (no
+  // en un efecto), así el listener de beforeunload de más abajo siempre
+  // lee el valor más nuevo sin tener que recrearse en cada cambio de
+  // estado. Bug real que esto corrige: si el usuario tipeaba algo y
+  // cerraba la pestaña (o recargaba) DENTRO de los 500ms del debounce
+  // de arriba, ese timeout nunca llegaba a correr y el último cambio
+  // se perdía — el borrador guardado quedaba un paso atrás de lo que
+  // la persona vio en pantalla.
+  const borradorActualRef = useRef(null)
+  useEffect(() => {
+    borradorActualRef.current = construirBorrador()
+  })
+  useEffect(() => {
+    // Listener registrado UNA sola vez (deps vacías): usa setBorrador
+    // (estable, ver useLocalStorage — su comportamiento no depende del
+    // render en que se creó) y lee el ref de arriba, que sí está
+    // siempre actualizado. No hace falta re-suscribir en cada cambio.
+    function onBeforeUnload() { setBorrador(borradorActualRef.current) }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // ── Nueva pieza — resetea todo el estado al default ────────────────
   // También borra el borrador del localStorage para que al recargar
@@ -1407,13 +1661,166 @@ export default function EditorPiezas() {
     setRedesOrden(null)
     setCanvas([])
     setSelectedId(null)
-    setImgPrincipal({ activo: false, src: '', alt: '', title: '', link: '' })
-    setImgFooter({ activo: false, src: '', alt: '', link: '' })
+    setImgPrincipal({ activo: false, src: '', alt: '', title: '', link: '', alto: 425 })
+    setImgFooter({ activo: false, src: '', alt: '', title: '', link: '' })
     setLegalesAdicionales([])
     setLegalesSeparados(false)
     setFirmaInstitucional(null)
     setIndicadores([])
     setBorrador(null)
+    // "Nueva pieza" desengancha del guardado en la nube que estuviera
+    // abierto — sin esto, tocar "Guardar" después de un "Reiniciar"
+    // pisaría la pieza guardada anterior en vez de crear una nueva.
+    setPiezaAbierta(null)
+  }
+
+  // ── Piezas guardadas en Supabase ("Mis piezas") ─────────────────────
+  // Guardado EXPLÍCITO (botón), a diferencia del borrador local de
+  // arriba (automático, debounced, siempre activo como red de
+  // seguridad de la pieza que se está editando AHORA). Este es un
+  // guardado con nombre y multi-pieza: permite tener varias piezas a
+  // medias, seguir editando desde otra compu, y no perder nada ante un
+  // "Reiniciar" accidental. piezaAbierta === null significa "esta
+  // pieza todavía no se guardó nunca en la nube" — el botón Guardar
+  // pasa a comportarse como "Guardar como" (inserta una fila nueva) en
+  // ese caso, y también cuando la pieza abierta es de OTRA persona (ver
+  // ownerId): un super_admin puede ABRIR la pieza de un compañero para
+  // mirarla, pero RLS solo deja hacer UPDATE al dueño real — en vez de
+  // que ese guardado falle en silencio contra la política de UPDATE,
+  // la UI lo trata como "guardar una copia propia" directamente.
+  const [piezaAbierta, setPiezaAbierta] = useState(null) // { id, ownerId } | null
+  const [misPiezas, setMisPiezas] = useState([])
+  const [showMisPiezas, setShowMisPiezas] = useState(false)
+  const [cargandoMisPiezas, setCargandoMisPiezas] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [piezaAEliminar, setPiezaAEliminar] = useState(null) // fila | null, para el ConfirmModal
+
+  // Reemplaza TODO el estado del editor por el de una pieza guardada —
+  // mismo criterio que confirmarImportacion (pisa sin pedir una
+  // segunda confirmación, ya que abrir desde la lista YA es la
+  // confirmación). `fila` viene de la tabla piezas_borradores: { id,
+  // user_id, nombre, data }, con `data` en el mismo shape que arma
+  // construirBorrador().
+  function cargarPiezaGuardada(fila) {
+    const d = fila.data ?? {}
+    setNombre(d.nombre ?? fila.nombre ?? 'Pieza sin nombre')
+    setTema(d.tema ?? TEMA_DEFAULT)
+    setBandaHeader(d.bandaHeaderSlug ? headerDesdeSlag(d.bandaHeaderSlug) : (BLOQUES_HEADER[0] ?? null))
+    setRedesOrden(d.redesOrden ?? null)
+    setCanvas(reconstruirCanvasDesdeGuardado(d.canvas))
+    setSelectedId(null)
+    setImgPrincipal(d.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '', alto: 425 })
+    setImgFooter(d.imgFooter ?? { activo: false, src: '', alt: '', title: '', link: '' })
+    setLegalesAdicionales(d.legalesAdicionales ?? [])
+    setLegalesSeparados(d.legalesSeparados ?? false)
+    setFirmaInstitucional(d.firmaInstitucional ?? null)
+    setIndicadores(d.indicadores ?? [])
+    setPiezaAbierta({ id: fila.id, ownerId: fila.user_id })
+    setShowMisPiezas(false)
+  }
+
+  // La lista de listarMisPiezas() NO trae `data` (evita bajar el jsonb
+  // completo de cada pieza solo para mostrar nombre+fecha en la
+  // lista) — al abrir una fila puntual, se pide el registro completo
+  // recién en ese momento.
+  async function abrirPiezaGuardada(fila) {
+    const { data: filaCompleta, error } = await supabase
+      .from('piezas_borradores').select('id, user_id, nombre, data').eq('id', fila.id).single()
+    if (error) { showError('No se pudo abrir la pieza: ' + error.message); return }
+    cargarPiezaGuardada(filaCompleta)
+  }
+
+  // Trae la lista de piezas guardadas — RLS decide el alcance: el
+  // dueño ve las propias, super_admin ve las de todo el equipo (ver
+  // migración piezas_borradores). El embed `profiles:user_id(full_name)`
+  // solo importa cuando hay filas de otra persona (super_admin) — para
+  // el caso normal (solo las propias) es información redundante pero
+  // inofensiva.
+  async function listarMisPiezas() {
+    setCargandoMisPiezas(true)
+    const { data, error } = await supabase
+      .from('piezas_borradores')
+      .select('id, nombre, updated_at, user_id, profiles:user_id(full_name)')
+      .order('updated_at', { ascending: false })
+    if (error) showError('No se pudieron cargar tus piezas guardadas: ' + error.message)
+    setMisPiezas(data ?? [])
+    setCargandoMisPiezas(false)
+  }
+
+  function abrirMisPiezas() {
+    setShowMisPiezas(true)
+    listarMisPiezas()
+  }
+
+  // Guarda la pieza actual en la nube. `comoNueva` fuerza un INSERT
+  // (fork) incluso si ya había una pieza abierta — usado por "Guardar
+  // como copia". Sin `comoNueva`: UPDATE si la pieza abierta es propia,
+  // INSERT si nunca se guardó o si es de otra persona (ver comentario
+  // de piezaAbierta más arriba).
+  async function guardarPieza({ comoNueva = false } = {}) {
+    if (!user) return
+    setGuardando(true)
+    const data = construirBorrador()
+    const esActualizacionPropia = !comoNueva && piezaAbierta && piezaAbierta.ownerId === user.id
+    if (esActualizacionPropia) {
+      const { error } = await supabase
+        .from('piezas_borradores')
+        .update({ nombre, data })
+        .eq('id', piezaAbierta.id)
+      if (error) showError('No se pudo guardar: ' + error.message)
+      else showSuccess('Pieza actualizada')
+    } else {
+      const { data: fila, error } = await supabase
+        .from('piezas_borradores')
+        .insert({ user_id: user.id, nombre, data })
+        .select('id')
+        .single()
+      // El error más común acá es el límite de piezas guardadas (ver
+      // trigger piezas_borradores_limitar) — su mensaje ya viene
+      // redactado para mostrarse tal cual al usuario, no como un error
+      // técnico genérico de Postgres.
+      if (error) showError(error.message)
+      else { setPiezaAbierta({ id: fila.id, ownerId: user.id }); showSuccess('Pieza guardada') }
+    }
+    setGuardando(false)
+  }
+
+  // Duplicar desde la lista — crea una copia PROPIA de cualquier fila
+  // visible (incluida una de otra persona, si sos super_admin) sin
+  // tocar lo que se está editando en este momento en el canvas. Útil
+  // para partir de una pieza ya armada como plantilla, o para
+  // "adueñarse" de una copia de algo que armó un compañero.
+  async function duplicarPiezaGuardada(fila) {
+    if (!user) return
+    // Trae el `data` completo — el listado de la tabla no lo incluye
+    // (evita bajar de más al solo mostrar la lista).
+    const { data: filaCompleta, error: errorGet } = await supabase
+      .from('piezas_borradores').select('nombre, data').eq('id', fila.id).single()
+    if (errorGet) { showError('No se pudo duplicar: ' + errorGet.message); return }
+    const { error } = await supabase
+      .from('piezas_borradores')
+      .insert({ user_id: user.id, nombre: filaCompleta.nombre, data: filaCompleta.data })
+    if (error) showError(error.message)
+    else { showSuccess('Pieza duplicada'); listarMisPiezas() }
+  }
+
+  function pedirEliminarPiezaGuardada(fila) {
+    setPiezaAEliminar(fila)
+  }
+  async function confirmarEliminarPiezaGuardada() {
+    if (!piezaAEliminar) return
+    const { error } = await supabase.from('piezas_borradores').delete().eq('id', piezaAEliminar.id)
+    if (error) {
+      showError('No se pudo eliminar: ' + error.message)
+    } else {
+      showSuccess('Pieza eliminada')
+      // Si la que se borró era la que está abierta ahora mismo,
+      // desengancharla — de lo contrario "Guardar" seguiría apuntando
+      // a un id que ya no existe.
+      if (piezaAbierta?.id === piezaAEliminar.id) setPiezaAbierta(null)
+      listarMisPiezas()
+    }
+    setPiezaAEliminar(null)
   }
 
   function crearInstancia(bloque) {
@@ -1486,6 +1893,32 @@ export default function EditorPiezas() {
   function eliminarBloque(instanceId) {
     setCanvas(prev => prev.filter(b => b.instanceId !== instanceId))
     if (selectedId === instanceId) setSelectedId(null)
+  }
+
+  // Duplicar un bloque ya editado — sin esto, repetir un bloque que ya
+  // se personalizó (texto reescrito, imagen cambiada, o un bloque de
+  // código con estilos custom) obligaba a rearmarlo entero desde cero
+  // arrastrando el template otra vez. Se copian TODOS los campos del
+  // bloque (no solo htmlEditado): un bloque de código lleva también
+  // estilosDesktop/estilosMobile propios (ver actualizarEstilosBloque),
+  // y sin copiarlos la duplicada perdería sus estilos custom. El nuevo
+  // instanceId usa timestamp+random (mismo patrón que crearInstancia en
+  // importar.js) — Date.now() solo puede colisionar si se duplica dos
+  // veces en el mismo milisegundo, el random es la red de seguridad
+  // para ese caso límite.
+  function duplicarBloque(instanceId) {
+    const idx = canvas.findIndex(b => b.instanceId === instanceId)
+    if (idx === -1) return
+    const original = canvas[idx]
+    const copia = { ...original, instanceId: `${original.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
+    setCanvas(prev => {
+      const i = prev.findIndex(b => b.instanceId === instanceId)
+      if (i === -1) return prev
+      const arr = [...prev]
+      arr.splice(i + 1, 0, copia)
+      return arr
+    })
+    setSelectedId(copia.instanceId)
   }
 
   function actualizarBloque(instanceId, htmlEditado) {
@@ -1652,8 +2085,11 @@ export default function EditorPiezas() {
   function actualizarIndicador(id, campo, val) { setIndicadores(p => p.map(i => i.id === id ? { ...i, [campo]: val } : i)) }
   function eliminarIndicador(id) { setIndicadores(p => p.filter(i => i.id !== id)) }
 
-  function exportar() {
-    const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })
+  function generarHtmlActual() {
+    return generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })
+  }
+
+  function descargarHtml(html) {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
     const slug = nombre.replace(/[ñÑ]/g, m => m === 'ñ' ? 'n' : 'N').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 80) || 'pieza'
     const url = URL.createObjectURL(blob)
@@ -1662,13 +2098,54 @@ export default function EditorPiezas() {
     URL.revokeObjectURL(url)
   }
 
+  async function copiarHtmlAlPortapapeles(html) {
+    try {
+      await navigator.clipboard.writeText(html)
+      setCopiado(true)
+      showSuccess('HTML copiado al portapapeles')
+      setTimeout(() => setCopiado(false), 2000)
+    } catch {
+      // navigator.clipboard.writeText puede fallar por permisos
+      // denegados, contexto no seguro, o (en Safari) porque el click
+      // ya no cuenta como "gesto de usuario" reciente si hubo un
+      // await largo antes. Antes esto fallaba en silencio: el botón
+      // no cambiaba a "Copiado" pero tampoco avisaba nada, así que el
+      // usuario creía que sí se copió y pegaba HTML viejo o vacío en
+      // la plataforma de envío real. Fallback: exportar.download
+      // sigue funcionando siempre (no depende de la Clipboard API),
+      // así que el aviso lo sugiere como alternativa inmediata.
+      showError('No se pudo copiar al portapapeles. Probá exportar el HTML y adjuntarlo, o revisá los permisos del navegador.')
+    }
+  }
+
+  // Chequeo previo a exportar/copiar — busca fragmentos de HTML
+  // pegados como texto visible (ver DetectarFragmentoHtmlCrudoEnTexto
+  // y el aviso en vivo del RichEditor). No es bloqueante a propósito:
+  // puede haber falsos positivos (un legal que legítimamente necesite
+  // mostrar algo parecido), así que se avisa y se deja decidir, en vez
+  // de impedir la exportación. avisoFragmentoPendiente guarda la
+  // acción concreta a ejecutar si el usuario confirma "de todos modos".
+  const [avisoFragmentoPendiente, setAvisoFragmentoPendiente] = useState(null) // { problemas, html, tipo: 'descargar'|'copiar' } | null
+  function exportar() {
+    const html = generarHtmlActual()
+    const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
+    if (problemas.length > 0) { setAvisoFragmentoPendiente({ problemas, html, tipo: 'descargar' }); return }
+    descargarHtml(html)
+  }
+
   const [copiado, setCopiado] = useState(false)
   async function copiar() {
-    const html = generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })
-    await navigator.clipboard.writeText(html)
-    setCopiado(true)
-    showSuccess('HTML copiado al portapapeles')
-    setTimeout(() => setCopiado(false), 2000)
+    const html = generarHtmlActual()
+    const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
+    if (problemas.length > 0) { setAvisoFragmentoPendiente({ problemas, html, tipo: 'copiar' }); return }
+    await copiarHtmlAlPortapapeles(html)
+  }
+
+  function confirmarExportarConFragmentos() {
+    if (!avisoFragmentoPendiente) return
+    if (avisoFragmentoPendiente.tipo === 'descargar') descargarHtml(avisoFragmentoPendiente.html)
+    else copiarHtmlAlPortapapeles(avisoFragmentoPendiente.html)
+    setAvisoFragmentoPendiente(null)
   }
 
   const [showConfirmReinicio, setShowConfirmReinicio] = useState(false)
@@ -1971,6 +2448,25 @@ export default function EditorPiezas() {
     cerrarModalImportar()
   }
 
+  // Cerrar con Escape — mismo criterio que ConfirmModal (Escape actúa
+  // como el botón de cierre/cancelar, nunca como confirmar). Antes
+  // estos dos modales solo se podían cerrar con click en la X o en el
+  // fondo oscuro; Escape no hacía nada, inconsistente con el patrón
+  // que ya tenía el resto de la app. Se cierra el que esté abierto en
+  // ESE momento — si por algún motivo llegaran a coexistir (no debería
+  // pasar hoy, cada uno se abre desde una acción distinta), Preview se
+  // prioriza por ser el más externo visualmente.
+  useEffect(() => {
+    if (!showPreview && !showImportar) return
+    function onKeyDown(e) {
+      if (e.key !== 'Escape') return
+      if (showPreview) setShowPreview(false)
+      else if (showImportar) cerrarModalImportar()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showPreview, showImportar])
+
   const selectedBloque = canvas.find(b => b.instanceId === selectedId)
   const redesDetectadas = bandaHeader ? detectarRedesSociales(bandaHeader.html) : []
 
@@ -2010,15 +2506,27 @@ export default function EditorPiezas() {
         selectedBloque={selectedBloque}
         nuevaPieza={nuevaPieza}
         agregarAlCanvas={agregarAlCanvas} agregarEspaciadorDespues={agregarEspaciadorDespues}
+        duplicarBloque={duplicarBloque}
         htmlEspaciadorConAlto={htmlEspaciadorConAlto}
-        agregarCodigo={agregarCodigo} eliminarBloque={eliminarBloque}
+        agregarCodigo={agregarCodigo} eliminarBloque={eliminarBloqueConDeshacer}
+        bloqueEliminado={bloqueEliminado} deshacerEliminarBloque={deshacerEliminarBloque} setBloqueEliminado={setBloqueEliminado}
         actualizarBloque={actualizarBloque} actualizarEstilosBloque={actualizarEstilosBloque}
         swapBloque={swapBloque} moverBloque={moverBloque}
         showPreview={showPreview} setShowPreview={setShowPreview}
         previewModo={previewModo} setPreviewModo={setPreviewModo}
         previewSrcdoc={previewSrcdoc}
         copiar={copiar} copiado={copiado} exportar={exportar}
-        imgPrincipal={imgPrincipal} setImgPrincipal={setImgPrincipal}
+        avisoFragmentoPendiente={avisoFragmentoPendiente} setAvisoFragmentoPendiente={setAvisoFragmentoPendiente}
+        confirmarExportarConFragmentos={confirmarExportarConFragmentos}
+        userId={user?.id}
+        piezaAbierta={piezaAbierta} guardando={guardando} guardarPieza={guardarPieza}
+        showMisPiezas={showMisPiezas} abrirMisPiezas={abrirMisPiezas} setShowMisPiezas={setShowMisPiezas}
+        misPiezas={misPiezas} cargandoMisPiezas={cargandoMisPiezas}
+        abrirPiezaGuardada={abrirPiezaGuardada} duplicarPiezaGuardada={duplicarPiezaGuardada}
+        pedirEliminarPiezaGuardada={pedirEliminarPiezaGuardada}
+        piezaAEliminar={piezaAEliminar} setPiezaAEliminar={setPiezaAEliminar}
+        confirmarEliminarPiezaGuardada={confirmarEliminarPiezaGuardada}
+        imgPrincipal={imgPrincipal} setImgPrincipal={setImgPrincipal} onImgPrincipalSrcBlur={onImgPrincipalSrcBlur}
         imgFooter={imgFooter} setImgFooter={setImgFooter}
         legalesAdicionales={legalesAdicionales} agregarLegalAdicional={agregarLegalAdicional}
         actualizarLegalAdicional={actualizarLegalAdicional} eliminarLegalAdicional={eliminarLegalAdicional}
@@ -2087,17 +2595,24 @@ export default function EditorPiezas() {
         <div className="ep-canvas-header-flex" />
 
         <div className="ep-canvas-actions">
+          <button className="ep-btn ep-btn-ghost" onClick={abrirMisPiezas} title="Ver piezas guardadas"><FolderOpen size={14} /> Mis piezas</button>
           <button className="ep-btn ep-btn-ghost" onClick={() => setShowImportar(true)} title="Importar pieza desde HTML o link"><Link2 size={14} /> Importar</button>
           <button className="ep-btn ep-btn-ghost" onClick={() => setShowPreview(true)}><Eye size={14} /> Vista previa</button>
 
           {/* Exportar — split button: el botón principal descarga
               directo (acción más usada), la flecha abre el resto de
-              las formas de exportación (copiar al portapapeles). */}
+              las formas de "sacar" la pieza — copiar al portapapeles,
+              y ahora también guardarla en la nube (Mis piezas). Antes
+              Guardar tenía su propio split-button aparte, pero
+              conceptualmente es lo mismo tipo de acción que ya vive
+              acá (formas de llevarte el trabajo hecho), así que
+              consolidarlo en un solo menú es más simple que dos
+              botones parecidos uno al lado del otro. */}
           <MenuDesplegable
             trigger={(toggle) => (
               <div className="ep-split-btn">
                 <button className="ep-btn ep-btn-primary ep-split-btn-main" onClick={exportar}><Download size={14} /> Exportar HTML</button>
-                <button className="ep-btn ep-btn-primary ep-split-btn-toggle" onClick={toggle} title="Más opciones de exportación"><ChevronDown size={13} /></button>
+                <button className="ep-btn ep-btn-primary ep-split-btn-toggle" onClick={toggle} title="Más opciones de exportación y guardado"><ChevronDown size={13} /></button>
               </div>
             )}>
             {(cerrar) => (
@@ -2105,6 +2620,11 @@ export default function EditorPiezas() {
                 <div className="ep-menu-titulo">Exportación</div>
                 <button className="ep-menu-item" onClick={() => { exportar(); cerrar() }}><Download size={14} /> Descargar .html</button>
                 <button className="ep-menu-item" onClick={() => { copiar(); cerrar() }}>{copiado ? <ClipboardCheck size={14} /> : <Copy size={14} />} {copiado ? 'Copiado' : 'Copiar HTML al portapapeles'}</button>
+                <div className="ep-menu-titulo">Guardado en la nube</div>
+                <button className="ep-menu-item" onClick={() => { guardarPieza({ comoNueva: false }); cerrar() }} disabled={guardando}>
+                  {guardando ? <Loader2 size={14} className="ep-spin" /> : <Save size={14} />} {piezaAbierta?.ownerId === user?.id ? 'Guardar' : 'Guardar en la nube'}
+                </button>
+                <button className="ep-menu-item" onClick={() => { guardarPieza({ comoNueva: true }); cerrar() }} disabled={guardando}><Copy size={14} /> Guardar como copia nueva</button>
               </>
             )}
           </MenuDesplegable>
@@ -2313,7 +2833,8 @@ export default function EditorPiezas() {
               <div className="ep-zona-toggle-body">
                 <label className="ep-img-label">URL (600px de ancho)</label>
                 <input className="ep-img-input" autoComplete="off" placeholder="https://cdn.ejemplo.com/imagen.png"
-                  value={imgPrincipal.src} onChange={e => setImgPrincipal(p => ({ ...p, src: e.target.value }))} />
+                  value={imgPrincipal.src} onChange={e => setImgPrincipal(p => ({ ...p, src: e.target.value }))}
+                  onBlur={e => onImgPrincipalSrcBlur(e.target.value)} />
                 <label className="ep-img-label" style={{ marginTop: 4 }}>Alt</label>
                 <input className="ep-img-input" autoComplete="off" placeholder="Texto alternativo"
                   value={imgPrincipal.alt} onChange={e => setImgPrincipal(p => ({ ...p, alt: e.target.value }))} />
@@ -2333,7 +2854,7 @@ export default function EditorPiezas() {
                     {confirmando.imgPrincipal ? <Loader2 size={14} className="ep-spin" /> : <Check size={14} />}
                     {confirmando.imgPrincipal ? 'Confirmando…' : 'Confirmar imagen'}
                   </button>
-                  <button className="ep-btn ep-btn-ghost" style={{ flex: 0 }} onClick={() => setImgPrincipal({ activo: true, src: '', alt: '', title: '', link: '' })} title="Reiniciar">
+                  <button className="ep-btn ep-btn-ghost" style={{ flex: 0 }} onClick={() => setImgPrincipal({ activo: true, src: '', alt: '', title: '', link: '', alto: 425 })} title="Reiniciar">
                     <RotateCcw size={13} />
                   </button>
                 </div>
@@ -2374,8 +2895,12 @@ export default function EditorPiezas() {
                         <Plus size={11} />
                       </button>
                     )}
+                    <button className="ep-canvas-bloque-duplicar" title="Duplicar bloque"
+                      onClick={e => { e.stopPropagation(); duplicarBloque(bloque.instanceId) }}>
+                      <Copy size={12} />
+                    </button>
                     <button className="ep-canvas-bloque-del"
-                      onClick={e => { e.stopPropagation(); eliminarBloque(bloque.instanceId) }} title="Eliminar">
+                      onClick={e => { e.stopPropagation(); eliminarBloqueConDeshacer(bloque.instanceId) }} title="Eliminar">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -2860,6 +3385,54 @@ export default function EditorPiezas() {
         onConfirm={() => { nuevaPieza(); setShowConfirmReinicio(false) }}
         onCancel={() => setShowConfirmReinicio(false)}
       />
+
+      {/* Chequeo previo a exportar/copiar — ver DetectarFragmentoHtmlCrudoEnTexto.
+          No bloquea: el usuario puede seguir si el aviso es un falso
+          positivo (un legal que legítimamente mencione algo similar). */}
+      <ConfirmModal
+        open={!!avisoFragmentoPendiente}
+        variant="warning"
+        title="Posible HTML pegado como texto"
+        message={mensajeAvisoFragmentos(avisoFragmentoPendiente)}
+        confirmLabel={avisoFragmentoPendiente?.tipo === 'copiar' ? 'Copiar igual' : 'Exportar igual'}
+        cancelLabel="Cancelar, quiero revisar"
+        onConfirm={confirmarExportarConFragmentos}
+        onCancel={() => setAvisoFragmentoPendiente(null)}
+      />
+
+      <ModalMisPiezas
+        open={showMisPiezas}
+        piezas={misPiezas}
+        cargando={cargandoMisPiezas}
+        userId={user?.id}
+        onCerrar={() => setShowMisPiezas(false)}
+        onAbrir={abrirPiezaGuardada}
+        onDuplicar={duplicarPiezaGuardada}
+        onEliminar={pedirEliminarPiezaGuardada}
+      />
+
+      <ConfirmModal
+        open={!!piezaAEliminar}
+        variant="danger"
+        title="¿Eliminar esta pieza guardada?"
+        message={`Se va a eliminar "${piezaAEliminar?.nombre}" de forma permanente. Esta acción no se puede deshacer.`}
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Cancelar"
+        onConfirm={confirmarEliminarPiezaGuardada}
+        onCancel={() => setPiezaAEliminar(null)}
+      />
+
+      {/* Toast de deshacer — propio del editor, no el feedback global
+          de NotificacionesContext (ese no soporta un botón de acción).
+          Se cierra solo a los 5s (mismo timer que ya vació
+          bloqueEliminado), o al click en Deshacer/X. */}
+      {bloqueEliminado && (
+        <div className="ep-deshacer-toast">
+          <span className="ep-deshacer-toast-texto">Bloque eliminado — <strong>{bloqueEliminado.bloque.nombre}</strong></span>
+          <button className="ep-deshacer-toast-btn" onClick={deshacerEliminarBloque}><RotateCcw size={13} /> Deshacer</button>
+          <button className="ep-deshacer-toast-cerrar" onClick={() => setBloqueEliminado(null)} title="Descartar"><X size={13} /></button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2888,12 +3461,20 @@ function EditorMobile(props) {
     redesOrden, redesDetectadas, toggleRedActiva, reordenarPillRed,
     canvas, setSelectedId, selectedBloque,
     nuevaPieza,
-    agregarAlCanvas, agregarEspaciadorDespues, agregarCodigo, eliminarBloque,
+    agregarAlCanvas, agregarEspaciadorDespues, agregarCodigo, eliminarBloque, duplicarBloque,
+    bloqueEliminado, deshacerEliminarBloque, setBloqueEliminado,
     htmlEspaciadorConAlto,
     actualizarBloque, actualizarEstilosBloque, swapBloque, moverBloque,
     showPreview, setShowPreview, previewModo, setPreviewModo, previewSrcdoc,
     copiar, copiado, exportar,
-    imgPrincipal, setImgPrincipal, imgFooter, setImgFooter,
+    avisoFragmentoPendiente, setAvisoFragmentoPendiente, confirmarExportarConFragmentos,
+    userId,
+    piezaAbierta, guardando, guardarPieza,
+    showMisPiezas, abrirMisPiezas, setShowMisPiezas,
+    misPiezas, cargandoMisPiezas,
+    abrirPiezaGuardada, duplicarPiezaGuardada, pedirEliminarPiezaGuardada,
+    piezaAEliminar, setPiezaAEliminar, confirmarEliminarPiezaGuardada,
+    imgPrincipal, setImgPrincipal, onImgPrincipalSrcBlur, imgFooter, setImgFooter,
     legalesAdicionales, agregarLegalAdicional, actualizarLegalAdicional, eliminarLegalAdicional,
     legalesSeparados, setLegalesSeparados,
     firmaInstitucional, toggleFirmaInstitucional, actualizarFirmaInstitucional,
@@ -3089,7 +3670,7 @@ function EditorMobile(props) {
               {imgPrincipal.activo && (
                 <>
                   {imgPrincipal.src && <img src={imgPrincipal.src} alt="" className="ep-m-img-preview" />}
-                  <input className="ep-m-input" placeholder="URL de la imagen" value={imgPrincipal.src} onChange={e => patch(setImgPrincipal, 'src', e.target.value)} />
+                  <input className="ep-m-input" placeholder="URL de la imagen" value={imgPrincipal.src} onChange={e => patch(setImgPrincipal, 'src', e.target.value)} onBlur={e => onImgPrincipalSrcBlur(e.target.value)} />
                   <input className="ep-m-input" placeholder="Alt" value={imgPrincipal.alt} onChange={e => patch(setImgPrincipal, 'alt', e.target.value)} />
                   <input className="ep-m-input" placeholder="Title" value={imgPrincipal.title} onChange={e => patch(setImgPrincipal, 'title', e.target.value)} />
                   <input className="ep-m-input" placeholder="Link (opcional)" value={imgPrincipal.link} onChange={e => patch(setImgPrincipal, 'link', e.target.value)} />
@@ -3121,6 +3702,7 @@ function EditorMobile(props) {
               {!reorderMode && (
                 <div className="ep-m-card-actions">
                   <button onClick={() => agregarEspaciadorDespues(bloque.instanceId)} title="Agregar espaciador"><Plus size={15} /></button>
+                  <button onClick={() => duplicarBloque(bloque.instanceId)} title="Duplicar bloque"><Copy size={15} /></button>
                   <button onClick={() => eliminarBloque(bloque.instanceId)} title="Eliminar"><Trash2 size={15} /></button>
                 </div>
               )}
@@ -3445,6 +4027,13 @@ function EditorMobile(props) {
           <div className="ep-m-sheet" onClick={e => e.stopPropagation()}>
             <div className="ep-m-sheet-handle" />
             <button className="ep-m-menu-item" onClick={() => { setShowPreview(true); setScreen('canvas') }}><Eye size={17} /> Vista previa</button>
+            <button className="ep-m-menu-item" onClick={() => { abrirMisPiezas(); setScreen('canvas') }}><FolderOpen size={17} /> Mis piezas</button>
+            <button className="ep-m-menu-item" onClick={() => { guardarPieza({ comoNueva: false }); setScreen('canvas') }} disabled={guardando}>
+              {guardando ? <Loader2 size={17} className="ep-spin" /> : <Save size={17} />} {piezaAbierta?.ownerId === userId ? 'Guardar' : 'Guardar en la nube'}
+            </button>
+            <button className="ep-m-menu-item" onClick={() => { guardarPieza({ comoNueva: true }); setScreen('canvas') }} disabled={guardando}>
+              <Copy size={17} /> Guardar como copia nueva
+            </button>
             <button className="ep-m-menu-item" onClick={() => { copiar(); }}>
               {copiado ? <ClipboardCheck size={17} /> : <Copy size={17} />} {copiado ? '¡Copiado!' : 'Copiar HTML'}
             </button>
@@ -3455,6 +4044,28 @@ function EditorMobile(props) {
         </div>
       )}
 
+      <ModalMisPiezas
+        open={showMisPiezas}
+        piezas={misPiezas}
+        cargando={cargandoMisPiezas}
+        userId={userId}
+        onCerrar={() => setShowMisPiezas(false)}
+        onAbrir={abrirPiezaGuardada}
+        onDuplicar={duplicarPiezaGuardada}
+        onEliminar={pedirEliminarPiezaGuardada}
+      />
+
+      <ConfirmModal
+        open={!!piezaAEliminar}
+        variant="danger"
+        title="¿Eliminar esta pieza guardada?"
+        message={`Se va a eliminar "${piezaAEliminar?.nombre}" de forma permanente. Esta acción no se puede deshacer.`}
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Cancelar"
+        onConfirm={confirmarEliminarPiezaGuardada}
+        onCancel={() => setPiezaAEliminar(null)}
+      />
+
       <ConfirmModal
         open={showConfirmReinicioM}
         variant="warning"
@@ -3464,6 +4075,17 @@ function EditorMobile(props) {
         cancelLabel="Cancelar"
         onConfirm={() => { nuevaPieza(); setShowConfirmReinicioM(false) }}
         onCancel={() => setShowConfirmReinicioM(false)}
+      />
+
+      <ConfirmModal
+        open={!!avisoFragmentoPendiente}
+        variant="warning"
+        title="Posible HTML pegado como texto"
+        message={mensajeAvisoFragmentos(avisoFragmentoPendiente)}
+        confirmLabel={avisoFragmentoPendiente?.tipo === 'copiar' ? 'Copiar igual' : 'Exportar igual'}
+        cancelLabel="Cancelar, quiero revisar"
+        onConfirm={confirmarExportarConFragmentos}
+        onCancel={() => setAvisoFragmentoPendiente(null)}
       />
 
       {/* ═══════════ Pantalla: VISTA PREVIA ═══════════ */}
@@ -3637,6 +4259,14 @@ function EditorMobile(props) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {bloqueEliminado && (
+        <div className="ep-deshacer-toast ep-m-deshacer-toast">
+          <span className="ep-deshacer-toast-texto">Bloque eliminado — <strong>{bloqueEliminado.bloque.nombre}</strong></span>
+          <button className="ep-deshacer-toast-btn" onClick={deshacerEliminarBloque}><RotateCcw size={13} /> Deshacer</button>
+          <button className="ep-deshacer-toast-cerrar" onClick={() => setBloqueEliminado(null)} title="Descartar"><X size={13} /></button>
         </div>
       )}
 

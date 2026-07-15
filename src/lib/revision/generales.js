@@ -657,6 +657,131 @@ export function ValidarPesoHTML(htmlString) {
   }
 }
 
+// Detecta fragmentos de HTML "roto" pegados como TEXTO VISIBLE en un
+// campo editable (legal, bullet, texto de bloque, etc.) — típico
+// accidente: alguien copia el outerHTML de un <a> desde el inspector
+// del navegador (o de otra fuente) y lo pega en un campo de texto en
+// vez de en el código fuente de un bloque. El RichEditor SIEMPRE
+// inserta lo pegado como texto plano (nunca lo interpreta como HTML
+// real — ver onPaste en EditorPiezas.jsx), así que el < / > literal
+// que traía ese fragmento queda escapado a &lt; / &gt; al serializar
+// — la pieza exportada NO se rompe estructuralmente por esto
+// (confirmado: tablas balanceadas, se puede reimportar sin problema),
+// pero el destinatario del mail ve ese fragmento crudo como texto
+// ilegible en pantalla.
+//
+// Señal usada: un &lt;/&gt; ESCAPADO (evidencia de que alguien tipeó o
+// pegó un < / > literal como texto — algo que casi nunca ocurre en
+// legales/textos reales, salvo alguna comparación numérica suelta
+// tipo "tasa > 5%") que aparece cerca de al menos un par
+// atributo="valor" (href=, style=, target=, src=, class=, data-*,
+// alt=, title=, width=, height=).
+//
+// Bug real encontrado (pieza real de ICBC/UCEMA, agosto 2026): un
+// <img alt="&gt;"> legítimo — el diseñador describe en el alt el
+// carácter ">" de un ícono de bullet tipo flecha, algo perfectamente
+// válido — disparaba un falso positivo, porque los OTROS atributos
+// Detecta fragmentos de HTML "roto" pegados como TEXTO VISIBLE en un
+// campo editable (legal, bullet, texto de bloque, etc.) — típico
+// accidente: alguien copia el outerHTML de un <a> desde el inspector
+// del navegador (o de otra fuente) y lo pega en un campo de texto en
+// vez de en el código fuente de un bloque. El RichEditor SIEMPRE
+// inserta lo pegado como texto plano (nunca lo interpreta como HTML
+// real — ver onPaste en EditorPiezas.jsx), así que si el fragmento
+// pegado incluía el `>` de cierre del tag, ese carácter queda escapado
+// a &gt; al serializar — la pieza exportada NO se rompe
+// estructuralmente por esto (confirmado: tablas balanceadas, se puede
+// reimportar sin problema), pero el destinatario del mail ve ese
+// fragmento crudo como texto ilegible en pantalla.
+//
+// Dos señales independientes (cualquiera de las dos alcanza):
+//
+// SEÑAL A — un &lt;/&gt; ESCAPADO (evidencia de que alguien tipeó o
+// pegó un < / > literal como texto) cerca de al menos un par
+// atributo="valor". Cubre el caso donde el fragmento SÍ incluye el
+// cierre del tag.
+//
+// SEÑAL B — 2 o más pares atributo="valor" (href=, style=, target=,
+// data-*, etc.) en el MISMO segmento de texto visible, sin necesidad
+// de ningún < / > cerca. Bug real reportado: un fragmento cortado
+// ANTES del cierre del tag (ej. "...target=\"_blank\"" sin el `>`
+// final) nunca genera ninguna entidad escapada — no hay ningún < / >
+// de por medio para que el navegador escape — así que la Señal A sola
+// no alcanza. En contenido visible real (legales, bullets, textos de
+// marketing) nadie escribe dos o más pares "atributo=\"valor\""
+// seguidos como prosa — es indicio sólido de un tag real cortado, con
+// o sin su `>` final.
+//
+// Ambas señales corren SOLO sobre segmentos de TEXTO (el contenido
+// que hay ENTRE tags reales), nunca dentro de un segmento de TAG
+// (adentro de un <...> real, con sus atributos) — separar esto es lo
+// que evita el falso positivo real ya encontrado: un <img alt="&gt;">
+// legítimo (describe el carácter ">" de un ícono de flecha) tiene esa
+// entidad DENTRO del atributo de un tag real, rodeada de los OTROS
+// atributos de ESE MISMO tag (src=, style=, width=...) — sin esta
+// separación, cualquiera de las dos señales dispararía ahí también,
+// aunque nunca hubo texto pegado de por medio.
+export function DetectarFragmentoHtmlCrudoEnTexto(htmlString) {
+  const problemas = []
+  const REGEX_ATRIBUTO = /\b(?:href|style|target|src|class|alt|title|width|height|data-[\w-]+)\s*=\s*"[^"]*"/i
+  const REGEX_ATRIBUTO_GLOBAL = /\b(?:href|style|target|src|class|alt|title|width|height|data-[\w-]+)\s*=\s*"[^"]*"/gi
+  const regexEntidad = /&(?:lt|gt);/gi
+  const clavesYaReportadas = new Set()
+
+  function agregar(posicionAbsoluta, ventana) {
+    // Agrupar hallazgos cercanos (ej. un mismo tag con < y > ambos
+    // escapados, o la Señal A y B disparando sobre el mismo
+    // fragmento) en un solo aviso, en vez de uno por cada match.
+    const clave = Math.floor(posicionAbsoluta / 200)
+    if (clavesYaReportadas.has(clave)) return
+    clavesYaReportadas.add(clave)
+    // snippet aparte del detalle: lo usa la UI (aviso en vivo del
+    // RichEditor y el modal previo a exportar/copiar) para mostrar
+    // EXACTAMENTE el fragmento sospechoso, y así sea fácil de
+    // ubicar en el campo real en vez de tener que adivinar cuál es.
+    const snippet = ventana.replace(/\s+/g, ' ').trim().slice(-260)
+    problemas.push({
+      detalle: `Posible fragmento de HTML pegado como texto visible (no como código): "…${snippet}"`,
+      snippet,
+    })
+  }
+
+  const regexTag = /<[^>]*>/g
+  const segmentosDeTexto = []
+  let ultimoFin = 0
+  let mTag
+  while ((mTag = regexTag.exec(htmlString)) !== null) {
+    segmentosDeTexto.push({ texto: htmlString.slice(ultimoFin, mTag.index), offset: ultimoFin })
+    ultimoFin = mTag.index + mTag[0].length
+  }
+  segmentosDeTexto.push({ texto: htmlString.slice(ultimoFin), offset: ultimoFin })
+
+  segmentosDeTexto.forEach(({ texto, offset }) => {
+    // Señal A
+    const regexEntidadLocal = new RegExp(regexEntidad.source, regexEntidad.flags)
+    let m
+    while ((m = regexEntidadLocal.exec(texto)) !== null) {
+      const inicioVentana = Math.max(0, m.index - 220)
+      const finVentana = Math.min(texto.length, m.index + 80)
+      const ventana = texto.slice(inicioVentana, finVentana)
+      if (REGEX_ATRIBUTO.test(ventana)) agregar(offset + m.index, ventana)
+    }
+
+    // Señal B
+    const matchesAtributo = [...texto.matchAll(REGEX_ATRIBUTO_GLOBAL)]
+    if (matchesAtributo.length >= 2) {
+      const primero = matchesAtributo[0]
+      const ultimo = matchesAtributo[matchesAtributo.length - 1]
+      const inicioVentana = Math.max(0, primero.index - 40)
+      const finVentana = Math.min(texto.length, ultimo.index + ultimo[0].length + 40)
+      const ventana = texto.slice(inicioVentana, finVentana)
+      agregar(offset + primero.index, ventana)
+    }
+  })
+
+  return problemas
+}
+
 export function ValidarEstructurasObsoletas(doc) {
   // Detecta el patrón de layout de dos columnas con <div inline-block>
   // que era la técnica vieja antes de la estructura class="top"/"bottom"

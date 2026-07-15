@@ -195,8 +195,15 @@ export function importarDesdeHtml(html) {
         alt: imgPrincipalBloque.match(/\salt="([^"]*)"/)?.[1] ?? '',
         title: imgPrincipalBloque.match(/\stitle="([^"]*)"/)?.[1] ?? '',
         link: imgPrincipalBloque.match(/<a\s+href="([^"]*)"/)?.[1] ?? '',
+        // Alto real de la imagen tal como quedó exportado (ver
+        // generarExport/alturaImgPrincipal) — sin esto, reimportar una
+        // pieza con Imagen principal en una proporción distinta a
+        // 425px la hacía volver a 425 y perdía el alto real medido.
+        // Fallback a 425 por si el HTML viene de una versión vieja
+        // del editor sin el atributo height explícito.
+        alto: parseInt(imgPrincipalBloque.match(/<img[^>]*\sheight="(\d+)"/)?.[1] ?? '425', 10),
       }
-    : { activo: false, src: '', alt: '', title: '', link: '' }
+    : { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
 
   const imgFooterBloque = html.match(/<!--IMG_FOOTER-->([\s\S]*?)<!--\/IMG_FOOTER-->/)?.[1] ?? ''
   const imgFooterSrc = imgFooterBloque.match(/<img[^>]*\ssrc="([^"]*)"/)?.[1] ?? ''
@@ -1864,7 +1871,7 @@ export function importarHeuristico(html) {
   // que por casualidad apareciera dentro de un bloque más adelante.
   const htmlAntesDeContenido = html.slice(0, tabla.inicioTag)
   const imgPrincipalMatch = htmlAntesDeContenido.match(/<img\b[^>]*\bwidth="600"[^>]*\bheight="425"[^>]*>|<img\b[^>]*\bheight="425"[^>]*\bwidth="600"[^>]*>/)
-  let imgPrincipal = { activo: false, src: '', alt: '', title: '', link: '' }
+  let imgPrincipal = { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
   if (imgPrincipalMatch) {
     const tag = imgPrincipalMatch[0]
     const src = tag.match(/\ssrc="([^"]*)"/)?.[1] ?? ''
@@ -1880,6 +1887,14 @@ export function importarHeuristico(html) {
         alt: tag.match(/\salt="([^"]*)"/)?.[1] ?? '',
         title: tag.match(/\stitle="([^"]*)"/)?.[1] ?? '',
         link: linkMatch?.[1] ?? '',
+        // El regex de arriba SOLO matchea height="425" a propósito —
+        // es la convención fija de la plataforma externa que se está
+        // heurísticamente reconociendo acá, no tiene relación con el
+        // alto real medido que ahora calcula el editor propio (ver
+        // onImgPrincipalSrcBlur/alturaImgPrincipal en
+        // EditorPiezas.jsx/exportar.js). Por eso queda fijo en 425,
+        // igual que siempre.
+        alto: 425,
       }
     } else {
       avisos.push({ texto: 'Se detectó una imagen principal pero no se pudo leer su URL — revisala manualmente.', tipo: 'general', canvasIdx: null })
