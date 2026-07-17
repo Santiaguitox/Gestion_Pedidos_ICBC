@@ -11,12 +11,17 @@ import { descargarPiezaIndividual, descargarTodasLasPiezas } from '@/lib/descarg
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 function CopyAllBtn({ entregables }) {
+  const { showError } = useNotificaciones()
   const [copied, setCopied] = useState(false)
-  function handleCopy() {
+  async function handleCopy() {
     const texto = entregables.filter(e => e.nombre_pieza)
       .map(e => e.link_online ? `${e.nombre_pieza} || ${e.link_online}` : e.nombre_pieza).join('\n')
-    navigator.clipboard.writeText(texto)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(texto)
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    } catch {
+      showError('No se pudo copiar al portapapeles')
+    }
   }
   return (
     <button onClick={handleCopy} className="entregables-copy-all"

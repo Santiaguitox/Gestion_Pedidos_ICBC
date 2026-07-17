@@ -2445,6 +2445,35 @@ select:focus {
 }
 .det-btn-sheet:hover { filter: brightness(0.96); }
 
+/* ── Pedido ya registrado en Sheet ──
+   Mismo criterio visual que .det-btn-sheet (verde, mismo tamaño) pero es
+   un estado, no una acción — el "Volver a registrar" es secundario y
+   deliberadamente menos prominente, para no invitar a tocarlo por error
+   y duplicar la fila en la planilla oficial. */
+.det-sheet-registrado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--green-border);
+  background: var(--green-bg);
+  color: var(--green-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.det-sheet-reregistrar {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.25rem;
+  font: 500 0.75rem/1 var(--font-body);
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.det-sheet-reregistrar:hover { color: var(--text-secondary); }
+
 /* ─── Grid principal: herramientas + riel de info (solo desktop) ──────────── */
 .det-grid {
   display: grid;
@@ -7202,4 +7231,14 @@ select:focus {
 .coment-error {
   display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
   padding: 4px 0;
+}
+
+/* ── Error de carga del detalle de pedido ──
+   Mismo criterio que .coment-error: mensaje honesto + Reintentar en vez
+   de un estado ambiguo. Se distingue de "Pedido no encontrado" (0 filas
+   reales) porque acá no sabemos si el pedido existe o no. */
+
+.pedido-detalle-error {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 40px 0; text-align: center; color: var(--text-secondary);
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { registrarActividad } from '@/hooks/useActividad'
+import { logActividad } from '@/hooks/useActividad'
 import { ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
 
 // Los toggles se acumulan localmente y se commitea UN solo UPDATE con el
@@ -19,8 +19,9 @@ export function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }
   const [pendientes, setPendientes] = useState(null)
   const ref = useRef(null)
   const timerRef = useRef(null)
-  const pendRef = useRef(null)        // espejo de `pendientes` para leer en callbacks
-  const anterioresRef = useRef(null)  // estados originales al iniciar el batch
+  const pendRef = useRef(null)        // espejo de `pendientes` — solo para el preview optimista
+  const anterioresRef = useRef(null)  // estados originales al iniciar el batch (para el log de actividad)
+  const togglesRef = useRef(null)     // secuencia CRUDA de estados tocados, en orden — lo que se manda a la RPC
   const commitRef = useRef(() => {})  // versión fresca de commit para listeners/cleanup
 
   const estadosActivos = pendientes ?? pedido.estados ?? []
@@ -28,31 +29,49 @@ export function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }
 
   async function commit() {
     clearTimeout(timerRef.current)
-    const nuevos = pendRef.current
-    if (!nuevos) return
+    const nuevosLocal = pendRef.current
+    const toggles = togglesRef.current
+    if (!nuevosLocal || !toggles?.length) return
     const anteriores = anterioresRef.current ?? []
     pendRef.current = null
     anterioresRef.current = null
+    togglesRef.current = null
 
-    // Si el resultado final es el mismo set de estados que el original
-    // (ej: activó y desactivó lo mismo), no hay nada que persistir.
+    // Si el preview local neto es igual al original (ej: activó y
+    // desactivó lo mismo dentro del batch), no hay nada que mandar a la
+    // base — optimización pura, no afecta la corrección: aunque el
+    // snapshot local esté viejo, un batch que localmente cancela contra
+    // sí mismo cancela igual al aplicarse contra cualquier estado real.
     const setAnterior = [...anteriores].sort().join('|')
-    const setNuevo = [...nuevos].sort().join('|')
-    if (setAnterior === setNuevo) {
+    const setNuevoLocal = [...nuevosLocal].sort().join('|')
+    if (setAnterior === setNuevoLocal) {
       setPendientes(null)
       return
     }
 
-    const { data, error } = await supabase.from('pedidos')
-      .update({ estados: nuevos }).eq('id', id).select('id')
-    if (error || !data?.length) {
-      // La base no cambió: se revierte el estado visual local para que
-      // la UI no mienta, y no se registra actividad de algo que no pasó.
+    // La RPC hace el replay de los toggles CONTRA EL VALOR VIGENTE en la
+    // base (row lockeado con FOR UPDATE, todo en una transacción) — no
+    // contra este snapshot local, que puede tener minutos de antigüedad
+    // (el detalle no tiene realtime). Así se elimina la carrera de raíz:
+    // no importa qué tan vieja esté la pantalla, no hay forma de pisar
+    // el cambio de otra persona.
+    const { data, error } = await supabase.rpc('aplicar_toggles_estado_pedido', {
+      p_pedido_id: id,
+      p_toggles: toggles,
+    })
+    if (error || !data) {
+      // La base no cambió: se revierte el preview local para que la UI
+      // no mienta, y no se registra actividad de algo que no pasó.
       setPendientes(null)
       showError('No se pudo actualizar el estado del pedido')
       return
     }
-    await registrarActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos })
+
+    const nuevos = data.estados ?? []
+    const setNuevoReal = [...nuevos].sort().join('|')
+    if (setAnterior !== setNuevoReal) {
+      await logActividad(id, user?.id, TIPO_ACTIVIDAD.CAMBIO_ESTADO, { anteriores, nuevos })
+    }
     setPendientes(null)
     onUpdate()
   }
@@ -87,6 +106,8 @@ export function EstadoPopover({ pedido, id, role, user, onUpdate, estados = [] }
     // Al primer toggle del batch, guardar el estado original para el
     // registro de actividad ({ anteriores, nuevos }).
     if (pendRef.current == null) anterioresRef.current = [...(pedido.estados ?? [])]
+    if (togglesRef.current == null) togglesRef.current = []
+    togglesRef.current.push(valor)
 
     const base = pendRef.current ?? pedido.estados ?? []
     let nuevos

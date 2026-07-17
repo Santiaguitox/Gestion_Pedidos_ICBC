@@ -40,6 +40,12 @@ export default function PedidoDetalle() {
   const isMobile = useIsMobile()
   const [pedido, setPedido] = useState(null)
   const [loading, setLoading] = useState(true)
+  // notFound: el pedido no existe (o fue borrado y las policies lo
+  // ocultan) — 0 filas real, no un fallo. fetchError: la carga falló
+  // por otro motivo (red, permisos, etc.) y no sabemos si el pedido
+  // existe o no.
+  const [notFound, setNotFound] = useState(false)
+  const [fetchError, setFetchError] = useState(null)
   const [editando, setEditando] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [usuarios, setUsuarios] = useState([])
@@ -109,14 +115,20 @@ export default function PedidoDetalle() {
     // sin traerlo, el avatar del popup caía siempre al color fallback y
     // la misma persona se veía con un color en el popup y otro en su
     // comentario del hilo (donde el join de profiles sí lo trae).
-    supabase.from('profiles').select('id, full_name, area_equipo, role, avatar_color').order('full_name').then(({ data }) => {
+    supabase.from('profiles').select('id, full_name, area_equipo, role, avatar_color').order('full_name').then(({ data, error }) => {
+      if (error) {
+        // Selector de asignables vacío en silencio era peor que avisar:
+        // sin esta lista no se puede asignar gente a subtareas nuevas.
+        showError('No se pudo cargar la lista de usuarios')
+        return
+      }
       setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER))
       setUsuariosConArea(data ?? [])
     })
-  }, [])
+  }, [showError])
 
   const queryPedido = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pedidos')
       // avatar_color: agregado para que los avatares de "Asignados" usen
       // el color real configurado por cada usuario, igual criterio que
@@ -125,20 +137,50 @@ export default function PedidoDetalle() {
       // color de fallback.
       .select('*, pedido_asignados(user_id, profiles(id,full_name,avatar_color)), subtareas(*, profiles:asignado_a(id,full_name,avatar_color)), entregable(*), pedido_base(*)')
       .eq('id', id).single()
-    return data
+    if (error) {
+      // PGRST116 = 0 filas: el id no existe (o fue borrado y la policy
+      // se lo oculta a este rol) — es un "no encontrado" genuino, no
+      // un fallo. Cualquier otro código es un error real (red, etc.)
+      // y no debe disfrazarse de "no encontrado".
+      if (error.code === 'PGRST116') return { data: null, notFound: true }
+      throw error
+    }
+    return { data, notFound: false }
   }, [id])
 
   // Wrapper con setState, usado por los handlers de abajo y pasado como
-  // prop onUpdate a componentes hijos (EstadoPopover, etc.).
-  async function fetchPedido() {
-    const data = await queryPedido()
-    setPedido(data)
-    setLoading(false)
-  }
+  // prop onUpdate a componentes hijos (EstadoPopover, etc.). Si el
+  // refetch falla, se conserva el `pedido` que ya estaba en pantalla en
+  // vez de tirarlo — la mutación que disparó este refetch ya puede
+  // haber tenido éxito en la base, y romper la página entera por un
+  // fallo del refresco sería peor que mostrar el dato desactualizado.
+  const fetchPedido = useCallback(async () => {
+    try {
+      const { data, notFound: nf } = await queryPedido()
+      setPedido(data)
+      setNotFound(nf)
+      setFetchError(null)
+    } catch (err) {
+      setFetchError(err)
+      showError('No se pudo actualizar el pedido — revisá tu conexión')
+    } finally {
+      setLoading(false)
+    }
+  }, [queryPedido, showError])
 
   useEffect(() => {
-    queryPedido().then(data => { setPedido(data); setLoading(false) })
-  }, [queryPedido])
+    queryPedido()
+      .then(({ data, notFound: nf }) => {
+        setPedido(data)
+        setNotFound(nf)
+        setFetchError(null)
+      })
+      .catch(err => {
+        setFetchError(err)
+        showError('No se pudo cargar el pedido — revisá tu conexión')
+      })
+      .finally(() => setLoading(false))
+  }, [queryPedido, showError])
 
   async function handleEdit(data) {
     try {
@@ -216,8 +258,10 @@ export default function PedidoDetalle() {
   }
 
   async function handleRegistrarSheet(filas) {
+    let filasOk = 0
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Tu sesión expiró, recargá la página')
       // 'filas' es un array — 1 elemento en el caso normal (mismo día
       // para todo el pedido), o varios si se cargaron grupos con
       // días/horarios distintos por pieza. Se escribe una fila al
@@ -235,9 +279,27 @@ export default function PedidoDetalle() {
           })
         })
         const result = await res.json()
-        if (!res.ok) throw new Error(result.error ?? 'Error al registrar en Sheet')
+        // Si falla a mitad de un pedido multi-fila, las filas anteriores
+        // YA quedaron escritas en el Sheet — el mensaje tiene que decir
+        // cuántas, para que no se reintente todo desde cero y se
+        // dupliquen. No se puede "seguir desde la que falló" en este
+        // mismo intento porque el modal ya cerró su formulario; queda
+        // para una futura mejora, por ahora se informa con precisión.
+        if (!res.ok) throw new Error(`${result.error ?? 'Error al registrar en Sheet'}${filasOk > 0 ? ` — ${filasOk} de ${filas.length} filas ya habían quedado registradas, no las reintentes` : ''}`)
+        filasOk++
       }
+
+      const { error: errorPedido } = await supabase.from('pedidos')
+        .update({ registrado_sheet: true, registrado_sheet_at: new Date().toISOString() }).eq('id', id)
+      // El Sheet ya se escribió: si esto falla el registro externo es
+      // válido, pero el pedido quedaría sin la marca y el botón activo
+      // otra vez — se avisa para que no lo re-registren pensando que
+      // falló todo (mismo criterio que ya usa handleRegistrarDiseno en
+      // SubtareasTimeline para las subtareas).
+      if (errorPedido) throw new Error('Se registró en el Sheet, pero no se pudo marcar el pedido como registrado — no vuelvas a registrarlo sin revisar la planilla primero')
+
       setShowSheet(false)
+      fetchPedido()
       setSuccessMsg(filas.length > 1
         ? `El pedido fue registrado en Google Sheets correctamente (${filas.length} filas).`
         : 'El pedido fue registrado en Google Sheets correctamente.')
@@ -249,7 +311,13 @@ export default function PedidoDetalle() {
   useDocumentTitle(pedido ? `Pedido: ${pedido.asunto}` : 'Pedido')
 
   if (loading) return <div className="loading-text">Cargando…</div>
-  if (!pedido) return <div className="loading-text">Pedido no encontrado.</div>
+  if (fetchError && !pedido) return (
+    <div className="pedido-detalle-error">
+      <p>No se pudo cargar el pedido. Revisá tu conexión.</p>
+      <button type="button" className="coment-btn-cancelar" onClick={fetchPedido}>Reintentar</button>
+    </div>
+  )
+  if (notFound || !pedido) return <div className="loading-text">Pedido no encontrado.</div>
 
   const prio = PRIORIDADES.find(p => p.value === pedido.prioridad)
   const tipo = tipos.find(t => t.value === pedido.tipo)
@@ -324,9 +392,25 @@ export default function PedidoDetalle() {
           }
           <EstadoPopover pedido={pedido} id={id} role={role} user={user} onUpdate={fetchPedido} estados={estados} />
           {mostrarRegistrarSheet && (
-            <button onClick={() => setShowSheet(true)} className="det-btn-sheet">
-              <FileSpreadsheet size={16} />Registrar pedido en Sheet
-            </button>
+            pedido.registrado_sheet ? (
+              <div className="det-sheet-registrado">
+                <FileSpreadsheet size={14} />Registrado en Sheet
+                {pedido.registrado_sheet_at && ` · ${format(new Date(pedido.registrado_sheet_at), "d MMM HH:mm", { locale: es })}`}
+                <button type="button" onClick={() => setConfirm({
+                  title: 'Volver a registrar en Sheet',
+                  message: 'Este pedido ya está marcado como registrado. Si lo registrás de nuevo, se agregará OTRA fila en la planilla oficial — hacelo solo si estás seguro de que la vez anterior no quedó bien.',
+                  confirmLabel: 'Registrar de nuevo',
+                  variant: 'warning',
+                  onConfirm: () => { setConfirm(null); setShowSheet(true) }
+                })} className="det-sheet-reregistrar">
+                  Volver a registrar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowSheet(true)} className="det-btn-sheet">
+                <FileSpreadsheet size={16} />Registrar pedido en Sheet
+              </button>
+            )
           )}
         </div>
       </div>

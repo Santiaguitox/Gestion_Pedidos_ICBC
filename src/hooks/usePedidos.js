@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { registrarActividad } from '@/hooks/useActividad'
+import { logActividad } from '@/hooks/useActividad'
 import { TIPO_ACTIVIDAD } from '@/lib/constants'
 
 function limpiarCampos(data) {
@@ -23,15 +23,6 @@ function limpiarCampos(data) {
   // pedidos_updated_at, no el cliente.
   delete limpio.updated_at
   return limpio
-}
-
-// Wrapper silencioso para registrarActividad — nunca rompe el flujo principal
-async function logActividad(...args) {
-  try {
-    await registrarActividad(...args)
-  } catch (err) {
-    console.warn('[actividad]', err)
-  }
 }
 
 const PAGINA_SIZE_DEFAULT = 30

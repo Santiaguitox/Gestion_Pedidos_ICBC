@@ -42,6 +42,7 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
   async function handleRegistrarDiseno(data, subtarea) {
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Tu sesión expiró, recargá la página')
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/escribir-sheet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },

@@ -10,6 +10,7 @@ import { format } from 'date-fns'
 import { colorAvatar, iniciales } from '@/lib/avatares'
 import { peorRevisionDePedido, peorBaseDePedido } from '@/lib/severidad'
 import { es } from 'date-fns/locale'
+import { useNotificaciones } from '@/context/NotificacionesContext'
 
 function AvatarAsignado({ asignado }) {
   const nombre = asignado.profiles?.full_name ?? ''
@@ -75,10 +76,20 @@ function PillBaseCompacto({ pedidoBase, entregables, onClick }) {
 }
 
 export function CopyBtn({ text }) {
+  const { showError } = useNotificaciones()
   const [copied, setCopied] = useState(false)
+  async function handleCopy(e) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    } catch {
+      showError('No se pudo copiar al portapapeles')
+    }
+  }
   return (
     <button
-      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+      onClick={handleCopy}
       title="Copiar"
       className={`copy-btn ${copied ? 'copy-btn-copied' : ''}`}
     >
@@ -88,16 +99,21 @@ export function CopyBtn({ text }) {
 }
 
 function CopyAllBtnInline({ entregables }) {
+  const { showError } = useNotificaciones()
   const [copied, setCopied] = useState(false)
-  function handleCopy(e) {
+  async function handleCopy(e) {
     e.stopPropagation()
     const texto = entregables
       .filter(e => e.nombre_pieza)
       .map(e => e.link_online ? `${e.nombre_pieza} || ${e.link_online}` : e.nombre_pieza)
       .join('\n')
-    navigator.clipboard.writeText(texto)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(texto)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      showError('No se pudo copiar al portapapeles')
+    }
   }
   return (
     <button onClick={handleCopy} className={`copy-all-btn ${copied ? 'copy-all-btn-copied' : ''}`}>

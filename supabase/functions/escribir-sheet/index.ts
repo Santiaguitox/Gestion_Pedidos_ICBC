@@ -66,6 +66,15 @@ async function getGoogleAccessToken(serviceAccountJson: string): Promise<string>
     body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
   })
 
+  if (!tokenRes.ok) {
+    // Sin este chequeo, un JWT rechazado por Google (reloj desincronizado,
+    // key rotada, etc.) devuelve tokenData sin access_token y el error
+    // real se pierde: recién explota más abajo en appendRow con un 401
+    // confuso que no dice que el problema fue obtener el token.
+    const err = await tokenRes.text()
+    throw new Error(`No se pudo obtener el access token de Google: ${err}`)
+  }
+
   const tokenData = await tokenRes.json()
   return tokenData.access_token
 }
@@ -163,6 +172,25 @@ async function pintarFila(accessToken: string, sheetId: number, updatedRange: st
   }
 }
 
+// Caracteres que Google Sheets interpreta como inicio de fórmula cuando
+// valueInputOption=USER_ENTERED. Un valor tipeado por un usuario (ej. en
+// "aclaraciones" o el nombre de campaña) que arranque con alguno de estos
+// se ejecuta como fórmula en la planilla oficial — más probable que sea
+// un accidente que un ataque en un equipo interno, pero la planilla es
+// el registro formal y no debería depender de qué tipeó cada usuario.
+const CARACTERES_FORMULA = ['=', '+', '-', '@']
+
+// Prefija con ' (comilla simple) todo string que empiece con uno de esos
+// caracteres — Sheets lo toma como texto literal y no evalúa nada. Los
+// campos de fecha/hora que sí necesitan que USER_ENTERED los parsee no
+// arrancan con estos caracteres, así que no se ven afectados. Valores
+// no-string (ej. cantidad_envios) se devuelven sin tocar.
+function sanearValorFormula(valor: unknown): unknown {
+  if (typeof valor !== 'string' || valor.length === 0) return valor
+  if (CARACTERES_FORMULA.includes(valor[0])) return `'${valor}`
+  return valor
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -214,7 +242,8 @@ serve(async (req) => {
     }
 
     const accessToken = await getGoogleAccessToken(serviceAccountJson)
-    const appendResult = await appendRow(accessToken, hojaTarget, data)
+    const dataSaneada = data.map(sanearValorFormula)
+    const appendResult = await appendRow(accessToken, hojaTarget, dataSaneada)
 
     // SIEMPRE se fija un color de fondo explícito en la fila recién
     // escrita (blanco en el caso normal, #ff9900 si fueraDeHora) —
