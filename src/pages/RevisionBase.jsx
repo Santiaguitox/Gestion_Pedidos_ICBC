@@ -46,7 +46,13 @@ const TONE_STYLES = {
 function downloadBlob(content, originalFileName, suffix) {
   const ext = originalFileName.split('.').pop()
   const baseName = originalFileName.replace(/\.[^/.]+$/, '')
-  const blob = new Blob([content], { type: 'text/plain;charset=windows-1252' })
+  // Un Blob armado desde un string siempre se codifica como UTF-8 sin
+  // importar qué charset declare `type` — declarar windows-1252 sobre
+  // esos bytes era una etiqueta falsa que rompía acentos en Excel al
+  // abrir el archivo. El BOM permite que Excel detecte UTF-8 sin
+  // ambigüedad en vez de asumir la codepage del sistema (mismo fix
+  // aplicado en RevisionEnvios.jsx, revisión 2026-07-19).
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = `${baseName}_${suffix}.${ext}`

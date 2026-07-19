@@ -151,6 +151,15 @@ export default function RevisionEnvios() {
   const [previewHtml, setPreviewHtml] = useState('')
   const previewIframeRef = useRef(null)
 
+  // Guard de request vigente: handleAnalizar/handleDetectarCampos son
+  // async y tardan (fetch + animación ~1.5s) — sin esto, si el usuario
+  // aprieta "Reiniciar" mientras uno está en vuelo, el resultado viejo
+  // "reaparecía" sobre el formulario ya vacío al resolver la promesa.
+  // Cada llamada toma un número propio al arrancar; si al resolver ese
+  // número ya no es el vigente (porque se reinició o se disparó otro
+  // análisis en el medio), la respuesta se descarta en silencio.
+  const requestIdRef = useRef(0)
+
   const avisosHeader = headerRaw.trim() ? validateCsvHeaders(headerRaw) : []
 
   async function cargarArchivo(file) {
@@ -171,6 +180,11 @@ export default function RevisionEnvios() {
   }
 
   function handleReiniciar() {
+    // Invalida cualquier análisis en vuelo — ver requestIdRef más
+    // arriba. También corta el estado "cargando" de una: si no había
+    // ningún request en curso esto es un no-op inofensivo.
+    requestIdRef.current++
+    setCargando(false); setProgreso(0)
     setHtml(''); setUrl(''); setUrlError(''); setHeaderRaw(''); setMuestra(null)
     setNombreArchivo(''); setError(''); setResultado(null)
     setCamposResultado(null); setValoresCampos({}); setEmailsTest([''])
@@ -211,14 +225,17 @@ export default function RevisionEnvios() {
     if (!inputValido) { setError(modo === 'html' ? 'Falta el HTML del mail.' : 'Falta la URL de la pieza.'); return }
     if (!validarUrlPieza()) return
 
+    const miRequestId = ++requestIdRef.current
     setUrlError(''); setError(''); setCargando(true); setResultado(null); setProgreso(0)
     try {
       const htmlAAnalizar = await obtenerHtmlAAnalizar()
+      if (requestIdRef.current !== miRequestId) return // se reinició o se disparó otro en el medio
       setResultado(compararCampos(headerRaw, htmlAAnalizar))
     } catch (err) {
+      if (requestIdRef.current !== miRequestId) return
       setError(err.message || 'No se pudo completar el análisis.')
     }
-    setCargando(false)
+    if (requestIdRef.current === miRequestId) setCargando(false)
   }
 
   // Detecta los campos <*Campo*> de la pieza y prepara el formulario
@@ -230,9 +247,11 @@ export default function RevisionEnvios() {
     if (!inputValido) { setError(modo === 'html' ? 'Falta el HTML del mail.' : 'Falta la URL de la pieza.'); return }
     if (!validarUrlPieza()) return
 
+    const miRequestId = ++requestIdRef.current
     setUrlError(''); setError(''); setCargando(true); setCamposResultado(null); setProgreso(0)
     try {
       const htmlAAnalizar = await obtenerHtmlAAnalizar()
+      if (requestIdRef.current !== miRequestId) return // se reinició o se disparó otro en el medio
       setHtmlDetectado(htmlAAnalizar)
       const todosLosCampos = [...extractFields(htmlAAnalizar)]
       // El campo Email, si la pieza lo usa como merge tag, no se pide
@@ -254,9 +273,10 @@ export default function RevisionEnvios() {
         return nuevo
       })
     } catch (err) {
+      if (requestIdRef.current !== miRequestId) return
       setError(err.message || 'No se pudo completar la detección.')
     }
-    setCargando(false)
+    if (requestIdRef.current === miRequestId) setCargando(false)
   }
 
   function actualizarValorCampo(campo, valor) {
@@ -284,7 +304,14 @@ export default function RevisionEnvios() {
     if (!camposResultado) return
     const csv = generarCsvBaseTest(camposResultado.campos, valoresCampos, emailsTest)
     const nombre = nombreBaseGenerada()
-    const blob = new Blob([csv], { type: 'text/plain;charset=windows-1252' })
+    // Un Blob armado a partir de un string SIEMPRE se codifica como
+    // UTF-8, sin importar qué charset declare `type` — declarar
+    // windows-1252 sobre esos bytes es una etiqueta falsa, no una
+    // conversión real. Con campos como <*Dirección*> o <*Teléfono*>
+    // (nombres con tilde) eso rompía los acentos al abrir en Excel. El
+    // BOM al inicio es lo que le permite a Excel detectar UTF-8 sin
+    // ambigüedad en vez de asumir la codepage del sistema.
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = nombre

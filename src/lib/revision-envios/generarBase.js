@@ -50,6 +50,22 @@ export function valoresPorDefecto(campos) {
   return obj
 }
 
+// Escapa un valor para una celda CSV (RFC 4180): si contiene el
+// separador, comillas dobles o un salto de línea, hay que envolverlo
+// en comillas dobles y duplicar cualquier comilla interna. Sin esto,
+// un valor de prueba como "Av. Corrientes; CABA" (con el separador
+// adentro) corre las columnas de todas las filas siguientes sin
+// ningún aviso — exactamente lo que esta base de test existe para
+// evitar. Aplica tanto a los nombres de columna como a los valores,
+// ya que un campo detectado en el HTML también podría traer el
+// separador en su nombre.
+export function escaparValorCsv(valor, sep) {
+  const str = String(valor ?? '')
+  const necesitaComillas = str.includes(sep) || str.includes('"') || str.includes('\n') || str.includes('\r')
+  if (!necesitaComillas) return str
+  return `"${str.replace(/"/g, '""')}"`
+}
+
 // Arma el CSV final: Email + un campo por columna, una fila por cada
 // email de test cargado. Los valores de los campos son los mismos en
 // todas las filas a propósito — la variación entre filas es solo el
@@ -59,9 +75,9 @@ export function valoresPorDefecto(campos) {
 // convención para bases de contacto.
 export function generarCsvBaseTest(campos, valores, emails, sep = ';') {
   const emailsLimpios = emails.map(e => e.trim()).filter(Boolean)
-  const header = ['Email', ...campos].join(sep)
+  const header = ['Email', ...campos].map(c => escaparValorCsv(c, sep)).join(sep)
   const filas = emailsLimpios.map(email =>
-    [email, ...campos.map(c => valores[c] ?? '')].join(sep)
+    [email, ...campos.map(c => valores[c] ?? '')].map(v => escaparValorCsv(v, sep)).join(sep)
   )
   return [header, ...filas].join('\n')
 }
