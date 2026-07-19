@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { X, Plus, Trash2 } from 'lucide-react'
@@ -163,11 +163,20 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
     ? horariosUnico.filter(esHorarioCompleto).length
     : grupos.filter(g => g.piezaIds.length > 0).reduce((acc, g) => acc + g.horarios.filter(esHorarioCompleto).length, 0)
 
-  useEffect(() => {
+  // Ajuste durante el render (mismo patrón que usePedidos.js para
+  // prevFiltrosKey): en vez de un useEffect que llama setState en su
+  // cuerpo (dispara un render en cascada), se compara contra el valor
+  // del render anterior y se ajusta ahí mismo — React re-corre el
+  // render con el estado nuevo antes de pintar. cantidad_envios se
+  // recalcula solo cuando totalEnviosConfigurados cambia; si el
+  // usuario lo edita a mano sin tocar día/horario, ese valor manual no
+  // se pisa (ver comentario de arriba).
+  const [prevTotalEnvios, setPrevTotalEnvios] = useState(totalEnviosConfigurados)
+  if (prevTotalEnvios !== totalEnviosConfigurados) {
+    setPrevTotalEnvios(totalEnviosConfigurados)
     set('cantidad_envios', String(totalEnviosConfigurados))
     if (totalEnviosConfigurados > 0) setErrorSinFilas(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalEnviosConfigurados])
+  }
 
   function actualizarGrupo(id, nuevo) {
     setGrupos(gs => gs.map(g => g.id === id ? nuevo : g))

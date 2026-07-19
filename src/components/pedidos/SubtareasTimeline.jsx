@@ -7,7 +7,7 @@ import { Plus, Trash2, Check, FileSpreadsheet } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usuariosConArea, onToggle, onEliminar, onAgregar, pedido, showError }) {
+export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usuariosConArea, onToggle, onEliminar, onAgregar, onRegistrado, pedido, showError }) {
   const [descripcion, setDescripcion] = useState('')
   const [asignadoA, setAsignadoA] = useState('')
   const [sheetDiseno, setSheetDiseno] = useState(null)
@@ -59,6 +59,12 @@ export function SubtareasTimeline({ subtareas, canWrite, canEdit, usuarios, usua
       // válido, pero la pieza quedaría sin la marca y el botón activo —
       // se avisa para que no lo re-registren pensando que falló todo.
       if (errorSubtarea) throw new Error('Se registró en el Sheet, pero no se pudo marcar la subtarea como registrada — no vuelvas a registrarla')
+      // Sin esto, subtareas={subtareas} sigue siendo el array viejo (la
+      // marca solo cambió en la base, no en memoria) y el badge
+      // "Registrado en Sheet" no aparecía hasta la próxima acción que
+      // disparara un fetchPedido — mismo bug que ya se había arreglado
+      // a nivel pedido en handleRegistrarSheet.
+      onRegistrado?.()
       setSheetDiseno(null)
       setSuccessMsg('La tarea de diseño fue registrada en Google Sheets.')
     } catch (err) {

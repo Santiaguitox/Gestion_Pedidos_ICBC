@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PedidosList from '@/components/pedidos/PedidosList'
 import PedidoForm from '@/components/pedidos/PedidoForm'
-import { usePedidos } from '@/hooks/usePedidos'
+import { usePedidosMutations } from '@/hooks/usePedidosMutations'
 
 export default function Pedidos() {
   useDocumentTitle('Pedidos')
@@ -11,7 +11,7 @@ export default function Pedidos() {
   const location = useLocation()
   const navigate = useNavigate()
   const [showForm, setShowForm] = useState(false)
-  const { crearPedido } = usePedidos()
+  const { crearPedido } = usePedidosMutations()
 
   // ─── Abrir el form desde afuera (acción "Nuevo pedido" del Ctrl+K) ──
   // El buscador navega acá con state.abrirNuevo. Se detecta con el

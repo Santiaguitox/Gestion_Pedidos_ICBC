@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { supabase } from '@/lib/supabase'
-import { usePedidos } from '@/hooks/usePedidos'
+import { usePedidosMutations } from '@/hooks/usePedidosMutations'
 import { useAuth } from '@/context/AuthContext'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -36,7 +36,7 @@ export default function PedidoDetalle() {
   const backLabel = backTo === '/' ? 'Dashboard' : backTo === '/calendario' ? 'Calendario' : backTo === '/notificaciones' ? 'Notificaciones' : backTo === '/estadisticas' ? 'Estadísticas' : 'Pedidos'
   const { role, user } = useAuth()
   const { showError } = useNotificaciones()
-  const { actualizarPedido, eliminarPedido } = usePedidos()
+  const { actualizarPedido, eliminarPedido } = usePedidosMutations()
   const isMobile = useIsMobile()
   const [pedido, setPedido] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -154,12 +154,20 @@ export default function PedidoDetalle() {
   // vez de tirarlo — la mutación que disparó este refetch ya puede
   // haber tenido éxito en la base, y romper la página entera por un
   // fallo del refresco sería peor que mostrar el dato desactualizado.
+  // Se incrementa en cada fetchPedido exitoso (mount incluido) y se le
+  // pasa a PedidoHistorial como dependencia de su efecto — así el
+  // historial se refresca solo después de cualquier acción de la
+  // sesión (subtareas, estados, aprobaciones, edición…) en vez de
+  // quedar viejo hasta recargar la página entera.
+  const [historialVersion, setHistorialVersion] = useState(0)
+
   const fetchPedido = useCallback(async () => {
     try {
       const { data, notFound: nf } = await queryPedido()
       setPedido(data)
       setNotFound(nf)
       setFetchError(null)
+      setHistorialVersion(v => v + 1)
     } catch (err) {
       setFetchError(err)
       showError('No se pudo actualizar el pedido — revisá tu conexión')
@@ -174,6 +182,7 @@ export default function PedidoDetalle() {
         setPedido(data)
         setNotFound(nf)
         setFetchError(null)
+        setHistorialVersion(v => v + 1)
       })
       .catch(err => {
         setFetchError(err)
@@ -349,7 +358,15 @@ export default function PedidoDetalle() {
   // 🔧 Si se crea un nuevo estado intermedio que también deba habilitar
   // el registro en Sheet, agregarlo a este array.
   const ESTADOS_CON_SHEET_HABILITADO = ['validando_entregable', 'entregable_aprobado', 'finalizado']
-  const mostrarRegistrarSheet = canEdit && pedido.estados?.some(v => ESTADOS_CON_SHEET_HABILITADO.includes(v))
+  // Separado del "ya está registrado": antes mostrarRegistrarSheet
+  // gateaba TODO el bloque (botón Y badge), así que si el pedido salía
+  // de estos 3 estados después de haberse registrado, el badge
+  // "Registrado en Sheet" desaparecía por completo — aunque
+  // registrado_sheet siguiera en true en la base. El badge ahora se
+  // muestra siempre que esté registrado, sin importar el estado actual;
+  // esta condición de estados solo decide si ofrecer el botón cuando
+  // TODAVÍA no se registró.
+  const puedeRegistrarSheet = pedido.estados?.some(v => ESTADOS_CON_SHEET_HABILITADO.includes(v))
 
   return (
     <div className="det-root">
@@ -391,7 +408,7 @@ export default function PedidoDetalle() {
             : estadosActivos.map(e => <Badge key={e.value} label={e.label} color={e.color} />)
           }
           <EstadoPopover pedido={pedido} id={id} role={role} user={user} onUpdate={fetchPedido} estados={estados} />
-          {mostrarRegistrarSheet && (
+          {canEdit && (
             pedido.registrado_sheet ? (
               <div className="det-sheet-registrado">
                 <FileSpreadsheet size={14} />Registrado en Sheet
@@ -406,11 +423,11 @@ export default function PedidoDetalle() {
                   Volver a registrar
                 </button>
               </div>
-            ) : (
+            ) : puedeRegistrarSheet ? (
               <button onClick={() => setShowSheet(true)} className="det-btn-sheet">
                 <FileSpreadsheet size={16} />Registrar pedido en Sheet
               </button>
-            )
+            ) : null
           )}
         </div>
       </div>
@@ -482,6 +499,7 @@ export default function PedidoDetalle() {
               subtareas={subtareas} canWrite={canWrite} canEdit={canEdit}
               usuarios={usuarios} usuariosConArea={usuariosConArea}
               onToggle={toggleSubtarea} onEliminar={eliminarSubtarea} onAgregar={agregarSubtarea}
+              onRegistrado={fetchPedido}
               pedido={pedido} showError={showError}
             />
           </DetalleAcordeon>
@@ -533,7 +551,7 @@ export default function PedidoDetalle() {
               title="Historial de actividad"
               defaultOpen={false}
             >
-              <PedidoHistorial pedidoId={id} />
+              <PedidoHistorial pedidoId={id} version={historialVersion} />
             </DetalleAcordeon>
           )}
 

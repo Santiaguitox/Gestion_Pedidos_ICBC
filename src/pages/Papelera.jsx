@@ -1,7 +1,7 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { usePedidos } from '@/hooks/usePedidos'
+import { usePedidosMutations } from '@/hooks/usePedidosMutations'
 import { useNotificaciones } from '@/context/NotificacionesContext'
 import { PRIORIDADES } from '@/lib/constants'
 import { useTipos } from '@/hooks/useTipos'
@@ -17,7 +17,7 @@ export default function Papelera() {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const { tipos } = useTipos()
-  const { restaurarPedido, eliminarPedidoDefinitivo } = usePedidos()
+  const { restaurarPedido, eliminarPedidoDefinitivo } = usePedidosMutations()
   // Pedido pendiente de confirmación de borrado definitivo (o null).
   const [confirmDefinitivo, setConfirmDefinitivo] = useState(null)
   const { showSuccess, showError } = useNotificaciones()
