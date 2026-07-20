@@ -57,6 +57,31 @@ export function tituloYDetalleDeAviso(aviso) {
 // marcador de BLOQUE — ahí no es una pieza de este editor, no una
 // pieza con algunos bloques desactualizados, y corresponde el mensaje
 // de "no se pudo leer" en vez de devolver un canvas vacío en silencio.
+// Detecta atributos rotos en un fragmento de HTML y arma los avisos
+// con el formato que consume toda la cadena de UI del import
+// (SugerenciaFixAtributo, aplicarSugerenciaAtributo, el marco ámbar de
+// marcarBloquesNoReconocidosParaPreview vía el filtro por tipo) —
+// compartido por los DOS caminos de importación: importarHeuristico
+// (piezas externas, fila por fila) e importarDesdeHtml (re-import por
+// marcadores de piezas exportadas por este editor). Antes solo lo
+// hacía el heurístico: una pieza exportada con un tag roto sin
+// arreglar, al re-importarse por marcadores, volvía en silencio — sin
+// aviso, sin marco, invisible otra vez en el preview. Los campos
+// tagReconstruido/fragmentoRoto/styleReconstruido solo se completan
+// cuando la reconstrucción es confiable — es lo que decide si la UI
+// muestra el botón "Aplicar este cambio" o solo el aviso informativo.
+function avisosDeAtributosRotos(fragmentoHtml, canvasIdx) {
+  return DetectarAtributosConDosPuntos(fragmentoHtml).map(p => ({
+    texto: p.detalle,
+    tipo: 'atributo-roto',
+    canvasIdx,
+    tagOriginal: p.tagCompleto,
+    tagReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.tagReconstruido : null,
+    fragmentoRoto: p.reconstruccion?.confiable ? p.reconstruccion.fragmentoRoto : null,
+    styleReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.styleReconstruido : null,
+  }))
+}
+
 export function importarDesdeHtml(html) {
   const avisos = []
 
@@ -139,7 +164,21 @@ export function importarDesdeHtml(html) {
     // el original, igual que crearInstancia, para que "Reiniciar
     // campo" siga teniendo a qué volver. Para Imagen_Libre se
     // normaliza además el <img> para garantizar los estilos base.
+    //
+    // Atributos rotos: mismo tratamiento exacto que en
+    // importarHeuristico (ver el comentario grande allá) — se detecta
+    // y avisa SIEMPRE, sobre contenidoNeutro (que es literalmente lo
+    // que se guarda como htmlEditado, así tagOriginal siempre matchea
+    // al aplicar), y solo se fuerza código personalizado si la
+    // clasificación es Imagen_Libre: normalizarImagenLibre reescribe
+    // el <img> entero en silencio y pisaría el tag roto antes de que
+    // el aviso pueda ofrecer nada.
+    const problemasAtributos = avisosDeAtributosRotos(contenidoNeutro, posicionFinal)
+    avisos.push(...problemasAtributos)
     const slugFinal = corregirSlugIcono(slug, contenidoNeutro)
+    if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+      return { id: 'codigo', instanceId: `codigo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: contenidoNeutro, htmlEditado: contenidoNeutro, tipo: 'codigo', slug: 'codigo' }
+    }
     const originalFinal = slugFinal !== slug ? (BLOQUES.find(b => b.slug === slugFinal) || original) : original
     const htmlEditadoFinal = slugFinal === 'Imagen_Libre'
       ? normalizarImagenLibre(contenidoNeutro)
@@ -1654,20 +1693,14 @@ export function importarHeuristico(html) {
     // simples sin necesidad real — bug real reportado por Santi
     // (2026-07-20): un párrafo de texto simple con un atributo roto
     // se importaba como código personalizado en vez de Bloque_Texto_Base.
+    //
+    // Acá adentro la detección se usa SOLO para la decisión de
+    // Imagen_Libre — los avisos se arman al final, en un pase único
+    // sobre el canvas YA revertido de color (ver el comentario junto a
+    // ese pase): el tagOriginal del aviso tiene que matchear byte a
+    // byte el htmlEditado que efectivamente queda guardado, y este
+    // filaHtml todavía no pasó por revertirColorTexto.
     const problemasAtributos = DetectarAtributosConDosPuntos(filaHtml)
-    if (problemasAtributos.length > 0) {
-      problemasAtributos.forEach(p => {
-        avisos.push({
-          texto: p.detalle,
-          tipo: 'atributo-roto',
-          canvasIdx: idx,
-          tagOriginal: p.tagCompleto,
-          tagReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.tagReconstruido : null,
-          fragmentoRoto: p.reconstruccion?.confiable ? p.reconstruccion.fragmentoRoto : null,
-          styleReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.styleReconstruido : null,
-        })
-      })
-    }
 
     // Clasificación estructural directa primero — cubre los casos
     // donde formaDeTags es demasiado pobre para distinguir bien (ver
@@ -1956,6 +1989,22 @@ export function importarHeuristico(html) {
 
   const colorTextoDetectado = TEMAS[tema].colorTexto
   const canvasConColorRevertido = canvas.map(b => ({ ...b, htmlEditado: revertirColorTexto(b.htmlEditado, colorTextoDetectado) }))
+
+  // Avisos de atributos rotos — en un pase único sobre el canvas
+  // FINAL (ya con el color revertido), no fila por fila durante la
+  // clasificación. Motivo: aplicarSugerenciaAtributo reemplaza
+  // tagOriginal dentro del htmlEditado guardado — si la detección
+  // corre sobre filaHtml PRE-revert (como hacía antes) y el tag roto
+  // conserva un "color: <colorDelTema>" válido en su ancla, el
+  // tagOriginal del aviso ya no existe en el bloque post-revert y el
+  // botón de aplicar no encuentra nada que reemplazar. Detectar sobre
+  // lo que efectivamente queda guardado elimina ese desfasaje por
+  // construcción. Bonus: este pase cubre también las filas
+  // fuera-de-rango (que se agregan al canvas después del loop de
+  // clasificación y antes no recibían ninguna detección de atributos).
+  canvasConColorRevertido.forEach((b, idx) => {
+    avisos.push(...avisosDeAtributosRotos(b.htmlEditado ?? b.html ?? '', idx))
+  })
 
   // Imagen principal: sin marcador <!--IMG_PRINCIPAL--> en piezas
   // externas — los comentarios de diseñador que la envuelven varían

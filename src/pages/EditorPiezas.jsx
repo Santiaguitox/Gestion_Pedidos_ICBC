@@ -2259,6 +2259,11 @@ export default function EditorPiezas() {
     if (!pendiente) return
     setImportarResultado(prev => {
       if (!prev?.resultado) return prev
+      // Se marca el aviso como aplicado SOLO si el reemplazo ocurrió
+      // de verdad — antes, si la defensa de abajo salteaba el replace
+      // (tag ya no presente en el bloque), el aviso igual quedaba con
+      // el tilde verde de "Cambio aplicado" con el tag todavía roto.
+      let seAplico = false
       const canvas = prev.resultado.canvas.map((bloque, idx) => {
         if (idx !== pendiente.canvasIdx) return bloque
         const htmlActual = bloque.htmlEditado ?? bloque.html ?? ''
@@ -2273,9 +2278,12 @@ export default function EditorPiezas() {
         // solo aviso que representa a las dos; reemplazar solo la
         // primera dejaba la segunda rota en silencio con el aviso ya
         // marcado como aplicado.
+        seAplico = true
         return { ...bloque, htmlEditado: htmlActual.replaceAll(pendiente.tagOriginal, pendiente.tagReconstruido) }
       })
-      const avisos = (prev.avisos ?? []).map((a, i) => i === pendiente.avisoIndex ? { ...a, aplicado: true } : a)
+      const avisos = seAplico
+        ? (prev.avisos ?? []).map((a, i) => i === pendiente.avisoIndex ? { ...a, aplicado: true } : a)
+        : (prev.avisos ?? [])
       return { ...prev, resultado: { ...prev.resultado, canvas }, avisos }
     })
     setSugerenciaAtributoPendiente(null)

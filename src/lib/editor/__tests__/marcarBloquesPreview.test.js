@@ -117,3 +117,49 @@ describe('marcarBloquesNoReconocidosParaPreview — bloques con atributos rotos 
     expect(resultado).toContain('font-size: 14px;')
   })
 })
+
+// ─── Round trip completo: exportar → re-importar por marcadores ──────────
+// (revisión de ciclo de vida 2026-07-20, 3ra pasada). El camino de
+// re-importación (importarDesdeHtml) no corría NINGUNA detección de
+// atributos rotos: una pieza exportada con un tag roto sin arreglar
+// volvía en silencio — sin aviso, sin marco ámbar, invisible otra vez.
+import { importarDesdeHtml } from '@/lib/editor/importar.js'
+import { generarExport } from '@/lib/editor/exportar.js'
+
+const TAG_ROTO = `<td style="padding-left:=" " 20px;" " font-family:=" " Arial;=" " font-size:=" " 17px;" align="left">Texto de la fila rota</td>`
+const base = {
+  bandaHeader: null, imgPrincipal: { activo: false, src: '' }, imgFooter: { activo: false, src: '' },
+  legalesAdicionales: [], legalesSeparados: false, firmaInstitucional: null, indicadores: [], redesOrden: [],
+}
+
+describe('round trip export → importarDesdeHtml con un tag roto sin arreglar', () => {
+  const filaRota = `<tr>${TAG_ROTO}</tr>`
+  const bloque = { id: 'Bloque_Texto_Base', instanceId: 'x1', slug: 'Bloque_Texto_Base', nombre: 'Texto', tipo: 'texto', html: filaRota, htmlEditado: filaRota }
+  const exportado = generarExport({ ...base, canvas: [bloque] })
+  const reimport = importarDesdeHtml(exportado)
+
+  it('el tag roto sobrevive el export byte a byte dentro de su marcador', () => {
+    expect(exportado).toContain(TAG_ROTO)
+  })
+
+  it('la re-importación detecta el atributo roto con su canvasIdx y tagOriginal matcheando el bloque guardado', () => {
+    const avisosRotos = reimport.avisos.filter(a => a.tipo === 'atributo-roto')
+    expect(avisosRotos).toHaveLength(1)
+    expect(avisosRotos[0].canvasIdx).toBe(0)
+    const bloqueImportado = reimport.resultado.canvas[avisosRotos[0].canvasIdx]
+    // La garantía que hace funcionar el botón "Aplicar": el tag del
+    // aviso existe literal en el htmlEditado guardado.
+    expect(bloqueImportado.htmlEditado).toContain(avisosRotos[0].tagOriginal)
+  })
+})
+
+describe('round trip — Imagen_Libre con img roto no pasa por normalizarImagenLibre', () => {
+  it('se importa como código personalizado para que la normalización no pise el tag roto en silencio', () => {
+    const imgRota = `<tr><td align="center"><img src="https://d343t93odde9ul.cloudfront.net/x.png" display:="" block="" color:="" c4161c="" width="100px" height="100px" alt="" /></td></tr>`
+    const exportado = generarExport({ ...base, canvas: [{ id: 'Imagen_Libre', instanceId: 'x2', slug: 'Imagen_Libre', nombre: 'Imagen', tipo: 'imagen', html: imgRota, htmlEditado: imgRota }] })
+    const reimport = importarDesdeHtml(exportado)
+    expect(reimport.resultado.canvas[0].slug).toBe('codigo')
+    expect(reimport.resultado.canvas[0].htmlEditado).toContain('display:=""')
+    expect(reimport.avisos.some(a => a.tipo === 'atributo-roto')).toBe(true)
+  })
+})
