@@ -7,6 +7,7 @@ import { BLOQUES, BLOQUES_CONTENIDO, BLOQUES_HEADER } from './bloques.js'
 import { formaDeTags, normalizarNegritas, similitudDeForma } from './htmlUtils.js'
 import { detectarRedesSociales } from './redesSociales.js'
 import { revertirColorTexto } from './exportar.js'
+import { DetectarAtributosConDosPuntos } from '@/lib/revision/generales.js'
 
 // ─── Título/detalle visual de un aviso de importación ──────────────────────
 // Cada aviso real solo trae un campo `texto` (una oración completa,
@@ -315,35 +316,88 @@ export function importarDesdeHtml(html) {
 // ningún template, o detectados fuera del área de contenido esperada)
 // — para que el usuario vea de un vistazo QUÉ partes de la pieza
 // importada necesitan revisión, en vez de tener que adivinar leyendo
-// el aviso de texto y comparando contra el preview. Cada bloque
-// marcado lleva un id="preview-bloque-N" (N = idx real en canvas) para
-// que el modal pueda hacer scrollIntoView() directo desde el listado
-// de avisos clickeable. Solo se usa en este preview de importación,
-// nunca en generarExport() real — el HTML final exportado/copiado
-// nunca debe llevar este overlay.
+// el aviso de texto y comparando contra el preview.
+//
+// TODO bloque (sea cual sea su slug) recibe un id="preview-bloque-N"
+// (N = idx real en canvas) para que el modal pueda hacer
+// scrollIntoView() directo desde el listado de avisos clickeable — no
+// solo los "código personalizado". Antes de este fix, un aviso de
+// atributo roto sobre un bloque que clasificó normal (ej.
+// Bloque_Texto_Base, ver el fix de 2026-07-20 que dejó de forzar
+// código personalizado para cualquier atributo roto) no tenía id
+// puesto en ningún lado — el click no encontraba nada. El marco
+// punteado + etiqueta se aplica a slug="codigo" ("No reconocido"/
+// "Fuera de lugar") Y TAMBIÉN a cualquier bloque cuyo idx venga en
+// idxsAtributosRotos ("Atributos rotos", en ámbar) — ver el comentario
+// dentro de la función. Para el resto, el id se agrega sin ningún
+// cambio visual (mismo <tr> tal cual generarExport lo armó, solo con
+// el id puesto).
+//
+// Solo se usa en este preview de importación, nunca en
+// generarExport() real — el HTML final exportado/copiado nunca debe
+// llevar ningún id ni overlay de estos.
 //
 // Funciona en dos pasos sobre el HTML YA generado por generarExport():
-// 1) Ubica cada marcador <!--BLOQUE slug="codigo" idx="N"-->...
-//    <!--/BLOQUE--> (slug="codigo" es exactamente lo que
-//    importarHeuristico/importarDesdeHtml asignan a un bloque sin
-//    match), con su atributo opcional origen="fuera-de-rango" (ver
-//    generarExport) para elegir el color correcto.
-// 2) Envuelve ese contenido en un wrapper con outline punteado y una
-//    etiqueta flotante — todo dentro del DOCUMENTO del iframe, no
-//    como un <div> de React superpuesto desde afuera (el iframe es un
-//    documento aislado, React no tiene acceso a las coordenadas
-//    internas de lo que renderiza ahí).
-export function marcarBloquesNoReconocidosParaPreview(html) {
+// 1) Ubica cada marcador <!--BLOQUE slug="X" idx="N"-->...
+//    <!--/BLOQUE-->, con su atributo opcional origen="fuera-de-rango"
+//    (ver generarExport) para elegir el color correcto cuando
+//    corresponda.
+// 2) Si slug es "codigo", envuelve el contenido en el wrapper con
+//    outline punteado y etiqueta flotante de siempre. Para cualquier
+//    otro slug, envuelve en un wrapper equivalente pero sin ningún
+//    estilo visual — mismo <table><tbody> transparente que ya usa el
+//    caso "codigo" para poder anidar un <tr> dentro de un <td> sin
+//    romper la estructura de tabla, pero sin outline/fondo/etiqueta.
+//
+// El <div> del marco declara su propio font-size (14px) a propósito —
+// bug real encontrado con una pieza de Santi (2026-07-20), verificado
+// después contra el DOM real generado por el pipeline completo: hay
+// DOS fuentes de font-size: 0 que un bloque roto puede heredar. La
+// dominante es el propio export: generarExport SIEMPRE envuelve el
+// área de contenido en <td style="width: 530px; font-size: 0;
+// padding: 35px;"> (truco de email para matar el espacio entre
+// imágenes) — TODOS los bloques viven adentro de ese td. La otra es
+// la regla div { font-size: 0px; } de la hoja base del canvas (mismo
+// truco, para el preheader), que aplica al marco mismo por ser <div>.
+// Normalmente ninguna se nota porque el contenido de cada bloque trae
+// su PROPIO font-size en el style de sus <td> (más específico, gana),
+// pero un tag cuyo style quedó tan roto que no parsea NINGUNA
+// propiedad (ver reconstruirAtributos.js) se queda sin nada que le
+// gane a ese 0 heredado — el texto colapsa a alto cero, visible en el
+// DOM pero invisible en pantalla. El 14px del marco se interpone en
+// la cadena de herencia y lo hace visible SOLO en este preview.
+export function marcarBloquesNoReconocidosParaPreview(html, idxsAtributosRotos = []) {
   return html.replace(
-    /<!--BLOQUE slug="codigo" idx="(\d+)"(?:\s+origen="([^"]*)")?-->([\s\S]*?)<!--\/BLOQUE-->/g,
-    (_match, idx, origen, contenidoBloque) => {
+    /<!--BLOQUE slug="([^"]*)" idx="(\d+)"(?:\s+origen="([^"]*)")?-->([\s\S]*?)<!--\/BLOQUE-->/g,
+    (_match, slug, idx, origen, contenidoBloque) => {
+      // Un bloque con atributos rotos recibe el marco visual aunque su
+      // slug NO sea "codigo" — desde el fix de 2026-07-20 que dejó de
+      // forzar código personalizado para cualquier atributo roto, una
+      // fila rota puede clasificar Bloque_Texto_Base y venir por acá.
+      // Sin el marco (que declara font-size: 14px propio, ver
+      // comentario de arriba), su <td> roto — sin ninguna propiedad
+      // CSS válida que le gane — hereda el font-size: 0 del <td>
+      // contenedor del área de contenido que generarExport SIEMPRE
+      // emite (style="width: 530px; font-size: 0; padding: 35px;"),
+      // y el texto colapsa a alto cero: en el DOM pero invisible.
+      // Ese wrapper del export no se puede tocar (es el email real);
+      // este marco de preview es el lugar correcto para interceptar
+      // la herencia, igual que ya se hacía para slug="codigo".
+      const tieneAtributoRoto = idxsAtributosRotos.includes(Number(idx))
+      if (slug !== 'codigo' && !tieneAtributoRoto) {
+        return `
+      <tr><td id="preview-bloque-${idx}" style="padding: 0;">
+        <table width="100%" cellspacing="0" cellpadding="0" border="0"><tbody>${contenidoBloque}</tbody></table>
+      </td></tr>`
+      }
       const esFueraDeRango = origen === 'fuera-de-rango'
-      const color = esFueraDeRango ? '#DC2626' : '#F97316'
-      const colorFondo = esFueraDeRango ? 'rgba(220, 38, 38, 0.08)' : 'rgba(249, 115, 22, 0.08)'
-      const etiqueta = esFueraDeRango ? 'Fuera de lugar' : 'No reconocido'
+      const esSoloAtributoRoto = slug !== 'codigo'
+      const color = esFueraDeRango ? '#DC2626' : esSoloAtributoRoto ? '#CA8A04' : '#F97316'
+      const colorFondo = esFueraDeRango ? 'rgba(220, 38, 38, 0.08)' : esSoloAtributoRoto ? 'rgba(202, 138, 4, 0.08)' : 'rgba(249, 115, 22, 0.08)'
+      const etiqueta = esFueraDeRango ? 'Fuera de lugar' : esSoloAtributoRoto ? 'Atributos rotos' : 'No reconocido'
       return `
       <tr><td id="preview-bloque-${idx}" style="padding: 0; position: relative;">
-        <div style="position: relative; outline: 2px dashed ${color}; outline-offset: -2px; background: ${colorFondo};">
+        <div style="position: relative; outline: 2px dashed ${color}; outline-offset: -2px; background: ${colorFondo}; font-size: 14px;">
           <span style="position: absolute; top: 2px; left: 2px; z-index: 1; background: ${color}; color: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 3px; line-height: 1;">${etiqueta}</span>
           <table width="100%" cellspacing="0" cellpadding="0" border="0"><tbody>${contenidoBloque}</tbody></table>
         </div>
@@ -1585,6 +1639,36 @@ export function importarHeuristico(html) {
 
   let coincidencias = 0
   const canvas = filas.map((filaHtml, idx) => {
+    // Atributos rotos por style con comillas anidadas — SIEMPRE se
+    // detectan y avisan acá, sin importar en qué termine
+    // clasificándose la fila (ver DetectarAtributosConDosPuntos,
+    // generales.js). Solo se fuerza código personalizado más abajo
+    // cuando la clasificación final es Imagen_Libre — el único
+    // template cuya normalización (normalizarImagenLibre) reescribe
+    // el <img> en silencio. El resto de los templates solo pasan por
+    // normalizarNegritas, que jamás toca atributos de ningún otro tag
+    // — el HTML roto sobrevive intacto igual sea Bloque_Texto_Base,
+    // Bullet, etc., así que clasificarlos normal ahí no tiene ningún
+    // riesgo. Forzar código de más (como hacía la versión anterior de
+    // este fix) le quitaba la edición linda a bloques de texto
+    // simples sin necesidad real — bug real reportado por Santi
+    // (2026-07-20): un párrafo de texto simple con un atributo roto
+    // se importaba como código personalizado en vez de Bloque_Texto_Base.
+    const problemasAtributos = DetectarAtributosConDosPuntos(filaHtml)
+    if (problemasAtributos.length > 0) {
+      problemasAtributos.forEach(p => {
+        avisos.push({
+          texto: p.detalle,
+          tipo: 'atributo-roto',
+          canvasIdx: idx,
+          tagOriginal: p.tagCompleto,
+          tagReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.tagReconstruido : null,
+          fragmentoRoto: p.reconstruccion?.confiable ? p.reconstruccion.fragmentoRoto : null,
+          styleReconstruido: p.reconstruccion?.confiable ? p.reconstruccion.styleReconstruido : null,
+        })
+      })
+    }
+
     // Clasificación estructural directa primero — cubre los casos
     // donde formaDeTags es demasiado pobre para distinguir bien (ver
     // comentario completo junto a clasificarPorEstructuraDirecta). Si
@@ -1603,6 +1687,15 @@ export function importarHeuristico(html) {
     }
     if (slugDirecto) {
       const slugFinal = corregirSlugIcono(slugDirecto, filaHtml)
+      // Único punto de riesgo real: Imagen_Libre reescribe el <img>
+      // entero vía normalizarImagenLibre (ver comentario grande más
+      // arriba) — con un atributo roto en el medio, esa reescritura
+      // lo pisaría en silencio antes de que el aviso pueda ofrecer
+      // nada. Se fuerza código personalizado ACÁ, puntual, en vez de
+      // para cualquier clasificación como antes.
+      if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+        return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
+      }
       const match = BLOQUES_CONTENIDO.find(b => b.slug === slugFinal)
       if (match) {
         coincidencias++
@@ -1733,6 +1826,12 @@ export function importarHeuristico(html) {
       // ningún template de referencia con el que ser coherente, así
       // que el HTML se conserva tal cual vino de la pieza original.
       const slugFinal = corregirSlugIcono(mejorMatch.slug, filaHtml)
+      // Mismo criterio puntual que en la clasificación directa (ver
+      // comentario grande más arriba) — solo Imagen_Libre reescribe
+      // el <img> en silencio.
+      if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+        return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
+      }
       const matchFinal = slugFinal !== mejorMatch.slug ? BLOQUES_CONTENIDO.find(b => b.slug === slugFinal) || mejorMatch : mejorMatch
       return { ...matchFinal, instanceId: `${matchFinal.id}-${Date.now()}-${idx}`, htmlEditado: matchFinal.slug === 'Imagen_Libre' ? normalizarImagenLibre(normalizarNegritas(filaHtml.trim())) : normalizarNegritas(filaHtml.trim()) }
     }

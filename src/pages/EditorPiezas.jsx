@@ -7,7 +7,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useNotificaciones } from '@/context/NotificacionesContext'
-import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado, DetectarFragmentoHtmlCrudoEnTexto } from '@/lib/revision/generales'
+import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado, DetectarFragmentoHtmlCrudoEnTexto, DetectarAtributosConDosPuntos } from '@/lib/revision/generales'
 import '@/styles/EditorPiezas.css'
 import {
   FIRMA_INSTITUCIONAL_DEFAULT,
@@ -76,7 +76,71 @@ const AVISO_ICONO_POR_TIPO = {
   'obsoleto': { Icono: AlertCircle, color: '#DC2626' },
   'outlook-riesgo': { Icono: AlertCircle, color: '#DC2626' },
   'contenido-duplicado': { Icono: AlertCircle, color: '#DC2626' },
+  'atributo-roto': { Icono: AlertCircle, color: '#DC2626' },
   'general': { Icono: Info, color: null }, // null = neutro, ver CSS
+}
+
+// Encuentra en qué bloque del canvas cayó un tag roto, buscando el
+// texto exacto del tag dentro del HTML real de cada bloque
+// (htmlEditado si ya se editó, si no el html original — mismo
+// criterio que convertirEstructurasObsoletasEnCanvas en importar.js).
+// Devuelve null en vez de -1 cuando no se encuentra, para que
+// coincida con el resto de los avisos (canvasIdx: null = "no
+// clickeable" en toda esta pantalla) — canvas puede venir undefined
+// si el import ni siquiera llegó a armar un resultado.
+function buscarCanvasIdxConTag(canvas, tag) {
+  if (!canvas || !tag) return null
+  const idx = canvas.findIndex(bloque => (bloque.htmlEditado ?? bloque.html ?? '').includes(tag))
+  return idx === -1 ? null : idx
+}
+
+// Sugerencia de fix accionable dentro de una card de aviso —
+// hoy solo la usa 'atributo-roto' (ver DetectarAtributosConDosPuntos
+// + reconstruirAtributos.js), pero queda genérica a propósito
+// (activada por presencia de tagReconstruido, no por tipo) para poder
+// sumar otros avisos reconstruibles a futuro sin duplicar esta UI.
+// Compartida entre el modal desktop y mobile — un solo lugar donde
+// mantener el "antes/después" y el botón de aplicar.
+function SugerenciaFixAtributo({ aviso, onSolicitarAplicar }) {
+  if (!aviso.tagReconstruido) return null
+  if (aviso.aplicado) {
+    return (
+      <div className="ep-sugerencia-fix ep-sugerencia-fix-aplicada">
+        <Check size={12} /><span>Cambio aplicado</span>
+      </div>
+    )
+  }
+  // Sin canvasIdx resuelto no hay bloque puntual sobre el cual aplicar
+  // el reemplazo con seguridad (puede pasar si el texto del bloque ya
+  // se normalizó distinto al HTML crudo donde se detectó el patrón) —
+  // se muestra el "antes/después" solo a título informativo, sin
+  // botón, para no ofrecer una acción que no tiene dónde aterrizar.
+  const puedeAplicar = aviso.canvasIdx != null
+  return (
+    <div className="ep-sugerencia-fix">
+      <div className="ep-sugerencia-fix-diff">
+        <div className="ep-sugerencia-fix-bloque ep-sugerencia-fix-antes">
+          <span className="ep-sugerencia-fix-label">Antes</span>
+          <code>{aviso.fragmentoRoto}</code>
+        </div>
+        <div className="ep-sugerencia-fix-bloque ep-sugerencia-fix-despues">
+          <span className="ep-sugerencia-fix-label">Después</span>
+          <code>style="{aviso.styleReconstruido}"</code>
+        </div>
+      </div>
+      {puedeAplicar ? (
+        <button
+          type="button"
+          className="ep-sugerencia-fix-btn"
+          onClick={e => { e.stopPropagation(); onSolicitarAplicar() }}
+        >
+          Aplicar este cambio
+        </button>
+      ) : (
+        <p className="ep-sugerencia-fix-nota">No se pudo ubicar el bloque exacto para aplicarlo automático — copiá el "Después" a mano si hace falta.</p>
+      )}
+    </div>
+  )
 }
 
 // ─── Redes sociales en bandas de Header ────────────────────────────────────
@@ -2181,6 +2245,41 @@ export default function EditorPiezas() {
   // resultado (aunque sea de baja confianza), pasamos a la pantalla de
   // resumen/preview dentro del mismo modal.
   const [importarResultado, setImportarResultado] = useState(null)
+  // Pendiente de confirmación al aplicar la sugerencia de fix de un
+  // atributo roto (ver SugerenciaFixAtributo) — { avisoIndex,
+  // canvasIdx, tagOriginal, tagReconstruido } | null. Se pide
+  // confirmación explícita (ConfirmModal) porque, a diferencia del
+  // resto de los avisos de este modal, esta es la única acción que
+  // MODIFICA el HTML de un bloque antes de siquiera terminar de
+  // importar la pieza — nunca se aplica con un solo clic.
+  const [sugerenciaAtributoPendiente, setSugerenciaAtributoPendiente] = useState(null)
+
+  function aplicarSugerenciaAtributo() {
+    const pendiente = sugerenciaAtributoPendiente
+    if (!pendiente) return
+    setImportarResultado(prev => {
+      if (!prev?.resultado) return prev
+      const canvas = prev.resultado.canvas.map((bloque, idx) => {
+        if (idx !== pendiente.canvasIdx) return bloque
+        const htmlActual = bloque.htmlEditado ?? bloque.html ?? ''
+        // Defensa: si el tag original ya no está (ej. se aplicó dos
+        // veces, o el bloque cambió por otro motivo entre medio), no
+        // se toca nada — mejor dejar el aviso sin resolver que
+        // arriesgar un replace sobre contenido que ya no coincide.
+        if (!htmlActual.includes(pendiente.tagOriginal)) return bloque
+        // replaceAll, no replace: la detección deduplica avisos por
+        // texto EXACTO del tag (ver DetectarAtributosConDosPuntos) —
+        // si el mismo tag roto aparece dos veces en el bloque, hay UN
+        // solo aviso que representa a las dos; reemplazar solo la
+        // primera dejaba la segunda rota en silencio con el aviso ya
+        // marcado como aplicado.
+        return { ...bloque, htmlEditado: htmlActual.replaceAll(pendiente.tagOriginal, pendiente.tagReconstruido) }
+      })
+      const avisos = (prev.avisos ?? []).map((a, i) => i === pendiente.avisoIndex ? { ...a, aplicado: true } : a)
+      return { ...prev, resultado: { ...prev.resultado, canvas }, avisos }
+    })
+    setSugerenciaAtributoPendiente(null)
+  }
   // Referencia al <iframe> del preview de importación — el srcDoc lo
   // hace same-origin (contenido inline, no una URL externa), así que
   // se puede acceder directo a contentDocument sin restricciones de
@@ -2384,6 +2483,39 @@ export default function EditorPiezas() {
         ]
       }
 
+      // Chequeo de atributos rotos por style="..." perdido (ver
+      // comentario completo en DetectarAtributosConDosPuntos,
+      // generales.js). Desde el fix del 2026-07-20, importarHeuristico
+      // ya corre este mismo chequeo POR FILA, antes de clasificar cada
+      // bloque — ver el comentario grande en el .map() de importar.js
+      // — así que para ese camino esto sería puro duplicado (con un
+      // canvasIdx encontrado por búsqueda de texto, peor que el índice
+      // exacto que ya trae el aviso interno). Este chequeo externo
+      // sigue haciendo falta para lo que ese path NO cubre: contenido
+      // fuera del canvas (header, imgPrincipal, legales) y el camino
+      // de importación por marcadores (importarDesdeHtml), que no pasa
+      // por ese mismo loop — por eso se filtra cualquier tag que ya
+      // haya sido reportado adentro, en vez de sacar el chequeo entero.
+      const tagsYaReportados = new Set(
+        (resultadoFinal.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.tagOriginal)
+      )
+      const riesgosAtributos = DetectarAtributosConDosPuntos(htmlNormalizado)
+        .filter(r => !tagsYaReportados.has(r.tagCompleto))
+      if (riesgosAtributos.length > 0) {
+        resultadoFinal.avisos = [
+          ...riesgosAtributos.map(r => ({
+            texto: r.detalle,
+            tipo: 'atributo-roto',
+            canvasIdx: buscarCanvasIdxConTag(resultadoFinal.resultado?.canvas, r.tagCompleto),
+            tagOriginal: r.tagCompleto,
+            tagReconstruido: r.reconstruccion?.confiable ? r.reconstruccion.tagReconstruido : null,
+            fragmentoRoto: r.reconstruccion?.confiable ? r.reconstruccion.fragmentoRoto : null,
+            styleReconstruido: r.reconstruccion?.confiable ? r.reconstruccion.styleReconstruido : null,
+          })),
+          ...(resultadoFinal.avisos ?? []),
+        ]
+      }
+
       // El análisis en sí (parseo + regex) es síncrono y suele tardar
       // milisegundos — sin este mínimo, el step de "analizando" podría
       // aparecer y desaparecer antes de que el ojo lo registre. No es
@@ -2497,6 +2629,8 @@ export default function EditorPiezas() {
         importarError={importarError} setImportarError={setImportarError}
         importarCargando={importarCargando} importarProgreso={importarProgreso} importarEtapa={importarEtapa}
         importarResultado={importarResultado} setImportarResultado={setImportarResultado}
+        sugerenciaAtributoPendiente={sugerenciaAtributoPendiente} setSugerenciaAtributoPendiente={setSugerenciaAtributoPendiente}
+        aplicarSugerenciaAtributo={aplicarSugerenciaAtributo}
         analizarImportacion={analizarImportacion} confirmarImportacion={confirmarImportacion}
         cerrarModalImportar={cerrarModalImportar}
         bandaHeader={bandaHeader} setBandaHeader={setBandaHeader}
@@ -3314,6 +3448,13 @@ export default function EditorPiezas() {
                                     <div className="ep-importar-aviso-texto">
                                       <div className="ep-importar-aviso-titulo">{titulo}</div>
                                       {detalle && <div className="ep-importar-aviso-detalle">{detalle}</div>}
+                                      <SugerenciaFixAtributo
+                                        aviso={a}
+                                        onSolicitarAplicar={() => setSugerenciaAtributoPendiente({
+                                          avisoIndex: i, canvasIdx: a.canvasIdx,
+                                          tagOriginal: a.tagOriginal, tagReconstruido: a.tagReconstruido,
+                                        })}
+                                      />
                                     </div>
                                   </li>
                                 )
@@ -3344,7 +3485,7 @@ export default function EditorPiezas() {
                           // redes que después desaparecían al confirmar,
                           // muy confuso. Ahora el preview usa el mismo
                           // redesOrden real que se va a aplicar de verdad.
-                          const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`
+                          const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`
                           return (
                             <div className={`ep-importar-preview-wrap ${importarModoPreview === 'mobile' ? 'modo-mobile' : ''}`}>
                               <AutoIframe ref={previewIframeRef} className="ep-importar-preview-iframe" title="Preview de la pieza importada" srcDoc={srcDoc} width={importarModoPreview === 'mobile' ? 375 : undefined} />
@@ -3384,6 +3525,21 @@ export default function EditorPiezas() {
         cancelLabel="Cancelar"
         onConfirm={() => { nuevaPieza(); setShowConfirmReinicio(false) }}
         onCancel={() => setShowConfirmReinicio(false)}
+      />
+
+      {/* Confirmación de la sugerencia de fix de un atributo roto (ver
+          SugerenciaFixAtributo) — a diferencia del resto de los avisos
+          del import, esta acción SÍ modifica el HTML de un bloque, por
+          eso pide confirmación explícita en vez de aplicarse directo. */}
+      <ConfirmModal
+        open={!!sugerenciaAtributoPendiente}
+        variant="warning"
+        title="¿Aplicar este cambio?"
+        message="Se va a reemplazar la etiqueta rota por la versión reconstruida en el bloque correspondiente. Podés seguir editándolo después con normalidad."
+        confirmLabel="Sí, aplicar"
+        cancelLabel="Cancelar"
+        onConfirm={aplicarSugerenciaAtributo}
+        onCancel={() => setSugerenciaAtributoPendiente(null)}
       />
 
       {/* Chequeo previo a exportar/copiar — ver DetectarFragmentoHtmlCrudoEnTexto.
@@ -3456,6 +3612,7 @@ function EditorMobile(props) {
     importarError, setImportarError,
     importarCargando, importarProgreso, importarEtapa,
     importarResultado, setImportarResultado,
+    sugerenciaAtributoPendiente, setSugerenciaAtributoPendiente, aplicarSugerenciaAtributo,
     analizarImportacion, confirmarImportacion, cerrarModalImportar,
     bandaHeader,
     redesOrden, redesDetectadas, toggleRedActiva, reordenarPillRed,
@@ -4077,6 +4234,21 @@ function EditorMobile(props) {
         onCancel={() => setShowConfirmReinicioM(false)}
       />
 
+      {/* Mismo modal que el árbol desktop (ver el comentario completo
+          ahí) — estado compartido, solo se duplica la invocación de
+          la UI, mismo criterio que el resto de los ConfirmModal de
+          este archivo (ej. avisoFragmentoPendiente más abajo). */}
+      <ConfirmModal
+        open={!!sugerenciaAtributoPendiente}
+        variant="warning"
+        title="¿Aplicar este cambio?"
+        message="Se va a reemplazar la etiqueta rota por la versión reconstruida en el bloque correspondiente. Podés seguir editándolo después con normalidad."
+        confirmLabel="Sí, aplicar"
+        cancelLabel="Cancelar"
+        onConfirm={aplicarSugerenciaAtributo}
+        onCancel={() => setSugerenciaAtributoPendiente(null)}
+      />
+
       <ConfirmModal
         open={!!avisoFragmentoPendiente}
         variant="warning"
@@ -4225,6 +4397,13 @@ function EditorMobile(props) {
                               <div>
                                 <div className="ep-m-import-aviso-titulo">{titulo}</div>
                                 {detalle && <div className="ep-m-muted-sm">{detalle}</div>}
+                                <SugerenciaFixAtributo
+                                  aviso={a}
+                                  onSolicitarAplicar={() => setSugerenciaAtributoPendiente({
+                                    avisoIndex: i, canvasIdx: a.canvasIdx,
+                                    tagOriginal: a.tagOriginal, tagReconstruido: a.tagReconstruido,
+                                  })}
+                                />
                               </div>
                             </div>
                           )
@@ -4239,7 +4418,7 @@ function EditorMobile(props) {
                     <AutoIframe
                       title="Preview de la pieza importada"
                       className="ep-m-preview-frame"
-                      srcDoc={`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] })))}</body></html>`}
+                      srcDoc={`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`}
                     />
                   </div>
                 </>

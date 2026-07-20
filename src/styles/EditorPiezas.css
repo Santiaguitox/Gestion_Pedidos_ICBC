@@ -2001,6 +2001,90 @@ input[autocomplete="off"] { }
   border-color: #DC2626;
 }
 
+/* Sugerencia de fix accionable dentro de una card de aviso (hoy solo
+   'atributo-roto' — ver SugerenciaFixAtributo en el JSX). Vive DENTRO
+   de .ep-importar-aviso-texto / .ep-m-import-aviso, por eso no
+   necesita su propio borde exterior fuerte: alcanza con un fondo
+   sutil para separarla visualmente del título/detalle de arriba. */
+.ep-sugerencia-fix {
+  margin-top: 0.5rem;
+  padding: 0.625rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+.ep-sugerencia-fix-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+/* Cada bloque (Antes/Después) apila el label ARRIBA del código, a
+   ancho completo — el layout anterior los ponía lado a lado, lo que
+   apretaba el código contra el margen derecho y, sumado al
+   break-all de abajo, lo volvía casi ilegible con tags largos. */
+.ep-sugerencia-fix-bloque {
+  border-left: 3px solid var(--border);
+  padding: 0.375rem 0 0.375rem 0.5rem;
+  border-radius: 3px;
+}
+.ep-sugerencia-fix-antes { border-left-color: var(--accent-primary); }
+.ep-sugerencia-fix-despues { border-left-color: var(--green-text); }
+.ep-sugerencia-fix-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.25rem;
+}
+.ep-sugerencia-fix-antes .ep-sugerencia-fix-label { color: var(--accent-primary); }
+.ep-sugerencia-fix-despues .ep-sugerencia-fix-label { color: var(--green-text); }
+.ep-sugerencia-fix-bloque code {
+  display: block;
+  font-size: 0.6875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-primary);
+  line-height: 1.5;
+  /* pre-wrap + break-word en vez de break-all: el texto se envuelve
+     en espacios/guiones normales y solo parte una palabra suelta si
+     de verdad no entra en el ancho disponible — nada de cortar en
+     cualquier letra como pasaba antes. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.ep-sugerencia-fix-btn {
+  margin-top: 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--icomm-violet);
+  background: transparent;
+  color: var(--icomm-violet);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.ep-sugerencia-fix-btn:hover { background: rgba(91, 78, 232, 0.08); }
+.ep-sugerencia-fix-nota {
+  margin: 0.625rem 0 0;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+.ep-sugerencia-fix-aplicada {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  color: var(--green-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
 /* Resaltado momentáneo del bloque en el preview al hacer click en su
    aviso — mismo color que el overlay/aviso correspondiente, con un
    pulso breve para que el ojo lo encuentre incluso si ya estaba

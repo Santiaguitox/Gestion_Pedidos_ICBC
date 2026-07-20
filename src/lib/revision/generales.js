@@ -1,5 +1,6 @@
 import { extraerImagenes } from '@/lib/revision/helpers.js'
 import { REVISION_CONFIG } from '@/lib/revision/config.js'
+import { reconstruirStyleRoto } from '@/lib/revision/reconstruirAtributos.js'
 const DOMINIO_APROBADO = REVISION_CONFIG.DOMINIO_IMAGENES_APROBADO
 
 export function ValidarDominioImagenes(doc) {
@@ -336,6 +337,97 @@ function DetectarAtributosMalCerrados(htmlString) {
     }
   }
 
+  problemas.push(...DetectarAtributosConDosPuntos(htmlLimpio))
+
+  return problemas
+}
+
+// Bug real reportado por Santi (2026-07-19): un <img> traía
+// `display:="" block="" color:="" c4161c="" width="100px"...` — un
+// style que en algún punto de la cadena de origen perdió su wrapper
+// (comillas simples envolviendo TODO el style, con una tipografía
+// no-sistema también entre comillas simples adentro — ver el detalle
+// completo y la reproducción contra un parser HTML real en el chat
+// del 2026-07-19) y quedó partido en atributos sueltos.
+// DetectarAtributosMalCerrados (arriba) no lo agarra porque cada
+// `nombre=""` está perfectamente bien formado — comillas balanceadas
+// y cerradas — el HTML es 100% válido para cualquier parser (browser
+// o DOMParser), solo que semánticamente es basura.
+//
+// Heurística de DETECCIÓN: un nombre de atributo HTML real NUNCA
+// contiene ':' (salvo namespaces XML tipo xlink:href, que no
+// aparecen en piezas de mail) — así que un atributo cuyo nombre
+// termina en ':' es, en la enorme mayoría de los casos reales, una
+// propiedad CSS que se quedó sin su wrapper style=. Se busca sobre el
+// string crudo (no el DOM ya parseado) porque el DOM ya aceptó el
+// atributo como válido y no deja rastro de que el nombre es
+// sospechoso.
+//
+// Además de detectar, intenta RECONSTRUIR una sugerencia del style
+// original (ver reconstruirAtributos.js). Esto funciona como una
+// SEGUNDA señal de detección, independiente de la heurística de
+// arriba — no solo un enriquecimiento posterior: una corrupción de
+// una sola declaración CSS corta (ej. "color: rojo" partido en
+// style="color: " + rojo="") puede no dejar NINGÚN nombre de
+// atributo con ':' expuesto (el ':' sobreviviente queda adentro del
+// valor ya anclado del style, no como nombre de atributo suelto) —
+// sin esta segunda señal, ese caso pasaría inadvertido pese a ser
+// perfectamente reconstruible.
+//
+// Se itera tag por tag (no con un solo regex global) y se deduplica
+// por el TEXTO COMPLETO del tag, no por nombre de atributo — dos
+// <img> distintos con el mismo atributo roto (ej. "display:") pero
+// contenido distinto son dos problemas independientes, cada uno con
+// su propia reconstrucción posible.
+export function DetectarAtributosConDosPuntos(htmlString) {
+  const problemas = []
+  const tagRegex = /<[a-zA-Z][^>]*>/g
+  const atributoConDosPuntos = /\s([a-zA-Z-]+:)=["'][^"']*["']/
+  const vistos = new Set()
+  let m
+  while ((m = tagRegex.exec(htmlString)) !== null) {
+    const tagCompleto = m[0]
+    if (vistos.has(tagCompleto)) continue
+
+    const matchAtributo = atributoConDosPuntos.exec(tagCompleto)
+    const reconstruccion = reconstruirStyleRoto(tagCompleto)
+    if (!matchAtributo && !reconstruccion) continue
+    vistos.add(tagCompleto)
+
+    // Nombre a mostrar en el aviso: el atributo con ':' expuesto si
+    // lo hay, o si no, la propiedad CSS que quedó truncada en el
+    // style ancla (ej. style="color: " → "color:"). En la práctica
+    // casi siempre hay una de las dos (llegar hasta acá ya exige al
+    // menos una señal), pero el fallback a 'style' cubre el caso
+    // borde de que ninguna calce exactamente (ej. ancla vacía en el
+    // caso B sin ancla) sin arriesgar una excepción.
+    const anclaConDosPuntos = reconstruccion && /([a-zA-Z-]+):\s*$/.exec(reconstruccion.styleTruncado)
+    const nombreDetectado = matchAtributo?.[1] ?? (anclaConDosPuntos ? `${anclaConDosPuntos[1]}:` : 'style')
+    const detalleBase = `Atributo "${nombreDetectado}" — probablemente un style="..." que perdió su wrapper y quedó partido en atributos sueltos (revisar la etiqueta completa)`
+
+    let detalle = detalleBase
+    if (reconstruccion?.confiable) {
+      detalle = `${detalleBase}. Reconstrucción sugerida: style="${reconstruccion.styleReconstruido}"`
+    } else if (reconstruccion?.declaracionesInvalidas?.length > 0) {
+      // Reconstrucción PARCIAL: parte de las declaraciones sí se
+      // pudieron armar bien, pero al menos una no tiene forma válida
+      // — casi siempre porque el nombre de esa propiedad puntual no
+      // sobrevivió en ningún lado (solo quedaron sus valores sueltos,
+      // ej. una tipografía sin "font-family:" en ningún atributo).
+      // Se explica esto en vez de descartar todo en silencio con el
+      // mensaje genérico — no se ofrece aplicar (nunca se inventa a
+      // qué propiedad pertenecía), pero al menos queda claro qué
+      // parte falta completar a mano.
+      const listado = reconstruccion.declaracionesInvalidas.map(d => `"${d}"`).join(', ')
+      detalle = `${detalleBase}. No se pudo reconstruir del todo: ${listado} no tiene forma de "propiedad: valor" — probablemente perdió el nombre de la propiedad y solo sobrevivió el valor. El resto sí reconstruye bien, pero no se ofrece aplicar automático mientras falte esa parte.`
+    }
+
+    problemas.push({
+      detalle,
+      tagCompleto,
+      reconstruccion,
+    })
+  }
   return problemas
 }
 

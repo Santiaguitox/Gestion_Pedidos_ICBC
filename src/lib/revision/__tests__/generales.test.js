@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DetectarContenidoDuplicado, DetectarInlineEnvolviendoOutlook, DetectarFragmentoHtmlCrudoEnTexto } from '@/lib/revision/generales.js'
+import { DetectarContenidoDuplicado, DetectarInlineEnvolviendoOutlook, DetectarFragmentoHtmlCrudoEnTexto, DetectarAtributosConDosPuntos } from '@/lib/revision/generales.js'
 import { generarExport } from '@/lib/editor/exportar.js'
 import { BLOQUES_HEADER, BLOQUES_CONTENIDO } from '@/lib/editor/bloques.js'
 
@@ -142,5 +142,81 @@ describe('DetectarFragmentoHtmlCrudoEnTexto', () => {
     const html = `<td>${textoPegado}</td>`
     const problemas = DetectarFragmentoHtmlCrudoEnTexto(html)
     expect(problemas).toHaveLength(1)
+  })
+})
+
+describe('DetectarAtributosConDosPuntos', () => {
+  it('caso real reportado por Santi (2026-07-19), resuelto sin ancla el 2026-07-20', () => {
+    // El <img> traía display:="" block="" color:="" c4161c="" en vez
+    // de style="display:block; color:#C4161C;" — sintácticamente
+    // válido (comillas balanceadas), por eso ningún otro chequeo lo
+    // agarraba, pero semánticamente el display/color reales se
+    // perdieron sin dejar rastro. Reconstruible SIN necesitar un
+    // style="..." truncado en el mismo tag como ancla — ver
+    // reconstruirAtributos.test.js para el detalle completo del
+    // cambio de diseño.
+    const html = `<tr>
+    <td style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: bold; text-align: left; color: #ffffff; line-height: 17px;" width="102px" valign="middle"><span style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: bold; text-align: left; color: #ffffff; line-height: 17px;"><img src="https://d343t93odde9ul.cloudfront.net/minisites/ICBC/iconos/IconoTasaPreferencial.png" display:="" block="" color:="" c4161c="" width="100px" height="100px" alt="" /></span></td>
+</tr>`
+    const problemas = DetectarAtributosConDosPuntos(html)
+    expect(problemas.length).toBeGreaterThan(0)
+    expect(problemas[0].detalle).toContain('display:')
+    expect(problemas[0].reconstruccion.confiable).toBe(true)
+    expect(problemas[0].reconstruccion.styleReconstruido).toBe('display: block; color: #c4161c;')
+  })
+
+  it('una corrupción de una sola declaración corta se detecta aunque ningún nombre de atributo tenga \':\' expuesto', () => {
+    // "color: " + "rojo" — el ':' sobreviviente queda DENTRO del
+    // valor ya anclado del style ("color: "), no como nombre de
+    // atributo suelto, así que la heurística de "nombre con :" no
+    // dispara sola acá. La reconstrucción SÍ encuentra el patrón
+    // (ancla truncada + un fantasma detrás) y por eso igual se
+    // reporta — es la razón de ser de la segunda señal de detección.
+    const html = `<img src="a.png" style="color: " rojo="" width="50">`
+    const problemas = DetectarAtributosConDosPuntos(html)
+    expect(problemas).toHaveLength(1)
+    expect(problemas[0].tagCompleto).toBe(html)
+    expect(problemas[0].reconstruccion.confiable).toBe(true)
+    expect(problemas[0].reconstruccion.styleReconstruido).toBe('color: rojo;')
+    expect(problemas[0].detalle).toContain('color:')
+    expect(problemas[0].detalle).toContain('Reconstrucción sugerida')
+  })
+
+  it('un style="..." legítimo no dispara nada — el : está en el VALOR, no en el nombre', () => {
+    const html = `<td style="color:#fff; font-size:14px;" width="100">ok</td>`
+    expect(DetectarAtributosConDosPuntos(html)).toEqual([])
+  })
+
+  it('un href con protocolo (mailto:, tel:) no dispara nada — el : está en el valor', () => {
+    const html = `<a href="mailto:contacto@icbc.com.ar">Escribinos</a>`
+    expect(DetectarAtributosConDosPuntos(html)).toEqual([])
+  })
+
+  it('tags distintos (aunque compartan el mismo nombre de atributo roto) avisan cada uno por separado', () => {
+    // Antes se deduplicaba por NOMBRE de atributo roto a nivel de todo
+    // el documento — un segundo <img> con contenido totalmente
+    // distinto pero el mismo "display:" roto quedaba silenciado. Ahora
+    // se deduplica por el TEXTO COMPLETO del tag: cada ocurrencia real
+    // es un problema independiente, con su propia reconstrucción.
+    const html = `<img display:="" src="a.png"><img display:="" src="b.png">`
+    const problemas = DetectarAtributosConDosPuntos(html)
+    expect(problemas).toHaveLength(2)
+  })
+
+  it('deduplica únicamente tags EXACTAMENTE idénticos (mismo texto repetido en la pieza)', () => {
+    const tag = `<img display:="" src="a.png">`
+    const html = tag + tag
+    expect(DetectarAtributosConDosPuntos(html)).toHaveLength(1)
+  })
+
+  it('atributos rotos en tags distintos con nombres distintos avisan cada uno', () => {
+    const html = `<img display:="" src="a.png"><td color:="" bgcolor="red">x</td>`
+    const problemas = DetectarAtributosConDosPuntos(html)
+    expect(problemas).toHaveLength(2)
+  })
+
+  it('HTML sin ningún atributo roto no dispara nada', () => {
+    const html = `<table width="600"><tr><td style="color:#333;">Texto normal</td></tr></table>`
+    expect(DetectarAtributosConDosPuntos(html)).toEqual([])
   })
 })
