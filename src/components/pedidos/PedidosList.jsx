@@ -125,16 +125,24 @@ export default function PedidosList({ onNew }) {
   const [paginaPorSubgrupo, setPaginaPorSubgrupo] = useState({})
 
   const hayBusqueda = busqueda.trim().length > 0
-  const hayFechaVencimiento = !hayBusqueda && !modoHistorico && (fechaDesde || fechaHasta)
-  // Mientras hay búsqueda activa o el modo histórico está prendido, las
-  // fechas de vencimiento y el botón "mostrar finalizados" no tienen
-  // ningún efecto (la función SQL los ignora en esos casos) — se
-  // deshabilitan visualmente para no generar la sensación de "toqué algo
-  // y no pasó nada". El valor de las fechas se mantiene guardado (no se
-  // borra) para que se reactive solo si se desactiva lo que lo bloqueaba.
-  const soloModoNormal = hayBusqueda || modoHistorico
+  const hayFiltroTag = !!filtroTag
+  // Filtrar por tag es, para efectos de ventana temporal, lo mismo que
+  // buscar por texto: el backend (ver migración fix_filtro_tag_ignora_
+  // ventana_temporal) ignora los últimos 30 días y el ocultamiento de
+  // finalizados en ambos casos — antes solo lo hacía con búsqueda de
+  // texto, y filtrar por tag solo mostraba resultados recientes.
+  const ignoraVentanaTemporal = hayBusqueda || hayFiltroTag
+  const hayFechaVencimiento = !ignoraVentanaTemporal && !modoHistorico && (fechaDesde || fechaHasta)
+  // Mientras hay búsqueda activa, tag filtrado, o el modo histórico está
+  // prendido, las fechas de vencimiento y el botón "mostrar finalizados"
+  // no tienen ningún efecto (la función SQL los ignora en esos casos) —
+  // se deshabilitan visualmente para no generar la sensación de "toqué
+  // algo y no pasó nada". El valor de las fechas se mantiene guardado
+  // (no se borra) para que se reactive solo si se desactiva lo que lo
+  // bloqueaba.
+  const soloModoNormal = ignoraVentanaTemporal || modoHistorico
 
-  const modo = hayBusqueda ? 'normal' // no importa, la función ignora el modo si hay búsqueda
+  const modo = ignoraVentanaTemporal ? 'normal' // no importa, la función ignora el modo si hay búsqueda o tag
     : modoHistorico ? 'historico'
     : (fechaDesde || fechaHasta) ? 'vencimiento'
     : 'normal'
@@ -283,7 +291,7 @@ export default function PedidosList({ onNew }) {
                 disabled={soloModoNormal}
                 onClick={() => setMostrarFinalizados(v => !v)}
                 className={`switch-pista ${mostrarFinalizados ? 'switch-pista-activo' : ''}`}
-                title={soloModoNormal ? 'No aplica en modo histórico ni con búsqueda activa' : undefined}
+                title={soloModoNormal ? 'No aplica en modo histórico, con búsqueda activa, ni con un tag filtrado' : undefined}
               >
                 <span className="switch-circulo" />
               </button>
@@ -292,7 +300,7 @@ export default function PedidosList({ onNew }) {
               </span>
               <span className="switch-finalizados-label-mobile">
                 <HelpPopover>
-                  Este switch <strong>muestra u oculta los pedidos ya finalizados</strong> dentro de los últimos 30 días. No aplica en modo histórico ni con búsqueda activa.
+                  Este switch <strong>muestra u oculta los pedidos ya finalizados</strong> dentro de los últimos 30 días. No aplica en modo histórico, con búsqueda activa, ni con un tag filtrado.
                 </HelpPopover>
               </span>
             </div>
