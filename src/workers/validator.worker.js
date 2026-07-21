@@ -1,21 +1,10 @@
 import { detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
+// La lógica de validación (validateRow, isExcluded y sus constantes)
+// vive en validacion.js para poder testearla — este archivo no se
+// puede importar desde la suite porque define self.onmessage al
+// cargarse. Mismo criterio que worker-utils.js.
+import { validateRow, isExcluded } from '@/workers/validacion'
 
-const DISPOSABLE_DOMAINS = new Set([
-  'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','yopmail.com',
-  'trashmail.com','sharklasers.com','grr.la','spam4.me','10minutemail.com',
-  'fakeinbox.com','dispostable.com','maildrop.cc','mailnull.com','spamgourmet.com',
-  'trashmail.at','trashmail.io','trashmail.me','discard.email','spamhereplease.com',
-  'getairmail.com','filzmail.com','throwam.com','mailexpire.com','spamex.com',
-]);
-
-const GENERIC_NAMES = new Set([
-  'test','testing','prueba','asdf','xxxxx','noreply','no-reply','admin','info',
-  'example','usuario','user','nombre','name','contact','contacto','cliente','client',
-  'demo','sample','muestra','null','none','n/a','na',
-]);
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const SUSPICIOUS_TLD = /\.(xyz|top|click|loan|work|gdn|bid|win|download|accountant|webcam)$/i;
 const ROWS_PER_CODE = 500;
 // Tope de filas devueltas en las listas de "notInOriginal" / "duplicatesInClean"
 // / "missingFromClean" de handleVerify — antes era el número 500 repetido a
@@ -24,79 +13,6 @@ const ROWS_PER_CODE = 500;
 // abajo), así el label "(mostrando 500)" nunca puede desincronizarse del
 // límite real usado para cortar las listas.
 const VERIFY_ROWS_LIMIT = 500;
-const EXCLUDE_CODES = new Set(['INVALID_FORMAT', 'TYPO_DOMAIN', 'EMPTY', 'DOUBLE_DOT']);
-
-// Único lugar que decide si una fila se considera "excluida" de la base
-// limpia — antes este mismo chequeo (codes.some(c => EXCLUDE_CODES.has(c)))
-// estaba repetido en 3 lugares distintos del archivo (handleAnalyze,
-// handleGenerateClean, handleGenerateRemoved): si el día de mañana cambia
-// qué códigos excluyen a un contacto, alcanza con tocar esta función.
-function isExcluded(row) {
-  return row.codes.some(c => EXCLUDE_CODES.has(c));
-}
-
-function validateRow(row, emailCol, nameCol, seenEmails, rowNum) {
-  const issues = [];
-  const raw = emailCol ? String(row[emailCol] ?? '').trim() : '';
-  const email = normalizeEmail(raw);
-  const name = nameCol ? String(row[nameCol] ?? '').trim() : '';
-
-  if (!emailCol) {
-    issues.push({ type: 'error', code: 'NO_EMAIL_COL', msg: 'No se encontró columna de email' });
-  } else if (!email) {
-    issues.push({ type: 'error', code: 'EMPTY', msg: 'Email vacío' });
-  } else {
-    if (!EMAIL_RE.test(email)) {
-      issues.push({ type: 'error', code: 'INVALID_FORMAT', msg: 'Formato inválido' });
-    } else {
-      const [local, domain] = email.split('@');
-      if (DISPOSABLE_DOMAINS.has(domain)) {
-        issues.push({ type: 'error', code: 'DISPOSABLE', msg: `Dominio desechable: ${domain}` });
-      }
-      if (seenEmails.has(email)) {
-        issues.push({ type: 'error', code: 'DUPLICATE', msg: `Duplicado (primera vez: fila ${seenEmails.get(email)})` });
-      } else {
-        seenEmails.set(email, rowNum);
-      }
-      if (email.includes('..')) {
-        issues.push({ type: 'warning', code: 'DOUBLE_DOT', msg: 'Doble punto en el email' });
-      }
-      if (local.startsWith('.') || local.endsWith('.')) {
-        issues.push({ type: 'warning', code: 'DOT_POSITION', msg: 'Punto al inicio/fin del usuario' });
-      }
-      if (SUSPICIOUS_TLD.test(domain)) {
-        issues.push({ type: 'warning', code: 'SUSPICIOUS_TLD', msg: `TLD sospechoso: .${domain.split('.').pop()}` });
-      }
-      const typos = {
-        'gmai.com':1,'gmial.com':1,'gmal.com':1,'gnail.com':1,'gamil.com':1,
-        'hotnail.com':1,'hotmial.com':1,'hotmil.com':1,
-        'yaho.com':1,'yhaoo.com':1,'yahooo.com':1,
-        'outlok.com':1,'outook.com':1,'otlook.com':1,
-      };
-      if (typos[domain]) {
-        issues.push({ type: 'error', code: 'TYPO_DOMAIN', msg: `Posible typo en dominio: ${domain}` });
-      }
-    }
-  }
-
-  if (nameCol) {
-    if (!name) {
-      issues.push({ type: 'warning', code: 'EMPTY_NAME', msg: 'Nombre vacío' });
-    } else {
-      if (GENERIC_NAMES.has(name.toLowerCase())) {
-        issues.push({ type: 'warning', code: 'GENERIC_NAME', msg: `Nombre genérico: "${name}"` });
-      }
-      if (/[<>{}\\|/\d]/.test(name)) {
-        issues.push({ type: 'warning', code: 'ODD_NAME', msg: 'Nombre con caracteres raros o números' });
-      }
-      if (name.length < 2) {
-        issues.push({ type: 'warning', code: 'SHORT_NAME', msg: 'Nombre demasiado corto' });
-      }
-    }
-  }
-
-  return issues;
-}
 
 let storedAllRows = [];
 let storedHeaderLine = '';

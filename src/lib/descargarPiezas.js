@@ -89,7 +89,8 @@ function limpiarHtml(html) {
 // Sanitiza el nombre del ZIP: normaliza tildes, reemplaza ñ→n,
 // espacios y caracteres especiales → _, colapsa múltiples _ y recorta.
 // Ejemplo: "Envío Plazo Fijo | CAMPAÑA NRO 33" → "Envio_Plazo_Fijo_CAMPANA_NRO_33"
-function sanitizarNombreZip(nombre) {
+// export para poder testearla (pura: string in → string out)
+export function sanitizarNombreZip(nombre) {
   return (nombre || 'piezas')
     .replace(/[ñÑ]/g, m => m === 'ñ' ? 'n' : 'N')  // ñ → n antes del normalize
     .normalize('NFD')                                  // descomponer tildes: á → a + ́
@@ -100,7 +101,8 @@ function sanitizarNombreZip(nombre) {
     .slice(0, 80) || 'piezas'
 }
 
-function nombreArchivo(pieza) {
+// export para poder testearla (pura: pieza in → nombre de archivo out)
+export function nombreArchivo(pieza) {
   const base = (pieza.nombre_pieza || pieza.link_online || 'pieza')
     .replace(/https?:\/\/[^/]+\/?/, '')
     .replace(/[^a-zA-Z0-9_-]/g, '_')

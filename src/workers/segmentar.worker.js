@@ -1,4 +1,7 @@
 import { decodeLatin1, detectEncoding, parseCSVLine } from '@/workers/worker-utils'
+// detectSep / evaluarCondicion / pasaFiltro viven en segmentacion.js
+// para poder testearlas — mismo criterio que worker-utils.js.
+import { detectSep, pasaFiltro } from '@/workers/segmentacion'
 
 const CHUNK_SIZE = 2 * 1024 * 1024  // mismo que validator.worker.js
 const BLOB_BATCH = 10000             // cada cuántas líneas filtradas se
@@ -9,37 +12,6 @@ let storedHeaderLine = ''
 
 self.onmessage = async (e) => {
   if (e.data.type === 'segment') await handleSegment(e.data)
-}
-
-function detectSep(firstLine) {
-  const counts = { ',': 0, ';': 0, '\t': 0 }
-  for (const c of firstLine) if (c in counts) counts[c]++
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
-}
-
-function evaluarCondicion(celda, operador, valor) {
-  const c = String(celda ?? '').toLowerCase()
-  const v = String(valor ?? '').toLowerCase()
-  switch (operador) {
-    case 'eq':        return c === v
-    case 'neq':       return c !== v
-    case 'contains':  return c.includes(v)
-    case 'ncontains': return !c.includes(v)
-    case 'starts':    return c.startsWith(v)
-    case 'empty':     return c.trim() === ''
-    case 'nempty':    return c.trim() !== ''
-    default:          return true
-  }
-}
-
-function pasaFiltro(vals, colIndex, condiciones, esAnd) {
-  if (!condiciones.length) return true
-  const resultados = condiciones.map(c => {
-    const idx = colIndex[c.columna]
-    if (idx === undefined) return false
-    return evaluarCondicion(vals[idx], c.operador, c.valor)
-  })
-  return esAnd ? resultados.every(Boolean) : resultados.some(Boolean)
 }
 
 async function handleSegment({ file, condiciones, operadorGlobal }) {

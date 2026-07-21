@@ -202,7 +202,9 @@ async function traerHtmlDeUrl(url) {
 // dentro de un texto, recortando ~40 caracteres antes y después y
 // agregando "…" en los bordes si el recorte no llega al principio/fin
 // real del texto.
-function extraerContexto(texto, indice, largoMatch, margen = 40) {
+// export para poder testearla directo (pura: texto+índice in →
+// fragmentos out, sin tocar el DOM).
+export function extraerContexto(texto, indice, largoMatch, margen = 40) {
   const inicio = Math.max(0, indice - margen)
   const fin = Math.min(texto.length, indice + largoMatch + margen)
   const prefijo = inicio > 0 ? '…' : ''
@@ -217,7 +219,11 @@ function extraerContexto(texto, indice, largoMatch, margen = 40) {
 // Busca TODAS las ocurrencias de 'valor' dentro de 'texto', devolviendo
 // el contexto de cada una. ignorarMayus controla si la comparación es
 // case-insensitive.
-function buscarOcurrencias(texto, valor, ignorarMayus) {
+// export para poder testearla directo — es la lógica que decide CUÁNTOS
+// hallazgos se reportan por pieza; un error acá (ej. loop infinito con
+// valor vacío, u overlap mal resuelto) es silencioso: no tira
+// excepción, solo cuenta mal.
+export function buscarOcurrencias(texto, valor, ignorarMayus) {
   if (!valor) return []
   const ocurrencias = []
   const textoComp = ignorarMayus ? texto.toLowerCase() : texto

@@ -5474,6 +5474,199 @@ select:focus {
   color: var(--icbc-red);
 }
 
+/* ─── Rediseño del modal: secciones numeradas + tarjetas de "modo" ───────
+   Reemplaza los checkboxes sueltos de antes. Todo el acento usa el rojo
+   institucional (--icbc-red / --red-bg / --red-border), NUNCA el violeta
+   de --accent-secondary — ese queda reservado para otras partes de la
+   app, acá se buscó consistencia con el resto del flujo de Pedidos. */
+.sheet-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.sheet-section-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sheet-section-badge {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--red-bg);
+  color: var(--icbc-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.sheet-section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+.sheet-section-pill {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--icbc-red);
+  background: var(--red-bg);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Tarjetas "modo" (Sin programación / Fuera de hora) — reemplazan los
+   checkboxes sueltos. Toda la tarjeta es clickeable, no solo el switch. */
+.sheet-mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sheet-mode-card.activo {
+  border-color: var(--red-border);
+  background: var(--red-bg-soft);
+}
+.sheet-mode-card-warning.activo {
+  border-color: rgba(255, 153, 0, 0.4);
+  background: rgba(255, 153, 0, 0.08);
+}
+.sheet-mode-card-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+.sheet-mode-card.activo .sheet-mode-card-icon {
+  background: var(--red-bg);
+  color: var(--icbc-red);
+}
+.sheet-mode-card-warning.activo .sheet-mode-card-icon {
+  background: rgba(255, 153, 0, 0.16);
+  color: #ff9900;
+}
+.sheet-mode-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.sheet-mode-card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+.sheet-mode-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+.sheet-switch-track {
+  width: 36px;
+  height: 21px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  padding: 2px;
+  box-sizing: border-box;
+  transition: background var(--transition);
+}
+.sheet-mode-card.activo .sheet-switch-track {
+  background: var(--icbc-red);
+}
+.sheet-mode-card-warning.activo .sheet-switch-track {
+  background: #ff9900;
+}
+.sheet-switch-thumb {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition);
+}
+.sheet-mode-card.activo .sheet-switch-thumb {
+  transform: translateX(15px);
+}
+
+/* Caja contenedora de la sección de programación — se apaga (opacity +
+   grayscale + pointer-events:none) cuando "Sin programación" está
+   activo, en vez de desaparecer de golpe: se entiende que existe pero
+   no aplica en este modo. */
+.sheet-schedule-wrap {
+  position: relative;
+}
+.sheet-schedule-box {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: opacity var(--transition);
+}
+.sheet-schedule-box.deshabilitado {
+  opacity: 0.35;
+  filter: grayscale(60%);
+  pointer-events: none;
+}
+.sheet-schedule-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.sheet-schedule-overlay-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px -8px rgba(20, 20, 40, 0.18);
+  border-radius: var(--radius-md);
+  padding: 0.45rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.sheet-inline-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #92400e;
+  background: rgba(255, 153, 0, 0.12);
+  border: 1px solid rgba(255, 153, 0, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.7rem;
+  margin: 0;
+}
+.sheet-inline-warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 /* Lista de día/horario con repeticiones (envío único o dentro de un
    grupo) — cada fila es una repetición: mismos datos, otro día/hora. */
 .sheet-horarios-wrap {

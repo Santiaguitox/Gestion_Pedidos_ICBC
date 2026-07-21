@@ -20,6 +20,9 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import { detectEncoding, decodeChunk, parseCSVLine, detectCol, normalizeEmail } from '@/workers/worker-utils'
+// diffRows vive en comparacion.js para poder testearla — mismo
+// criterio que worker-utils.js.
+import { diffRows } from '@/workers/comparacion'
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -116,16 +119,6 @@ async function readRowAt(meta, offset, length) {
   const row = {};
   meta.headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
   return row;
-}
-
-function diffRows(rowA, rowB, commonCols) {
-  const fieldDiffs = [];
-  for (const col of commonCols) {
-    const valA = (rowA[col] ?? '').trim();
-    const valB = (rowB[col] ?? '').trim();
-    if (valA !== valB) fieldDiffs.push({ col, valA, valB });
-  }
-  return fieldDiffs;
 }
 
 // ─── MODO RÁPIDO — diffs en memoria, sin IndexedDB ───────────────────────

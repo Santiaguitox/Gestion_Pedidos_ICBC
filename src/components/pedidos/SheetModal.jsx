@@ -147,7 +147,26 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   const [confirmPendientes, setConfirmPendientes] = useState(null) // array de avisos, o null
   const [errorSinFilas, setErrorSinFilas] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Caso "entregable = HTML suelto": el cliente lo envía por su propia
+  // plataforma, no hay día/hora de programación que cargar. Con esto
+  // tildado se ignora por completo la sección de horarios/grupos (sigue
+  // montada por debajo con sus valores por defecto, pero no se muestra
+  // ni se usa) y armarFilas() registra una única fila con
+  // dia_programacion/hora_programacion vacíos.
+  const [sinProgramacion, setSinProgramacion] = useState(false)
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
+
+  function toggleSinProgramacion(checked) {
+    setSinProgramacion(checked)
+    if (checked) {
+      // Sin envío programado no hay "cantidad de envíos" real — se
+      // resetea a 0 pero queda editable por si el usuario la quiere
+      // ajustar a mano. Aclaraciones se deja tal cual está — sin
+      // autocompletar nada, el usuario decide si quiere aclarar algo.
+      set('cantidad_envios', '0')
+      setErrorSinFilas(false)
+    }
+  }
 
   const usaEnvioUnico = modoProgramacion === 'mismo' || !tieneMultiplesPiezas
 
@@ -158,7 +177,8 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // cuando tiene día y hora cargados. Se recalcula en tiempo real cada
   // vez que se agrega/quita/completa una repetición o un grupo; si el
   // usuario lo edita a mano y no vuelve a tocar día/horario, su valor
-  // manual queda tal cual.
+  // manual queda tal cual. Irrelevante cuando sinProgramacion está
+  // activo (la sección que la alimenta ni se muestra).
   const totalEnviosConfigurados = usaEnvioUnico
     ? horariosUnico.filter(esHorarioCompleto).length
     : grupos.filter(g => g.piezaIds.length > 0).reduce((acc, g) => acc + g.horarios.filter(esHorarioCompleto).length, 0)
@@ -220,6 +240,12 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
     const base = { ...data, fecha_aprobacion: fechaAprobFmt }
     const fmtDia = dia => dia ? format(new Date(dia + 'T00:00:00'), "dd/MM/yyyy") : ''
 
+    // Sin programación: 1 sola fila, sin día/hora — la Sheets API
+    // acepta strings vacíos en esas columnas sin problema.
+    if (sinProgramacion) {
+      return [{ ...base, dia_programacion: '', hora_programacion: '' }]
+    }
+
     if (usaEnvioUnico) {
       return horariosUnico.filter(esHorarioCompleto).map(h => ({
         ...base,
@@ -250,6 +276,7 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // igual?" antes de guardar: repeticiones sin día/hora completos (se
   // van a descartar) y, si aplica, piezas sin ningún grupo asignado.
   function construirAvisosPendientes() {
+    if (sinProgramacion) return []
     const avisos = []
 
     const incompletos = usaEnvioUnico
@@ -271,7 +298,7 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
 
   async function handleConfirm() {
     setErrorSinFilas(false)
-    if (totalEnviosConfigurados === 0) {
+    if (!sinProgramacion && totalEnviosConfigurados === 0) {
       setErrorSinFilas(true)
       return
     }
@@ -294,107 +321,178 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
     <div className="modal-overlay">
       <div className="modal" style={{ maxWidth: '560px' }}>
         <div className="modal-header">
-          <h2 className="modal-title">Registrar en Google Sheets</h2>
+          <div>
+            <h2 className="modal-title">Registrar en Google Sheets</h2>
+            {pedido?.asunto && (
+              <p className="text-muted-sm" style={{ margin: '2px 0 0' }}>{pedido.asunto}</p>
+            )}
+          </div>
           <button onClick={onClose} className="modal-close"><X size={18} /></button>
         </div>
         <div className="modal-body">
           <p className="text-muted-sm" style={{ marginBottom: '0.75rem' }}>Revisá y editá los datos antes de confirmar el registro.</p>
-          <div className="flex flex-col gap-2">
-            <div className="sheet-field">
-              <label className="field-label">Nombre de campaña</label>
-              <input value={data.nombre_campana} onChange={e => set('nombre_campana', e.target.value)} placeholder="Nombre de campaña…" />
-            </div>
-            <div className="sheet-field">
-              <label className="field-label">Descripción</label>
-              <input value={data.descripcion} onChange={e => set('descripcion', e.target.value)} placeholder="Descripción…" />
-            </div>
-            <div className="sheet-grid-2">
-              <div className="sheet-field">
-                <label className="field-label">Fecha pedido</label>
-                <input value={data.fecha_pedido} onChange={e => set('fecha_pedido', e.target.value)} placeholder="Fecha pedido…" />
-              </div>
-              <div className="sheet-field">
-                <label className="field-label">Hora pedido</label>
-                <input value={data.hora_pedido} onChange={e => set('hora_pedido', e.target.value)} placeholder="HH:MM" maxLength={5} />
-              </div>
-            </div>
-            <div className="sheet-grid-2">
-              <div className="sheet-field">
-                <label className="field-label">Instancia</label>
-                <input value={data.instancia} onChange={e => set('instancia', e.target.value)} placeholder="Instancia…" />
-              </div>
-              <div className="sheet-field">
-                <label className="field-label">Cantidad envíos</label>
-                <input value={data.cantidad_envios} onChange={e => set('cantidad_envios', e.target.value)} placeholder="Cantidad…" />
-              </div>
-            </div>
-            <div className="sheet-grid-2">
-              <div className="sheet-field">
-                <label className="field-label">Fecha aprobación</label>
-                <DatePicker value={data.fecha_aprobacion} onChange={val => set('fecha_aprobacion', val)} placeholder="Seleccionar fecha…" />
-              </div>
-              <div className="sheet-field">
-                <label className="field-label">Hora aprobación</label>
-                <input value={data.hora_aprobacion} onChange={e => set('hora_aprobacion', e.target.value)} placeholder="HH:MM" maxLength={5} />
-              </div>
-            </div>
-            <div className="sheet-field">
-              <label className="field-label">Aclaraciones</label>
-              <input value={data.aclaraciones} onChange={e => set('aclaraciones', e.target.value)} placeholder="Aclaraciones…" />
-            </div>
+          <div className="flex flex-col gap-5">
 
-            {tieneMultiplesPiezas && (
-              <div className="sheet-field">
-                <label className="field-label">¿Todas las piezas se configuran el mismo día y horario?</label>
-                <div className="sheet-toggle-mismo-dia">
-                  <button type="button"
-                    className={`sheet-toggle-opcion${modoProgramacion === 'mismo' ? ' activo' : ''}`}
-                    onClick={() => setModoProgramacion('mismo')}>
-                    Sí, mismo día y horario
-                  </button>
-                  <button type="button"
-                    className={`sheet-toggle-opcion${modoProgramacion === 'distinto' ? ' activo' : ''}`}
-                    onClick={() => setModoProgramacion('distinto')}>
-                    No, varía por pieza
-                  </button>
+            <div className="flex flex-col gap-2">
+              <div className="sheet-section-header-left">
+                <span className="sheet-section-badge">1</span>
+                <span className="sheet-section-title">Datos del pedido</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="sheet-field">
+                  <label className="field-label">Nombre de campaña</label>
+                  <input value={data.nombre_campana} onChange={e => set('nombre_campana', e.target.value)} placeholder="Nombre de campaña…" />
+                </div>
+                <div className="sheet-field">
+                  <label className="field-label">Descripción</label>
+                  <input value={data.descripcion} onChange={e => set('descripcion', e.target.value)} placeholder="Descripción…" />
+                </div>
+                <div className="sheet-grid-2">
+                  <div className="sheet-field">
+                    <label className="field-label">Fecha pedido</label>
+                    <input value={data.fecha_pedido} onChange={e => set('fecha_pedido', e.target.value)} placeholder="Fecha pedido…" />
+                  </div>
+                  <div className="sheet-field">
+                    <label className="field-label">Hora pedido</label>
+                    <input value={data.hora_pedido} onChange={e => set('hora_pedido', e.target.value)} placeholder="HH:MM" maxLength={5} />
+                  </div>
+                </div>
+                <div className="sheet-grid-2">
+                  <div className="sheet-field">
+                    <label className="field-label">Instancia</label>
+                    <input value={data.instancia} onChange={e => set('instancia', e.target.value)} placeholder="Instancia…" />
+                  </div>
+                  <div className="sheet-field">
+                    <label className="field-label">Cantidad envíos</label>
+                    <input value={data.cantidad_envios} onChange={e => set('cantidad_envios', e.target.value)} placeholder="Cantidad…" />
+                  </div>
+                </div>
+                <div className="sheet-grid-2">
+                  <div className="sheet-field">
+                    <label className="field-label">Fecha aprobación</label>
+                    <DatePicker value={data.fecha_aprobacion} onChange={val => set('fecha_aprobacion', val)} placeholder="Seleccionar fecha…" />
+                  </div>
+                  <div className="sheet-field">
+                    <label className="field-label">Hora aprobación</label>
+                    <input value={data.hora_aprobacion} onChange={e => set('hora_aprobacion', e.target.value)} placeholder="HH:MM" maxLength={5} />
+                  </div>
+                </div>
+                <div className="sheet-field">
+                  <label className="field-label">Aclaraciones</label>
+                  <input value={data.aclaraciones} onChange={e => set('aclaraciones', e.target.value)} placeholder="Aclaraciones…" />
                 </div>
               </div>
-            )}
+            </div>
 
-            {usaEnvioUnico ? (
-              <ListaHorarios horarios={horariosUnico} onChange={setHorariosUnico} />
-            ) : (
-              <div className="sheet-grupos-wrap">
-                {grupos.map(grupo => (
-                  <FilaGrupo
-                    key={grupo.id}
-                    grupo={grupo}
-                    piezasDisponibles={piezasConNombre.filter(p => !piezasAsignadasEnOtroGrupo(grupo.id).has(p.id))}
-                    onChange={nuevo => actualizarGrupo(grupo.id, nuevo)}
-                    onEliminar={() => eliminarGrupo(grupo.id)}
-                    puedeEliminar={grupos.length > 1}
-                  />
-                ))}
-                <button type="button" className="sheet-btn-agregar-grupo" onClick={agregarGrupo}>
-                  <Plus size={14} /> Agregar grupo
-                </button>
-                <p className="ap-hint" style={{ margin: 0 }}>
-                  Se va a registrar una fila en el Sheet por cada grupo con piezas asignadas (y una más por cada repetición de día/horario que le agregues) — el resto de los datos del pedido se repite igual en todas.
-                </p>
+            <div
+              className={`sheet-mode-card${sinProgramacion ? ' activo' : ''}`}
+              role="switch"
+              aria-checked={sinProgramacion}
+              tabIndex={0}
+              onClick={() => toggleSinProgramacion(!sinProgramacion)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSinProgramacion(!sinProgramacion) } }}
+            >
+              <div className="sheet-mode-card-icon">
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11.5" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M2.5 7.2H15.5" stroke="currentColor" strokeWidth="1.4" /><path d="M4 11.5L14 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
               </div>
-            )}
+              <div className="sheet-mode-card-body">
+                <div className="sheet-mode-card-title">Sin programación de envío</div>
+                <div className="sheet-mode-card-desc">El entregable es solo el HTML; el cliente lo envía por su propia plataforma. Oculta la sección de programación de abajo.</div>
+              </div>
+              <div className="sheet-switch-track"><div className="sheet-switch-thumb" /></div>
+            </div>
 
-            <label className="sheet-checkbox-fuera-hora">
-              <input type="checkbox" checked={data.fueraDeHora} onChange={e => set('fueraDeHora', e.target.checked)} />
-              Pedido fuera de hora
-            </label>
+            <div className="flex flex-col gap-2">
+              <div className="sheet-section-header">
+                <div className="sheet-section-header-left">
+                  <span className="sheet-section-badge">2</span>
+                  <span className="sheet-section-title">Programación de envío</span>
+                </div>
+                <span className="sheet-section-pill">Condicional</span>
+              </div>
+
+              <div className="sheet-schedule-wrap">
+                <div className={`sheet-schedule-box${sinProgramacion ? ' deshabilitado' : ''}`}>
+                  {errorSinFilas && !sinProgramacion && (
+                    <p className="sheet-inline-warning">
+                      <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5L14 13H1L7.5 1.5Z" stroke="#92400e" strokeWidth="1.3" strokeLinejoin="round" /><path d="M7.5 6V9.2" stroke="#92400e" strokeWidth="1.3" strokeLinecap="round" /><circle cx="7.5" cy="11.2" r="0.8" fill="#92400e" /></svg>
+                      No hay ningún día u horario completo cargado — completá al menos uno para poder registrar el pedido.
+                    </p>
+                  )}
+
+                  {tieneMultiplesPiezas && (
+                    <div className="sheet-field">
+                      <label className="field-label">¿Todas las piezas se configuran el mismo día y horario?</label>
+                      <div className="sheet-toggle-mismo-dia">
+                        <button type="button"
+                          className={`sheet-toggle-opcion${modoProgramacion === 'mismo' ? ' activo' : ''}`}
+                          onClick={() => setModoProgramacion('mismo')}>
+                          Sí, mismo día y horario
+                        </button>
+                        <button type="button"
+                          className={`sheet-toggle-opcion${modoProgramacion === 'distinto' ? ' activo' : ''}`}
+                          onClick={() => setModoProgramacion('distinto')}>
+                          No, varía por pieza
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {usaEnvioUnico ? (
+                    <ListaHorarios horarios={horariosUnico} onChange={setHorariosUnico} />
+                  ) : (
+                    <div className="sheet-grupos-wrap">
+                      {grupos.map(grupo => (
+                        <FilaGrupo
+                          key={grupo.id}
+                          grupo={grupo}
+                          piezasDisponibles={piezasConNombre.filter(p => !piezasAsignadasEnOtroGrupo(grupo.id).has(p.id))}
+                          onChange={nuevo => actualizarGrupo(grupo.id, nuevo)}
+                          onEliminar={() => eliminarGrupo(grupo.id)}
+                          puedeEliminar={grupos.length > 1}
+                        />
+                      ))}
+                      <button type="button" className="sheet-btn-agregar-grupo" onClick={agregarGrupo}>
+                        <Plus size={14} /> Agregar grupo
+                      </button>
+                      <p className="ap-hint" style={{ margin: 0 }}>
+                        Se va a registrar una fila en el Sheet por cada grupo con piezas asignadas (y una más por cada repetición de día/horario que le agregues) — el resto de los datos del pedido se repite igual en todas.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {sinProgramacion && (
+                  <div className="sheet-schedule-overlay">
+                    <div className="sheet-schedule-overlay-pill">
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="var(--text-muted)" strokeWidth="1.3" /><path d="M3 3L11 11" stroke="var(--text-muted)" strokeWidth="1.3" /></svg>
+                      No aplica en este modo
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div
+              className={`sheet-mode-card sheet-mode-card-warning${data.fueraDeHora ? ' activo' : ''}`}
+              role="switch"
+              aria-checked={data.fueraDeHora}
+              tabIndex={0}
+              onClick={() => set('fueraDeHora', !data.fueraDeHora)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('fueraDeHora', !data.fueraDeHora) } }}
+            >
+              <div className="sheet-mode-card-icon">
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.7" stroke="currentColor" strokeWidth="1.4" /><path d="M9 5.5V9.3L11.5 10.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+              </div>
+              <div className="sheet-mode-card-body">
+                <div className="sheet-mode-card-title">Pedido fuera de hora</div>
+                <div className="sheet-mode-card-desc">Pinta la fila en naranja dentro del Google Sheet para que el equipo lo priorice.</div>
+              </div>
+              <div className="sheet-switch-track"><div className="sheet-switch-thumb" /></div>
+            </div>
+
           </div>
           <div className="modal-footer" style={{ marginTop: '1.25rem', flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem' }}>
-            {errorSinFilas && (
-              <p className="msg-error" style={{ margin: 0 }}>
-                No hay ningún día/horario completo para registrar — completá al menos uno.
-              </p>
-            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
               <button onClick={onClose} className="btn-secondary">Cancelar</button>
               <button onClick={handleConfirm} disabled={saving} className="btn-primary"
