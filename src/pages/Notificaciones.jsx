@@ -1,7 +1,7 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 import { agruparNotificaciones, rutaDeNotificacion } from '@/lib/notificaciones'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'

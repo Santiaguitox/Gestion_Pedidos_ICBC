@@ -192,9 +192,17 @@ function SelectorTabla({ textoTabla, setTextoTabla, seleccion, setSeleccion }) {
   // vista de tabla — el textarea crudo (una sola línea gigante por
   // fila, ilegible con datos reales tipo JSON de filtros) queda oculto
   // detrás de un botón "Editar pegado" por si hace falta repegar.
-  useEffect(() => {
+  // Ajuste de estado DURANTE el render con tracking del valor
+  // anterior, no en useEffect: la versión con efecto commiteaba un
+  // render intermedio con el textarea todavía visible y recién
+  // después lo ocultaba (cascada que react-hooks/set-state-in-effect
+  // marca como error) — con el ajuste en render el pase a vista de
+  // tabla sale en un solo paint.
+  const [tieneHeadersPrevio, setTieneHeadersPrevio] = useState(tieneHeaders)
+  if (tieneHeaders !== tieneHeadersPrevio) {
+    setTieneHeadersPrevio(tieneHeaders)
     if (tieneHeaders) setEditandoPegado(false)
-  }, [tieneHeaders])
+  }
 
   return (
     <>

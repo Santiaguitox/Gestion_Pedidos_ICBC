@@ -127,7 +127,11 @@ export function useEstadisticas({ desde, hasta, comparar, tipo, instancia, usuar
   const [error, setError] = useState(null)
 
   const [dataAnterior, setDataAnterior] = useState(null)
-  const [loadingComparar, setLoadingComparar] = useState(false)
+  // Si el hook se monta con el switch de comparar YA activo (estado
+  // persistido), el primer fetch de comparación arranca al toque — el
+  // loading inicial tiene que reflejarlo, porque el ajuste en render
+  // solo se dispara en CAMBIOS de la clave, no en el montaje.
+  const [loadingComparar, setLoadingComparar] = useState(Boolean(comparar && desde && hasta))
   const [errorComparar, setErrorComparar] = useState(null)
 
   const [config, setConfig] = useState(null)
@@ -137,10 +141,37 @@ export function useEstadisticas({ desde, hasta, comparar, tipo, instancia, usuar
       .then(({ data: cfg }) => setConfig(cfg ?? null))
   }, [])
 
+  // Flip de loading/error al cambiar los parámetros — como AJUSTE DE
+  // ESTADO DURANTE EL RENDER (con tracking del valor anterior), no
+  // dentro de los fetch: el setLoading(true) síncrono adentro del
+  // useCallback invocado desde el useEffect era el patrón que
+  // react-hooks/set-state-in-effect marca como error (render en
+  // cascada post-commit). Con el ajuste en render, el skeleton aparece
+  // en el MISMO paint que el cambio de filtro (antes tardaba un
+  // commit extra) y los fetch quedan puramente async. La clave
+  // serializa exactamente las deps que re-disparan cada fetch — si se
+  // agrega un parámetro nuevo al hook, sumarlo acá Y en las deps del
+  // useCallback correspondiente.
+  const claveParams = JSON.stringify([desde, hasta, tipo, instancia, usuarioId])
+  const [claveParamsPrevia, setClaveParamsPrevia] = useState(claveParams)
+  const claveComparar = JSON.stringify([comparar, desde, hasta, tipo, instancia, usuarioId])
+  const [claveCompararPrevia, setClaveCompararPrevia] = useState(claveComparar)
+  if (claveParams !== claveParamsPrevia) {
+    setClaveParamsPrevia(claveParams)
+    if (desde && hasta) { setLoading(true); setError(null) }
+  }
+  if (claveComparar !== claveCompararPrevia) {
+    setClaveCompararPrevia(claveComparar)
+    if (!comparar || !desde || !hasta) { setDataAnterior(null); setErrorComparar(null) }
+    else { setLoadingComparar(true); setErrorComparar(null) }
+  }
+
+  // Los fetch NO tocan loading/error de forma síncrona — eso ya lo
+  // hizo el ajuste en render de arriba (camino de cambio de params) o
+  // el wrapper refetch (camino manual desde un handler, donde el set
+  // síncrono es legítimo). Acá queda solo el trabajo async.
   const fetchPrincipal = useCallback(async () => {
     if (!desde || !hasta) return
-    setLoading(true)
-    setError(null)
     try {
       const actual = await rpcEstadisticas({ desde, hasta, tipo, instancia, usuarioId })
       setData(actual)
@@ -152,12 +183,23 @@ export function useEstadisticas({ desde, hasta, comparar, tipo, instancia, usuar
     }
   }, [desde, hasta, tipo, instancia, usuarioId])
 
+  // Fetch async puro: todos los sets de adentro corren después del
+  // await (post-respuesta), no hay setState síncrono en la cadena del
+  // efecto — los flips síncronos de loading/error ya se movieron al
+  // ajuste-en-render de arriba. La regla igual marca CUALQUIER
+  // setState alcanzable desde un efecto, incluso post-await, lo que
+  // condena el patrón estándar de fetch-en-efecto que la propia doc
+  // de React usa — para ese caso el disable documentado es la salida
+  // honesta (la alternativa real sería una librería de datos o un
+  // external store, otro proyecto).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchPrincipal() }, [fetchPrincipal])
 
   const fetchComparacion = useCallback(async () => {
-    if (!comparar || !desde || !hasta) { setDataAnterior(null); setErrorComparar(null); return }
-    setLoadingComparar(true)
-    setErrorComparar(null)
+    // La limpieza de dataAnterior/errorComparar al apagar el switch y
+    // el flip de loadingComparar al prenderlo ya los hizo el ajuste
+    // en render — acá solo se decide si hay que fetchear.
+    if (!comparar || !desde || !hasta) return
     try {
       const anterior = await rpcEstadisticas({ ...rangoMesAnterior({ desde, hasta }), tipo, instancia, usuarioId })
       setDataAnterior(anterior)
@@ -169,10 +211,21 @@ export function useEstadisticas({ desde, hasta, comparar, tipo, instancia, usuar
     }
   }, [comparar, desde, hasta, tipo, instancia, usuarioId])
 
+  // Mismo caso que el efecto de fetchPrincipal de arriba.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchComparacion() }, [fetchComparacion])
 
+  // refetch manual (botón "Reintentar" y similares): acá el flip
+  // síncrono de loading/error es correcto — se llama desde un event
+  // handler, no desde un efecto, así que no genera cascada post-commit.
+  const refetch = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    fetchPrincipal()
+  }, [fetchPrincipal])
+
   return {
-    data, loading, error, refetch: fetchPrincipal,
+    data, loading, error, refetch,
     dataAnterior, loadingComparar, errorComparar,
     config,
   }

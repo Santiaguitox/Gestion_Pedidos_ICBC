@@ -2,7 +2,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TagSearch } from '@/components/ui/TagSearch'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { supabase } from '@/lib/supabase'
 import { PRIORIDADES, ROLES } from '@/lib/constants'
 import { useEstados } from '@/hooks/useEstados'
@@ -190,8 +190,17 @@ export default function Dashboard() {
   // Función pura de fetch, reusada tanto por el efecto que dispara con
   // cambios de filtro como por el canal de realtime de abajo — evita
   // duplicar la misma llamada en dos lugares.
+  // Sin setLoading(true) síncrono acá adentro: el flip de loading al
+  // cambiar un filtro lo hace el ajuste-en-render de abajo (mismo
+  // paint que el cambio, sin el render en cascada post-commit que
+  // react-hooks/set-state-in-effect marca como error). CAMBIO DE
+  // COMPORTAMIENTO deliberado en el camino de realtime: antes cada
+  // cambio en la tabla de pedidos (incluso de otro usuario) pasaba
+  // por acá y flasheaba el skeleton entero del dashboard; ahora el
+  // refetch de realtime reemplaza la lista en silencio cuando llega
+  // la respuesta — un refresh de fondo no debería blanquear lo que ya
+  // se está viendo.
   function fetchPedidosDashboard() {
-    setLoading(true)
     supabase.rpc('listar_pedidos', {
       p_modo: 'dashboard',
       p_prioridad: filtroPrioridad || null,
@@ -206,6 +215,20 @@ export default function Dashboard() {
     })
   }
 
+  // Flip de loading al cambiar filtros — ajuste de estado DURANTE el
+  // render con tracking del valor anterior (patrón de React para
+  // estado derivado), en el mismo paint que el cambio. El montaje lo
+  // cubre el useState(true) inicial de loading.
+  const claveFiltros = JSON.stringify([filtroPrioridad, filtroTipo, filtroEstado, filtroTag, filtroUsuario, user?.id])
+  const [claveFiltrosPrevia, setClaveFiltrosPrevia] = useState(claveFiltros)
+  if (claveFiltros !== claveFiltrosPrevia) {
+    setClaveFiltrosPrevia(claveFiltros)
+    setLoading(true)
+  }
+
+  // Fetch async puro: los sets de adentro corren todos dentro del
+  // .then() (post-respuesta), no hay setState síncrono en el cuerpo
+  // del efecto.
   useEffect(() => {
     fetchPedidosDashboard()
   }, [filtroPrioridad, filtroTipo, filtroEstado, filtroTag, filtroUsuario, user?.id])

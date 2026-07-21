@@ -14,7 +14,10 @@ export function useTagsDisponibles() {
 
   useEffect(() => {
     let cancelado = false
-    setLoading(true)
+    // Sin setLoading(true): el estado inicial ya es true y el efecto
+    // corre solo al montar (deps []) — mismo motivo que en
+    // CargaTrabajoModal (setState síncrono en efecto = render en
+    // cascada redundante).
     supabase
       .from('pedidos')
       .select('tags')

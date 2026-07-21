@@ -1,9 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { NotificacionesContext } from '@/context/useNotificaciones'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { contarNoLeidas } from '@/lib/notificaciones'
 
-const NotificacionesContext = createContext(null)
+// El contexto y el hook useNotificaciones viven en useNotificaciones.js — ver el
+// comentario allá (Fast Refresh exige que este archivo exporte SOLO
+// componentes).
 const LIMITE_NOTIFICACIONES = 50
 const FEEDBACK_DURATION = 4000
 
@@ -258,6 +261,3 @@ export function NotificacionesProvider({ children }) {
   )
 }
 
-export function useNotificaciones() {
-  return useContext(NotificacionesContext)
-}

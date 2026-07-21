@@ -179,7 +179,7 @@ export default function SegmentarTabBase() {
       c.columna && (SIN_VALOR.has(c.operador) || c.valor.trim() !== '')
     )
     worker.postMessage({ type: 'segment', file, condiciones: condicionesValidas, operadorGlobal })
-  }, [condiciones, operadorGlobal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [condiciones, operadorGlobal])
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
@@ -255,8 +255,18 @@ export default function SegmentarTabBase() {
       {phase === 'idle' && (
         <>
           {/* Si ya hay un archivo cargado (viene de "Ajustar filtros"),
-              mostrar barra de archivo. Si no, mostrar el dropzone hero. */}
-          {fileRef.current ? (
+              mostrar barra de archivo. Si no, mostrar el dropzone hero.
+              La condición usa fileName (estado, reactivo) y NO
+              fileRef.current: mutar un ref no re-renderiza, así que
+              condicionar el render a un ref solo "funcionaba" porque
+              setFileName se llama junto con la asignación del ref —
+              cualquier refactor que separe esos dos pasos dejaba la UI
+              desincronizada en silencio. fileName y fileRef.current se
+              setean/limpian juntos en processFile/reset, así que la
+              condición es semánticamente la misma. El ref sigue
+              existiendo para su uso legítimo: pasarle el File crudo al
+              worker desde el handler de "Aplicar filtros". */}
+          {fileName ? (
             <div className="rb-filebar">
               <div className="rb-filebar-left">
                 <div className="rb-filebar-icon"><FileText size={18} /></div>
@@ -292,8 +302,9 @@ export default function SegmentarTabBase() {
             </div>
           )}
 
-          {/* Panel de filtros — solo visible si hay un archivo cargado */}
-          {fileRef.current && (
+          {/* Panel de filtros — solo visible si hay un archivo cargado
+              (fileName, no fileRef.current — ver comentario de arriba) */}
+          {fileName && (
             <div className="seg-panel">
               <div className="seg-panel-header">
                 <div className="seg-panel-titulo">

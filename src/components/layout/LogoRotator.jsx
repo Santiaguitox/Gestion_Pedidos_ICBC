@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useTheme } from '@/context/ThemeContext'
+import { useTheme } from '@/context/useTheme'
 import iconmLogoFull from '@/assets/Icomm_Logo.png'
 import iconmLogoMobile from '@/assets/Icomm_Logo_Mobile.png'
 import icbcLogoFull from '@/assets/ICBC_Logo.png'

@@ -8,7 +8,7 @@ import {
   Download, RotateCcw, AlertCircle, Info, CalendarClock, Hourglass, Filter,
   ChevronDown, ChevronUp, X, BarChart2, Plus, CheckCircle2, Clock, Zap,
 } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { useTipos } from '@/hooks/useTipos'
 import { useInstancias } from '@/hooks/useInstancias'
 import { useUsuarios } from '@/hooks/useUsuarios'

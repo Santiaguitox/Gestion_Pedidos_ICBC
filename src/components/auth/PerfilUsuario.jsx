@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { ROLE_COLORS } from '@/lib/constants'
 import { Badge } from '@/components/ui/Badge'
 import CambiarPassword from '@/components/auth/CambiarPassword'

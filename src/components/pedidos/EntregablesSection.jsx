@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
 import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2, Download } from 'lucide-react'
 import { format } from 'date-fns'

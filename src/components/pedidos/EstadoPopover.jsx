@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 import { logActividad } from '@/hooks/useActividad'
 import { ROLES, TIPO_ACTIVIDAD } from '@/lib/constants'
 

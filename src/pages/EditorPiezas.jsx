@@ -4,9 +4,9 @@ import { useState, useRef, useEffect, forwardRef } from 'react'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info, Save, FolderOpen, User } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { supabase } from '@/lib/supabase'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 import { DetectarInlineEnvolviendoOutlook, DetectarContenidoDuplicado, DetectarFragmentoHtmlCrudoEnTexto, DetectarAtributosConDosPuntos } from '@/lib/revision/generales'
 import '@/styles/EditorPiezas.css'
 import {
@@ -699,18 +699,26 @@ function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
   // (sin importación, o importación sin repeticiones extra) ambos
   // tienen la misma cantidad de <td>, así que el comportamiento de
   // siempre queda intacto.
-  const camposOriginales = useRef(null)
-  if (!camposOriginales.current) {
+  // useState con inicializador perezoso, NO useRef con asignación en
+  // render: la semántica buscada es exactamente "calcular una sola vez
+  // por instancia del componente y congelar" — el inicializador de
+  // useState garantiza eso por contrato de React (corre una única vez,
+  // nunca se re-ejecuta ni se descarta, a diferencia de useMemo), y no
+  // requiere leer/escribir un ref durante el render, que es el
+  // anti-patrón que react-hooks/refs marca como error (funciona hoy de
+  // casualidad, pero React no garantiza coherencia de refs mutados en
+  // pleno render, especialmente con StrictMode/render concurrente).
+  const [camposOriginales] = useState(() => {
     const contarTds = (h) => (h.match(/<td\b/gi) || []).length
     const tdsOriginal = contarTds(bloque.html)
     const tdsEditado = bloque.htmlEditado ? contarTds(bloque.htmlEditado) : 0
     const baseHtml = tdsEditado > tdsOriginal ? bloque.htmlEditado : bloque.html
-    camposOriginales.current = detectarCampos(baseHtml)
-  }
+    return detectarCampos(baseHtml)
+  })
   const esCodigo = bloque.tipo === 'codigo'
   const esEspaciador = bloque.slug === 'Espaciador'
   const esImagenLibre = bloque.slug === 'Imagen_Libre'
-  const sinCampos = !esCodigo && !esEspaciador && !esImagenLibre && camposOriginales.current.length === 0
+  const sinCampos = !esCodigo && !esEspaciador && !esImagenLibre && camposOriginales.length === 0
 
   function actualizarCampo(tipo, idx, cambios, idxFallback) {
     setHtmlLocal(prev => actualizarCampoEnHtml(prev, tipo, idx, cambios, idxFallback))
@@ -1056,7 +1064,7 @@ function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
     }
   }
 
-  const campos = camposOriginales.current
+  const campos = camposOriginales
 
   return (
     <>
@@ -1250,9 +1258,17 @@ function CategoriaColapsable({ titulo, children, count = null, busqueda = '' }) 
   // Auto-expandir (nunca auto-colapsar) cuando la búsqueda tiene
   // resultados acá — sin esto, escribir algo que está en una
   // categoría cerrada no mostraba nada hasta abrirla a mano.
-  useEffect(() => {
+  // Ajuste de estado DURANTE el render con tracking del valor
+  // anterior (el patrón que documenta React para "adjusting state
+  // when a prop changes"), no en un useEffect: el efecto disparaba un
+  // segundo render en cascada después de cada commit (el error
+  // react-hooks/set-state-in-effect), mientras que el ajuste en
+  // render se aplica antes de commitear, en una sola pasada.
+  const [busquedaPrevia, setBusquedaPrevia] = useState(busqueda)
+  if (busqueda !== busquedaPrevia) {
+    setBusquedaPrevia(busqueda)
     if (busqueda && count > 0) setAbierto(true)
-  }, [busqueda])
+  }
   return (
     <div className="ep-categoria">
       <button className="ep-categoria-header" onClick={() => setAbierto(v => !v)}>
@@ -2613,12 +2629,14 @@ export default function EditorPiezas() {
   // Inicializa redesOrden la primera vez que se carga un header con
   // redes reales — todas activas, en el orden en que aparecen en el
   // HTML original. Se vuelve a disparar cada vez que redesOrden se
-  // resetea a null (cambio de header), no en cada render.
-  useEffect(() => {
-    if (redesOrden == null && redesDetectadas.length > 0) {
-      setRedesOrden(redesDetectadas.map(key => ({ key, activa: true })))
-    }
-  }, [redesOrden, bandaHeader])
+  // resetea a null (cambio de header), no en cada render. Ajuste de
+  // estado DURANTE el render (patrón de React para estado derivado de
+  // otro estado), no en useEffect: la versión con efecto commiteaba
+  // primero un render con redesOrden todavía en null y recién después
+  // el bueno — dos pasadas en cascada por cada cambio de header.
+  if (redesOrden == null && redesDetectadas.length > 0) {
+    setRedesOrden(redesDetectadas.map(key => ({ key, activa: true })))
+  }
 
   const previewSrcdoc = showPreview
     ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:99px}</style></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })}</body></html>`
@@ -3732,18 +3750,24 @@ function EditorMobile(props) {
   // resultados mientras hay una búsqueda activa — igual criterio que
   // se suma ahora también en desktop (CategoriaColapsable). Sin esto,
   // escribir algo que está en una categoría cerrada no mostraba nada
-  // hasta abrirla a mano, dejando la búsqueda "muda".
-  useEffect(() => {
-    if (!busquedaLib) return
-    setCatAbierta(prev => {
-      let cambio = false
-      const next = { ...prev }
-      for (const cat of CATEGORIAS_LIB) {
-        if (!next[cat.key] && filtro(cat.lista).length > 0) { next[cat.key] = true; cambio = true }
-      }
-      return cambio ? next : prev
-    })
-  }, [busquedaLib])
+  // hasta abrirla a mano, dejando la búsqueda "muda". Ajuste de
+  // estado DURANTE el render con tracking del valor anterior (mismo
+  // patrón y motivo que CategoriaColapsable en desktop — ver el
+  // comentario allá), no en useEffect.
+  const [busquedaLibPrevia, setBusquedaLibPrevia] = useState(busquedaLib)
+  if (busquedaLib !== busquedaLibPrevia) {
+    setBusquedaLibPrevia(busquedaLib)
+    if (busquedaLib) {
+      setCatAbierta(prev => {
+        let cambio = false
+        const next = { ...prev }
+        for (const cat of CATEGORIAS_LIB) {
+          if (!next[cat.key] && filtro(cat.lista).length > 0) { next[cat.key] = true; cambio = true }
+        }
+        return cambio ? next : prev
+      })
+    }
+  }
 
   return (
     <div className="ep-m-root">

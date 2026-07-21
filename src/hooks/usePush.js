@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { estadoPush, suscribirsePush, desuscribirsePush } from '@/lib/push'
 
 // Estado y acciones del Web Push PARA ESTE DISPOSITIVO.

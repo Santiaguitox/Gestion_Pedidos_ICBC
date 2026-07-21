@@ -357,8 +357,17 @@ export default function RevisionEnvios() {
   // recarga entero al cambiar srcDoc) en cada tecla — con el debounce
   // el reemplazo se siente "en vivo" igual, sin el parpadeo de
   // recargar el iframe en cada letra tipeada.
+  // La LIMPIEZA del preview cuando desaparece la pieza detectada se
+  // hace como ajuste de estado durante el render (abajo) — acá en el
+  // efecto queda solo el reemplazo debounced, cuyo set corre dentro
+  // del setTimeout (async, sin cascada post-commit).
+  const [htmlDetectadoPrevio, setHtmlDetectadoPrevio] = useState(htmlDetectado)
+  if (htmlDetectado !== htmlDetectadoPrevio) {
+    setHtmlDetectadoPrevio(htmlDetectado)
+    if (!htmlDetectado) setPreviewHtml('')
+  }
   useEffect(() => {
-    if (!htmlDetectado) { setPreviewHtml(''); return }
+    if (!htmlDetectado) return
     const id = setTimeout(() => {
       const emailPreview = emailsTest.find(e => e.trim()) || 'test@ejemplo.com'
       setPreviewHtml(reemplazarCampos(htmlDetectado, valoresCampos, emailPreview))
@@ -388,10 +397,17 @@ export default function RevisionEnvios() {
   // (ej. si el componente re-renderiza por otra razón) y evita pisar un
   // análisis manual posterior si el usuario edita y vuelve a analizar.
   const autoRunDone = useRef(false)
+  // handleAnalizar setea estado de forma síncrona, pero este efecto es
+  // un kickoff imperativo de una única vez al montar desde un
+  // deep-link — el equivalente a que el usuario apriete "Analizar"
+  // solo. No hay cascada repetida posible (autoRunDone lo garantiza) y
+  // no existe forma de expresar "acción de montaje" sin efecto — es el
+  // escape hatch legítimo de la regla.
   useEffect(() => {
     if (autoRunDone.current) return
     autoRunDone.current = true
     if (navState?.url && navState?.headerLine) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleAnalizar()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

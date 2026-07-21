@@ -1,6 +1,9 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { ThemeContext } from '@/context/useTheme'
 
-const ThemeContext = createContext(null)
+// El contexto y el hook useTheme viven en useTheme.js — ver el
+// comentario allá (Fast Refresh exige que este archivo exporte SOLO
+// componentes).
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
@@ -19,6 +22,3 @@ export function ThemeProvider({ children }) {
   )
 }
 
-export function useTheme() {
-  return useContext(ThemeContext)
-}

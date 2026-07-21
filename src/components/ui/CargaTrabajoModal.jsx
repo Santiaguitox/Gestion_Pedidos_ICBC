@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Users as UsersIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { calcularGrupo } from '@/lib/fechas'
 import { colorAvatar, iniciales } from '@/lib/avatares'
 
@@ -28,7 +28,11 @@ export function CargaTrabajoModal({ onClose }) {
   const [seleccionados, setSeleccionados] = useState(() => new Set(user?.id ? [user.id] : []))
 
   useEffect(() => {
-    setLoading(true)
+    // Sin setLoading(true) acá: el estado inicial YA es true y este
+    // efecto corre una única vez al montar (deps []) — el set síncrono
+    // era redundante y además el patrón que react-hooks marca como
+    // error (setState síncrono dentro de un efecto dispara un render
+    // en cascada antes de que el fetch siquiera arranque).
     Promise.all([
       supabase.rpc('listar_pedidos', { p_modo: 'dashboard' }),
       supabase.from('profiles').select('id, full_name, avatar_color').order('full_name'),

@@ -1,4 +1,4 @@
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/useAuth'
 import { supabase } from '@/lib/supabase'
 import { logActividad } from '@/hooks/useActividad'
 import { TIPO_ACTIVIDAD } from '@/lib/constants'

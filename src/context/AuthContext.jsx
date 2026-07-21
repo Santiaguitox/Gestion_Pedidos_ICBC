@@ -1,7 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AuthContext } from '@/context/useAuth'
 import { supabase } from '@/lib/supabase'
 
-const AuthContext = createContext(null)
+// El contexto y el hook useAuth viven en useAuth.js — ver el
+// comentario allá (Fast Refresh exige que este archivo exporte SOLO
+// componentes).
 
 export function AuthProvider({ children }) {
   const [authState, setAuthState] = useState({
@@ -64,6 +67,3 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  return useContext(AuthContext)
-}

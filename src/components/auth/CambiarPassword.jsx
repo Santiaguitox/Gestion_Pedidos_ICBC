@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 import { X, Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function CambiarPassword({ onClose }) {

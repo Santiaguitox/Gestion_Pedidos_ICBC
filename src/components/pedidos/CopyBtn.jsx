@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Copy, Check } from 'lucide-react'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 
 export function CopyBtn({ text, size = 13 }) {
   const { showError } = useNotificaciones()

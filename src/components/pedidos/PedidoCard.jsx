@@ -10,7 +10,7 @@ import { format } from 'date-fns'
 import { colorAvatar, iniciales } from '@/lib/avatares'
 import { peorRevisionDePedido, peorBaseDePedido } from '@/lib/severidad'
 import { es } from 'date-fns/locale'
-import { useNotificaciones } from '@/context/NotificacionesContext'
+import { useNotificaciones } from '@/context/useNotificaciones'
 
 function AvatarAsignado({ asignado }) {
   const nombre = asignado.profiles?.full_name ?? ''
