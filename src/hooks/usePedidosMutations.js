@@ -25,6 +25,8 @@ export function usePedidosMutations() {
     if (limpio.fecha_limite === '') limpio.fecha_limite = null
     if (limpio.fecha_programacion === '') limpio.fecha_programacion = null
     if (limpio.hora_programacion === '') limpio.hora_programacion = null
+    if (limpio.fecha_pedido_cliente === '') limpio.fecha_pedido_cliente = null
+    if (limpio.hora_pedido_cliente === '') limpio.hora_pedido_cliente = null
     // tipo y prioridad son NOT NULL con CHECK en la base — un '' los viola.
     // El formulario ya preselecciona un valor válido, esto es solo respaldo.
     if (limpio.tipo === '') limpio.tipo = 'creacion_email'

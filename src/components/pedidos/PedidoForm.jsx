@@ -10,6 +10,8 @@ import { useTagsDisponibles } from '@/hooks/useTagsDisponibles'
 import { X, Check, Plus } from 'lucide-react'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { HelpPopover } from '@/components/ui/HelpPopover'
+import { colorAvatar, iniciales } from '@/lib/avatares'
 
 const TIPOS_ENVIO = [
   { value: 'test', label: 'Test' },
@@ -53,6 +55,8 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     cantidad_envios:    pedido?.cantidad_envios ?? '',
     fecha_programacion: pedido?.fecha_programacion ?? '',
     hora_programacion:  pedido?.hora_programacion ?? '',
+    fecha_pedido_cliente: pedido?.fecha_pedido_cliente ?? '',
+    hora_pedido_cliente:  pedido?.hora_pedido_cliente ?? '',
     // Token del lock optimista: el updated_at del pedido TAL COMO
     // ESTABA cuando este form se abrió (useState inicializa una sola
     // vez, así que aunque el prop se refresque con el detalle, este
@@ -64,6 +68,10 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     updated_at:         pedido?.updated_at ?? null,
   })
   const [usuarios, setUsuarios] = useState([])
+  // Arranca tildado si el pedido ya tenía cargada la fecha/hora real
+  // del cliente (editando uno existente) — si no, apagado por defecto,
+  // que es el caso normal (pedido cargado apenas llega).
+  const [cargarFechaCliente, setCargarFechaCliente] = useState(!!pedido?.fecha_pedido_cliente)
   const [tagInput, setTagInput] = useState('')
   const [tagSugerenciasAbiertas, setTagSugerenciasAbiertas] = useState(false)
   // Se abre cuando se aprieta Guardar/Crear con texto tipeado en el
@@ -88,7 +96,7 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
     // Viewer no puede aparecer como opción en "Asignar a" — no tiene
     // lógica de negocio que se le asigne un pedido (mismo criterio por
     // el que se ocultó Notificaciones para ese rol).
-    supabase.from('profiles').select('id,full_name,role').then(({ data }) => setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER)))
+    supabase.from('profiles').select('id,full_name,role,avatar_color').then(({ data }) => setUsuarios((data ?? []).filter(u => u.role !== ROLES.VIEWER)))
   }, [])
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
@@ -101,10 +109,23 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
   // que se recibe por parámetro en vez de leer form.tags directo.
   async function ejecutarGuardado(formAGuardar) {
     if (!formAGuardar.asunto.trim()) { setError('El asunto es obligatorio.'); return }
+    // Si el checkbox de "fecha real del cliente" está activo, fecha Y
+    // hora son obligatorias las dos — un dato a medias sería peor que
+    // no tenerlo (el modal de Sheet no sabría si completar la hora
+    // faltante con la de creación o dejarla vacía). Si el checkbox está
+    // apagado, se guardan vacías aunque hayan quedado valores cargados
+    // de cuando estuvo prendido — no tiene sentido persistir un dato
+    // que el usuario decidió que no aplica.
+    const fechaClienteFinal = cargarFechaCliente ? formAGuardar.fecha_pedido_cliente : ''
+    const horaClienteFinal = cargarFechaCliente ? formAGuardar.hora_pedido_cliente : ''
+    if (cargarFechaCliente && (!fechaClienteFinal || !horaClienteFinal.trim())) {
+      setError('Si activás la fecha real del pedido, completá fecha y hora.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      await onSave(formAGuardar)
+      await onSave({ ...formAGuardar, fecha_pedido_cliente: fechaClienteFinal, hora_pedido_cliente: horaClienteFinal })
       showSuccess(isEdit ? 'Pedido actualizado correctamente' : 'Pedido creado correctamente')
     } catch (err) {
       setError(err.message)
@@ -215,184 +236,258 @@ export default function PedidoForm({ pedido, onSave, onCancel }) {
 
         <form onSubmit={handleSubmit} className="modal-body">
 
-          <div className="field">
-            <FieldLabel done={!!form.asunto.trim()}>
-              Asunto / origen del mail <span style={{ color: 'var(--icbc-red)' }}>*</span>
-            </FieldLabel>
-            <input value={form.asunto} onChange={e => set('asunto', e.target.value)}
-              placeholder="Ej: Campaña Día del Padre - ICBC" />
-          </div>
+          <div className="flex flex-col gap-8">
 
-          <div className="field">
-            <FieldLabel done={!!form.descripcion.trim()}>
-              Descripción <span className="field-label-optional">opcional</span>
-            </FieldLabel>
-            <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)}
-              rows={3} placeholder="Detalles del pedido…" />
-          </div>
+            <div className="flex flex-col gap-3">
+              <div className="pf-section-header">
+                <span className="pf-section-badge">1</span>
+                <span className="pf-section-title">Datos del pedido</span>
+              </div>
 
-          <div className="form-divider" />
+              <div className="pf-required-card">
+                <div className="pf-required-card-header">
+                  <FieldLabel done={!!form.asunto.trim()}>Asunto / origen del mail</FieldLabel>
+                  <span className="pf-required-pill">Obligatorio</span>
+                </div>
+                <input value={form.asunto} onChange={e => set('asunto', e.target.value)}
+                  placeholder="Ej: Campaña Día del Padre - ICBC" />
+              </div>
 
-          <div className="field">
-            <FieldLabel done={!!form.tipo}>Tipo</FieldLabel>
-            <div className="chip-group">
-              {tipos.map(t => (
-                <button key={t.value} type="button"
-                  onClick={() => set('tipo', t.value)}
-                  className="chip" style={chipStyle(t.color, form.tipo === t.value)}>
-                  {t.label}
-                </button>
-              ))}
+              <div className="field">
+                <FieldLabel done={!!form.descripcion.trim()}>
+                  Descripción <span className="field-label-optional">opcional</span>
+                </FieldLabel>
+                <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)}
+                  rows={3} placeholder="Detalles del pedido…" />
+              </div>
             </div>
-          </div>
 
-          <div className="form-divider" />
 
-          <div className="field">
-            <FieldLabel done={!!form.prioridad}>Prioridad</FieldLabel>
-            <div className="chip-group">
-              {PRIORIDADES.map(p => (
-                <button key={p.value} type="button"
-                  onClick={() => set('prioridad', p.value)}
-                  className="chip" style={chipStyle(p.color, form.prioridad === p.value)}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className="flex flex-col gap-5">
+              <div className="pf-section-header">
+                <span className="pf-section-badge">2</span>
+                <span className="pf-section-title">Clasificación</span>
+              </div>
 
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={form.estados.length > 0}>Estado inicial</FieldLabel>
-            <div className="chip-group">
-              {estados.map(e => {
-                const active = form.estados.includes(e.value)
-                return (
-                  <button key={e.value} type="button"
-                    onClick={() => set('estados', active
-                      ? form.estados.filter(x => x !== e.value)
-                      : [...form.estados, e.value]
-                    )}
-                    className="chip" style={chipStyle(e.color, active)}>
-                    {e.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={!!form.instancia}>
-              Instancia <span className="field-label-optional">opcional</span>
-            </FieldLabel>
-            <div className="chip-group">
-              {instancias.map(i => (
-                <button key={i.value} type="button"
-                  onClick={() => set('instancia', form.instancia === i.value ? '' : i.value)}
-                  className="chip" style={chipStyle(i.color, form.instancia === i.value)}>
-                  {i.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={!!form.tipo_envio}>
-              Tipo de envío <span className="field-label-optional">opcional</span>
-            </FieldLabel>
-            <div className="chip-group">
-              {TIPOS_ENVIO.map(t => (
-                <button key={t.value} type="button"
-                  onClick={() => set('tipo_envio', form.tipo_envio === t.value ? '' : t.value)}
-                  className="chip"
-                  style={form.tipo_envio === t.value ? { background: 'rgba(91,78,232,0.1)', borderColor: 'rgba(91,78,232,0.4)', color: 'var(--icomm-violet)' } : {}}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {form.tipo_envio === 'otro' && (
-              <input value={form.tipo_envio_otro}
-                onChange={e => set('tipo_envio_otro', e.target.value)}
-                placeholder="Especificá el tipo de envío…"
-                style={{ marginTop: '0.5rem' }} />
-            )}
-          </div>
-
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={!!form.fecha_limite}>
-              Fecha límite <span className="field-label-optional">opcional</span>
-            </FieldLabel>
-            <DatePicker value={form.fecha_limite} onChange={val => set('fecha_limite', val)} />
-          </div>
-
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={form.asignados.length > 0}>Asignar a</FieldLabel>
-            <div className="chip-group">
-              {usuarios.map(u => {
-                const active = form.asignados.includes(u.id)
-                return (
-                  <button key={u.id} type="button"
-                    onClick={() => set('asignados', active
-                      ? form.asignados.filter(x => x !== u.id)
-                      : [...form.asignados, u.id]
-                    )}
-                    className="chip"
-                    style={active ? { background: 'rgba(208,17,27,0.1)', borderColor: 'rgba(208,17,27,0.4)', color: 'var(--icbc-red)' } : {}}>
-                    <span className="avatar-xs">{u.full_name?.[0]?.toUpperCase()}</span>
-                    {u.full_name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="form-divider" />
-
-          <div className="field">
-            <FieldLabel done={form.tags.length > 0}>
-              Tags <span className="field-label-optional">opcional</span>
-            </FieldLabel>
-            <div className="tag-input-row" ref={tagFieldRef} style={{ position:'relative' }}>
-              <input value={tagInput}
-                onChange={e => { setTagInput(e.target.value); setTagSugerenciasAbiertas(true) }}
-                onFocus={() => setTagSugerenciasAbiertas(true)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
-                placeholder="Escribí y presioná Enter…" />
-              <button type="button" onClick={() => addTag()} className="btn-add-tag" aria-label="Agregar tag"><Plus size={16} strokeWidth={2.4} /></button>
-
-              {tagSugerenciasAbiertas && tagSugerencias.length > 0 && (
-                <div className="tag-sugerencias">
-                  {tagSugerencias.map(s => (
-                    <button key={s} type="button" className="tag-sugerencia-item" onClick={() => addTag(s)}>
-                      {s}
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'rgba(26,46,230,0.12)' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: '#1A2EE6' }} />
+                  </span>
+                  <span className="pf-category-label">Tipo</span>
+                </div>
+                <div className="chip-group">
+                  {tipos.map(t => (
+                    <button key={t.value} type="button"
+                      onClick={() => set('tipo', t.value)}
+                      className="chip" style={chipStyle(t.color, form.tipo === t.value)}>
+                      {t.label}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
-            {form.tags.length > 0 && (
-              <div className="tag-list">
-                {form.tags.map(t => (
-                  <span key={t} className="tag-item">
-                    {t}
-                    <button type="button" onClick={() => set('tags', form.tags.filter(x => x !== t))}
-                      className="tag-item-remove">×</button>
-                  </span>
-                ))}
               </div>
-            )}
+
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'rgba(208,17,27,0.12)' }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="6" width="2" height="5" fill="#D0111B" /><rect x="5" y="3" width="2" height="8" fill="#D0111B" /><rect x="9" y="0" width="2" height="11" fill="#D0111B" /></svg>
+                  </span>
+                  <span className="pf-category-label">Prioridad</span>
+                </div>
+                <div className="chip-group">
+                  {PRIORIDADES.map(p => (
+                    <button key={p.value} type="button"
+                      onClick={() => set('prioridad', p.value)}
+                      className="chip" style={chipStyle(p.color, form.prioridad === p.value)}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'rgba(91,78,232,0.12)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #5B4EE8' }} />
+                  </span>
+                  <span className="pf-category-label">Estado inicial <span className="pf-category-label-suffix">· múltiple</span></span>
+                </div>
+                <div className="chip-group">
+                  {estados.map(e => {
+                    const active = form.estados.includes(e.value)
+                    return (
+                      <button key={e.value} type="button"
+                        onClick={() => set('estados', active
+                          ? form.estados.filter(x => x !== e.value)
+                          : [...form.estados, e.value]
+                        )}
+                        className="chip" style={chipStyle(e.color, active)}>
+                        {e.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'rgba(14,165,233,0.12)' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: '#0EA5E9' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: '#0EA5E9', opacity: 0.5, marginLeft: -2 }} />
+                  </span>
+                  <span className="pf-category-label">Instancia <span className="pf-category-label-suffix">opcional</span></span>
+                </div>
+                <div className="chip-group">
+                  {instancias.map(i => (
+                    <button key={i.value} type="button"
+                      onClick={() => set('instancia', form.instancia === i.value ? '' : i.value)}
+                      className="chip" style={chipStyle(i.color, form.instancia === i.value)}>
+                      {i.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'var(--bg-hover)' }}>
+                    <span style={{ width: 0, height: 0, borderTop: '4px solid transparent', borderBottom: '4px solid transparent', borderLeft: '6px solid var(--text-muted)' }} />
+                  </span>
+                  <span className="pf-category-label">Tipo de envío <span className="pf-category-label-suffix">opcional</span></span>
+                </div>
+                <div className="chip-group">
+                  {TIPOS_ENVIO.map(t => (
+                    <button key={t.value} type="button"
+                      onClick={() => set('tipo_envio', form.tipo_envio === t.value ? '' : t.value)}
+                      className="chip"
+                      style={form.tipo_envio === t.value ? { background: 'rgba(91,78,232,0.1)', borderColor: 'rgba(91,78,232,0.4)', color: 'var(--icomm-violet)' } : {}}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {form.tipo_envio === 'otro' && (
+                  <input value={form.tipo_envio_otro}
+                    onChange={e => set('tipo_envio_otro', e.target.value)}
+                    placeholder="Especificá el tipo de envío…"
+                    style={{ marginTop: '0.5rem' }} />
+                )}
+              </div>
+            </div>
+
+
+            <div className="flex flex-col gap-3">
+              <div className="pf-section-header">
+                <span className="pf-section-badge">3</span>
+                <span className="pf-section-title">Fechas</span>
+              </div>
+
+              <div className="field">
+                <FieldLabel done={!!form.fecha_limite}>
+                  Fecha límite <span className="field-label-optional">opcional</span>
+                </FieldLabel>
+                <DatePicker value={form.fecha_limite} onChange={val => set('fecha_limite', val)} />
+              </div>
+
+              <div className={`pf-fecha-real-card${cargarFechaCliente ? ' activo' : ''}`}>
+                <label className="pf-fecha-real-checkbox-row">
+                  <input type="checkbox" checked={cargarFechaCliente}
+                    onChange={e => setCargarFechaCliente(e.target.checked)} />
+                  <span className="pf-fecha-real-label">
+                    Registrar fecha y hora efectiva del pedido
+                    <HelpPopover>
+                      La fecha y hora ingresadas se utilizarán para registrar el pedido en Google Sheets, en lugar de la fecha y hora de carga en la aplicación. Usá esta opción cuando el pedido se haya realizado antes de ser cargado en el sistema.
+                    </HelpPopover>
+                  </span>
+                </label>
+                {cargarFechaCliente && (
+                  <div className="pf-fecha-real-fields">
+                    <div>
+                      <label>Fecha real *</label>
+                      <DatePicker value={form.fecha_pedido_cliente} onChange={val => set('fecha_pedido_cliente', val)} placeholder="Fecha del pedido…" />
+                    </div>
+                    <div>
+                      <label>Hora real *</label>
+                      <input value={form.hora_pedido_cliente} onChange={e => set('hora_pedido_cliente', e.target.value)}
+                        placeholder="HH:MM" maxLength={5} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
+            <div className="flex flex-col gap-5">
+              <div className="pf-section-header">
+                <span className="pf-section-badge">4</span>
+                <span className="pf-section-title">Equipo y tags</span>
+              </div>
+
+              <div>
+                <div className="pf-category-header">
+                  <span className="pf-category-icon" style={{ background: 'rgba(13,148,136,0.12)' }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#0D9488' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#0D9488', opacity: 0.5, marginLeft: -4 }} />
+                  </span>
+                  <span className="pf-category-label">Asignar a</span>
+                </div>
+                <div className="chip-group">
+                  {usuarios.map(u => {
+                    const active = form.asignados.includes(u.id)
+                    return (
+                      <button key={u.id} type="button"
+                        onClick={() => set('asignados', active
+                          ? form.asignados.filter(x => x !== u.id)
+                          : [...form.asignados, u.id]
+                        )}
+                        className="chip"
+                        style={active ? { background: 'rgba(208,17,27,0.1)', borderColor: 'rgba(208,17,27,0.4)', color: 'var(--icbc-red)' } : {}}>
+                        <span className="avatar-xs" style={{ background: u.avatar_color || colorAvatar(u.id) }}>{iniciales(u.full_name)}</span>
+                        {u.full_name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="field">
+                <FieldLabel done={form.tags.length > 0}>
+                  Tags <span className="field-label-optional">opcional</span>
+                </FieldLabel>
+                <div className="tag-input-row" ref={tagFieldRef} style={{ position:'relative' }}>
+                  <input value={tagInput}
+                    onChange={e => { setTagInput(e.target.value); setTagSugerenciasAbiertas(true) }}
+                    onFocus={() => setTagSugerenciasAbiertas(true)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+                    placeholder="Escribí y presioná Enter…" />
+                  <button type="button" onClick={() => addTag()} className="btn-add-tag" aria-label="Agregar tag"><Plus size={16} strokeWidth={2.4} /></button>
+
+                  {tagSugerenciasAbiertas && tagSugerencias.length > 0 && (
+                    <div className="tag-sugerencias">
+                      {tagSugerencias.map(s => (
+                        <button key={s} type="button" className="tag-sugerencia-item" onClick={() => addTag(s)}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {form.tags.length > 0 && (
+                  <div className="tag-list">
+                    {form.tags.map(t => (
+                      <span key={t} className="tag-item">
+                        {t}
+                        <button type="button" onClick={() => set('tags', form.tags.filter(x => x !== t))}
+                          className="tag-item-remove">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
 
-          {error && <p className="msg-error">{error}</p>}
+          {error && <p className="msg-error" style={{ marginTop: '1rem' }}>{error}</p>}
 
           <div className="modal-footer">
             <button type="button" onClick={onCancel} className="btn-secondary">Cancelar</button>

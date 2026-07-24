@@ -119,8 +119,19 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
 
   const [data, setData] = useState({
     nombre_campana:    pedido.asunto ?? '',
-    fecha_pedido:      format(new Date(pedido.created_at), "dd/MM/yyyy", { locale: es }),
-    hora_pedido:       format(new Date(pedido.created_at), "HH:mm", { locale: es }),
+    // Si se cargó la fecha/hora real en que el cliente hizo el pedido
+    // (PedidoForm, checkbox "El cliente lo pidió en otro momento"), se
+    // usa esa — es la que realmente se quiere dejar registrada en el
+    // Sheet. Si no se cargó (caso normal, pedido cargado apenas llega),
+    // sigue exactamente como antes: la fecha/hora en que se creó el
+    // registro en la app. Ambos campos se cargan siempre juntos (ver
+    // validación en PedidoForm), así que alcanza con chequear la fecha.
+    fecha_pedido:      pedido.fecha_pedido_cliente
+      ? format(new Date(pedido.fecha_pedido_cliente + 'T00:00:00'), "dd/MM/yyyy", { locale: es })
+      : format(new Date(pedido.created_at), "dd/MM/yyyy", { locale: es }),
+    hora_pedido:       pedido.fecha_pedido_cliente
+      ? pedido.hora_pedido_cliente
+      : format(new Date(pedido.created_at), "HH:mm", { locale: es }),
     descripcion:       pedido.descripcion ?? '',
     instancia:         pedido.instancia ?? '',
     fecha_aprobacion:  format(fechaAprobRef, "yyyy-MM-dd"),

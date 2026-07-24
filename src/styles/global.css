@@ -1396,6 +1396,14 @@ select:focus {
   right: 0;
 }
 
+/* Variante usada cuando no hay espacio suficiente debajo del ícono
+   dentro del viewport (o del contenedor scrolleable que lo recorta) —
+   el panel se abre hacia arriba en vez de hacia abajo. */
+.help-popover-panel-arriba {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
+}
+
 .filtros-bloque-nota {
   display: flex;
   align-items: center;
@@ -7434,4 +7442,155 @@ select:focus {
 .pedido-detalle-error {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding: 40px 0; text-align: center; color: var(--text-secondary);
+}
+
+/* ─── Rediseño de PedidoForm: secciones numeradas + tarjetas ─────────────
+   Mismo criterio que ya usamos en SheetModal (badge numerado + título),
+   con clases propias (prefijo pf-) para no depender de las de sheet-
+   por si esas cambian a futuro. Acento en rojo institucional, igual
+   que el resto de la app. */
+.pf-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.1rem;
+}
+.pf-section-badge {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--icbc-red);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.pf-section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+/* Header chico por categoría de chips (Tipo/Prioridad/Estado/Instancia/
+   Tipo de envío/Asignar a) — icono cuadrado + label mayúscula, para que
+   el ojo distinga cada grupo sin tener que leer el texto entero. El
+   color de fondo del ícono se pasa inline por categoría (ver JSX),
+   independiente del color real de cada chip individual. */
+.pf-category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+.pf-category-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pf-category-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.pf-category-label-suffix {
+  text-transform: none;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Tarjeta que envuelve "Asunto" — el único campo que de verdad bloquea
+   el guardado si queda vacío. Antes se distinguía solo con un asterisco
+   rojo chiquito al lado del label. */
+.pf-required-card {
+  border: 1.5px solid var(--red-border);
+  background: var(--red-bg-soft);
+  border-radius: var(--radius-lg);
+  padding: 0.7rem 0.85rem;
+}
+.pf-required-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.pf-required-pill {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--icbc-red);
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+}
+
+/* Tarjeta de "Fecha real del pedido" — se resalta en rojo cuando el
+   checkbox está activo, neutra cuando no. El input de fecha/hora real
+   solo aparece activo, separado por un divisor punteado. */
+.pf-fecha-real-card {
+  border: 1.5px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 0.9rem;
+  /* Solo se anima color/fondo (el toggle activo/inactivo) — con "all"
+     cualquier reflow incidental apenas se abre el modal (ej. el salto
+     del web font DM Sans/Inter terminando de cargar, que cambia el
+     ancho del texto y hace pasar el label de una línea a dos) quedaba
+     animado como si la tarjeta "temblara" sola, sin que nadie tocara
+     nada. */
+  transition: border-color var(--transition), background-color var(--transition);
+}
+.pf-fecha-real-card.activo {
+  border-color: var(--red-border);
+  background: var(--red-bg-soft);
+}
+.pf-fecha-real-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+.pf-fecha-real-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+  accent-color: var(--icbc-red);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pf-fecha-real-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.pf-fecha-real-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-strong);
+}
+.pf-fecha-real-fields label {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 0.25rem;
 }
