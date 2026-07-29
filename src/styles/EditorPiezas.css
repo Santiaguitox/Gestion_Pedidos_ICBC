@@ -17,14 +17,35 @@
   background: var(--bg-base);
   font-family: var(--font-body);
 }
+/* ep-cuerpo antes tenía overflow:hidden a secas: si la ventana no
+   entraba, el ÚNICO que cedía espacio era .ep-canvas-wrap (tenía
+   min-width:0, el truco típico de flexbox para permitir shrink
+   ilimitado) — se achicaba hasta casi desaparecer, con texto cortado,
+   botones pisados y un scroll horizontal suelto DENTRO de esa columna
+   (efecto lateral de .ep-canvas-body, que tiene overflow-y:auto — por
+   spec CSS, eso fuerza overflow-x a 'auto' también aunque no se pida).
+   Biblioteca (240px) y Panel de edición (280px) nunca cedían nada
+   (flex-shrink:0), así que TODO el ajuste recaía sobre el canvas.
+
+   Ahora: el canvas tiene un mínimo real (ep-canvas-wrap min-width abajo)
+   y, si aun así no entra todo (biblioteca + canvas mínimo + panel de
+   edición ≈ 940px), es .ep-cuerpo el que scrollea horizontal COMO UNA
+   SOLA FILA — un solo scrollbar prolijo en vez de que cada columna se
+   rompa por separado. En una ventana angosta el usuario scrollea para
+   ver Biblioteca/Canvas/Panel completos, en vez de verlos ilegibles. */
 .ep-cuerpo {
   flex: 1;
   display: flex;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-height: 0;
 }
 
 /* ─── Panel izquierdo — Biblioteca ─────────────────────────────────────── */
+/* width fijo + flex-shrink:0 a propósito: es uno de los 3 anchos que
+   componen el mínimo real de .ep-cuerpo (ver comentario ahí arriba).
+   No cede espacio — si no entra, scrollea .ep-cuerpo entero, no esta
+   columna sola. */
 .ep-biblioteca {
   width: 240px;
   flex-shrink: 0;
@@ -134,12 +155,18 @@
 .ep-bloque-add:hover { background: #a50e15; }
 
 /* ─── Centro — Canvas ───────────────────────────────────────────────────── */
+/* min-width real (antes: 0, shrink ilimitado — ver comentario en
+   .ep-cuerpo). 420px es lo mínimo para que el contenido del canvas
+   (nombres de bloque, badges, botones) siga siendo legible sin
+   pisarse ni cortarse — por debajo de eso ya no hay forma de mostrarlo
+   bien, así que a partir de ahí es .ep-cuerpo el que scrollea, no este
+   panel el que se aplasta. */
 .ep-canvas-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-width: 0;
+  min-width: 420px;
 }
 
 .ep-canvas-header {
@@ -811,6 +838,10 @@
 }
 
 /* ─── Panel derecho — Editor ────────────────────────────────────────────── */
+/* width fijo + flex-shrink:0 a propósito, mismo motivo que
+   .ep-biblioteca: es uno de los 3 anchos del mínimo real de
+   .ep-cuerpo. No cede espacio — si no entra, scrollea .ep-cuerpo
+   entero, no esta columna sola. */
 .ep-editor {
   width: 280px;
   flex-shrink: 0;

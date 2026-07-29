@@ -1,5 +1,7 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useLockAppScroll } from '@/hooks/useLockAppScroll'
+import { useHysteresisBelow } from '@/hooks/useHysteresisBelow'
+import { useLayoutMetrics } from '@/context/useLayoutMetrics'
 import { useState, useRef, useEffect, forwardRef } from 'react'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info, Save, FolderOpen, User } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -40,30 +42,48 @@ import {
   tituloYDetalleDeAviso,
 } from '@/lib/editor/importar.js'
 
-// Detección de mobile por viewport — mismo breakpoint (768px) que ya
-// usa EditorPiezas.css para ocultar los paneles laterales en desktop.
-// No toca ningún camino de desktop: solo decide qué árbol renderizar.
+// Ancho mínimo real para que el editor desktop entre completo: las 2
+// columnas laterales fijas (Biblioteca 240px + Panel de edición 280px
+// = 520px, ver EditorPiezas.css) más el ancho real en el que se
+// renderiza la pieza (~600px, el ancho de email estándar — mismo
+// número que ya usa el resto del editor para el preview real, no un
+// valor inventado) más un margen para el padding/borde del canvas
+// (~40px). Si el contenedor real no tiene este ancho, no hay forma de
+// mostrar las 2 barras laterales enteras Y el canvas a su ancho real
+// al mismo tiempo — ahí se pasa a EditorMobile en vez de mostrar el
+// desktop apretado/roto.
+const EDITOR_DESKTOP_MIN_WIDTH = 1160 // 240 + 280 + 600 + 40
+
+// Margen de histéresis entre "entrar a mobile" y "volver a desktop".
+// Necesario porque cruzar EDITOR_DESKTOP_MIN_WIDTH no es gratis: al
+// montar <EditorMobile>, la regla `.main-content:has(> .ep-m-root)`
+// en EditorPiezas.css le saca a .main-content su padding (1.75rem
+// 2rem ≈ 64px de ancho entre los dos costados) y su overflow-y:auto
+// (que puede tener scrollbar, ~15-17px más) — eso cambia de golpe el
+// ancho medido (contentWidth) hasta ~80px apenas se cruza el umbral,
+// empujándolo de vuelta para el otro lado y generando un parpadeo
+// infinito mobile→desktop→mobile→... 100px de margen absorbe ese
+// salto real (no es solo ruido de medición, es un cambio de layout
+// concreto) con margen de sobra.
+const EDITOR_MOBILE_EXIT_WIDTH = EDITOR_DESKTOP_MIN_WIDTH + 100
+
+// Detección de mobile — se basa en una sola pregunta: ¿entra el
+// editor desktop completo (las 2 barras laterales enteras + el canvas
+// mostrando la pieza a su ancho real de ~600px) en el espacio
+// disponible? Si no entra, se muestra la versión mobile — sin
+// importar si el dispositivo es táctil o tiene mouse: un desktop con
+// ventana angosta tampoco tiene espacio real para mostrar el desktop
+// completo, así que corresponde el mismo tratamiento que un celular.
 //
-// OJO: NO es el mismo hook que src/hooks/useIsMobile.js (que mide solo
-// innerWidth con breakpoint 640) — por eso el nombre distinto, para que
-// nadie los confunda ni "unifique" sin querer. Acá se usa el lado más
-// chico del viewport (no innerWidth solo) para que no cambie al rotar
-// el dispositivo: el ancho de un celular grande en horizontal (ej.
-// iPhone Pro Max ~926px) supera fácil los 768px y haría que, al
-// rotarlo, se muestre de golpe el editor de escritorio completo en vez
-// del mobile. El lado corto de un celular no cambia entre portrait y
-// landscape, así que basarse en el mínimo mantiene la misma versión
-// del editor sin importar la orientación.
-function useIsMobileLadoCorto(breakpoint = 768) {
-  const medir = () => Math.min(window.innerWidth, window.innerHeight) <= breakpoint
-  const [isMobile, setIsMobile] = useState(medir)
-  useEffect(() => {
-    function onResize() { setIsMobile(medir()) }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [breakpoint])
-  return isMobile
-}
+// contentWidth viene de useLayoutMetrics — es el ancho real del
+// contenedor de contenido (<main class="main-content"> en AppLayout),
+// YA con el sidebar de la app descontado (ver
+// LayoutMetricsContext.jsx) — no window.innerWidth, que lo incluye y
+// no refleja el espacio real disponible para el editor.
+//
+// contentWidth == null mientras el ResizeObserver todavía no hizo su
+// primera medición — se trata como "no mobile todavía" a propósito,
+// para no mostrar un flash de la versión mobile en el primer render.
 
 // Ícono + color por tipo de aviso real ('no-reconocido', 'fuera-de-
 // rango', 'obsoleto', 'general') — mismos colores que ya usa el resto
@@ -1486,7 +1506,8 @@ function mensajeAvisoFragmentos(aviso) {
 
 export default function EditorPiezas() {
   useDocumentTitle('Editor de Piezas')
-  const isMobile = useIsMobileLadoCorto()
+  const { contentWidth } = useLayoutMetrics()
+  const isMobile = useHysteresisBelow(contentWidth, EDITOR_DESKTOP_MIN_WIDTH, EDITOR_MOBILE_EXIT_WIDTH)
 
   const { showSuccess, showError } = useNotificaciones()
   const { user } = useAuth()

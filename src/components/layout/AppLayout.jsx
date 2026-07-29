@@ -1,5 +1,6 @@
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useLockAppScroll } from '@/hooks/useLockAppScroll'
+import { LayoutMetricsProvider } from '@/context/LayoutMetricsContext'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { useTheme } from '@/context/useTheme'
@@ -233,6 +234,11 @@ export default function AppLayout() {
   const [showBuscador, setShowBuscador] = useState(false)
   const { toast, dismissToast, feedback, dismissFeedback } = useNotificaciones()
   const navigate = useNavigate()
+  // Ref al <main> real — LayoutMetricsProvider lo observa con
+  // ResizeObserver y expone su ancho por contexto (ver
+  // LayoutMetricsContext.jsx). Vive acá porque el <main> se define más
+  // abajo en este mismo componente.
+  const mainContentRef = useRef(null)
 
   // NOTA sobre la "franja gris" al cerrar el teclado en iOS (queda
   // documentado para no reintentar a ciegas): .app-shell mide 100dvh con
@@ -271,6 +277,7 @@ export default function AppLayout() {
   // forma real de navegar sin pasar por esos clicks.
 
   return (
+    <LayoutMetricsProvider contentRef={mainContentRef}>
     <div className="app-shell flex h-screen overflow-hidden">
 
       {/* Sidebar desktop */}
@@ -325,7 +332,7 @@ export default function AppLayout() {
           </div>
         </div>
 
-        <main className="main-content">
+        <main className="main-content" ref={mainContentRef}>
           {/* Antes esto era exclusivo de Estadísticas (.est-page-con-fondo,
               a propósito, para marcarla "especial" mientras estaba en
               pulido) — Santi pidió aplicarlo a toda la app. Un solo
@@ -344,5 +351,6 @@ export default function AppLayout() {
       {showPerfil && <PerfilUsuario onClose={() => setShowPerfil(false)} />}
       <BuscadorGlobal open={showBuscador} onClose={() => setShowBuscador(false)} role={role} />
     </div>
+    </LayoutMetricsProvider>
   )
 }
