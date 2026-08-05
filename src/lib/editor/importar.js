@@ -82,6 +82,92 @@ function avisosDeAtributosRotos(fragmentoHtml, canvasIdx) {
   }))
 }
 
+
+// Construye el bloque de canvas correspondiente a UN marcador
+// <!--BLOQUE--> ya encontrado (slug + contenido crudo entre marcadores) —
+// misma lógica que antes vivía inline dentro del .map de bloquesEncontrados
+// en importarDesdeHtml, extraída para poder llamarla desde el loop que
+// intercala marcadores con tramos recuperados por heurística (ver
+// extraerSegmentosDeZona y el comentario grande en importarDesdeHtml).
+function construirBloqueDesdeMarcador(slug, contenido, posicionFinal, colorTextoDetectado, avisos) {
+  // Revertir el color del tema al neutro #333333 ANTES de guardar como
+  // htmlEditado — ver comentario completo junto a revertirColorTexto(). Se
+  // aplica siempre, incluso para bloques sin template conocido (Código
+  // personalizado), porque el mismo problema de recoloreo futuro aplica
+  // igual a esos bloques.
+  const contenidoNeutro = revertirColorTexto(contenido, colorTextoDetectado)
+  const original = BLOQUES.find(b => b.slug === slug)
+  if (!original) {
+    // Slug que ya no existe en BLOQUES (template renombrado o borrado desde
+    // que se exportó esta pieza) — el contenido real sigue estando completo
+    // entre los marcadores, así que no se pierde nada: entra como bloque de
+    // tipo "Código personalizado" (el mismo que ya existe para HTML escrito
+    // a mano), conservando su posición y contenido exactos, solo sin los
+    // campos detectados de un template que ya no está.
+    avisos.push({ texto: `El bloque "${slug}" no coincide con ningún template actual — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: posicionFinal })
+    return { id: 'codigo', instanceId: `codigo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: contenidoNeutro, htmlEditado: contenidoNeutro, tipo: 'codigo', slug: 'codigo' }
+  }
+  // htmlEditado = el contenido real tal cual quedó en la pieza exportada (ya
+  // revertido al color neutro) — puede diferir del html original del
+  // template si el usuario editó campos. html = el original, igual que
+  // crearInstancia, para que "Reiniciar campo" siga teniendo a qué volver.
+  // Para Imagen_Libre se normaliza además el <img> para garantizar los
+  // estilos base.
+  //
+  // Atributos rotos: mismo tratamiento exacto que en importarHeuristico (ver
+  // el comentario grande allá) — se detecta y avisa SIEMPRE, sobre
+  // contenidoNeutro (que es literalmente lo que se guarda como htmlEditado,
+  // así tagOriginal siempre matchea al aplicar), y solo se fuerza código
+  // personalizado si la clasificación es Imagen_Libre: normalizarImagenLibre
+  // reescribe el <img> entero en silencio y pisaría el tag roto antes de que
+  // el aviso pueda ofrecer nada.
+  const problemasAtributos = avisosDeAtributosRotos(contenidoNeutro, posicionFinal)
+  avisos.push(...problemasAtributos)
+  const slugFinal = corregirSlugIcono(slug, contenidoNeutro)
+  if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+    return { id: 'codigo', instanceId: `codigo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: contenidoNeutro, htmlEditado: contenidoNeutro, tipo: 'codigo', slug: 'codigo' }
+  }
+  const originalFinal = slugFinal !== slug ? (BLOQUES.find(b => b.slug === slugFinal) || original) : original
+  const htmlEditadoFinal = slugFinal === 'Imagen_Libre'
+    ? normalizarImagenLibre(contenidoNeutro)
+    : contenidoNeutro
+  return { ...originalFinal, instanceId: `${originalFinal.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, htmlEditado: htmlEditadoFinal }
+}
+
+
+// Separa un tramo de HTML de la zona de contenido en segmentos ordenados
+// TAL COMO aparecen en el texto: tramos marcados (<!--BLOQUE-->...
+// <!--/BLOQUE-->, tal cual los escribe generarExport) y huecos — cualquier
+// HTML que quede entre dos marcadores, antes del primero, o después del
+// último, dentro de la misma zona de contenido.
+//
+// Por qué hace falta esto: una pieza puede tener ALGUNOS marcadores (fue
+// exportada por este editor en algún momento) pero también tramos sin
+// marcador — casos reales: alguien agregó/pegó filas a mano por fuera del
+// editor después de exportar, o hay HTML de una versión vieja mezclado con
+// una más nueva. El criterio de "es una pieza de este editor" es tener AL
+// MENOS UN marcador en algún lado (ver el chequeo más abajo en
+// importarDesdeHtml), no tenerlos TODOS — antes de este fix, un solo
+// marcador encontrado hacía que TODO el resto de la pieza se procesara
+// asumiendo marcadores perfectos, y cualquier tramo sin marcador
+// desaparecía en silencio del canvas (bug real reportado: una pieza con los
+// primeros bloques marcados y algunas filas sueltas al final — la caja de
+// info y el texto legal en cursiva — perdía esas filas sin ningún aviso).
+function extraerSegmentosDeZona(zonaHtml) {
+  const segmentos = []
+  const bloqueRegexLocal = /<!--BLOQUE\s+slug="([^"]+)"\s+idx="(\d+)"(?:\s+\w+="[^"]*")*\s*-->([\s\S]*?)<!--\/BLOQUE-->/g
+  let cursor = 0
+  let m
+  while ((m = bloqueRegexLocal.exec(zonaHtml)) !== null) {
+    if (m.index > cursor) segmentos.push({ tipo: 'hueco', html: zonaHtml.slice(cursor, m.index) })
+    segmentos.push({ tipo: 'marcador', slug: m[1], contenido: m[3].trim() })
+    cursor = m.index + m[0].length
+  }
+  if (cursor < zonaHtml.length) segmentos.push({ tipo: 'hueco', html: zonaHtml.slice(cursor) })
+  return segmentos
+}
+
+
 export function importarDesdeHtml(html) {
   const avisos = []
 
@@ -113,22 +199,50 @@ export function importarDesdeHtml(html) {
   const colorTextoDetectado = TEMAS[tema].colorTexto
 
   // ── Bloques de contenido ──────────────────────────────────────────
-  // idx en el marcador es la posición real en el array canvas (puesta
-  // por generarExport al exportar), no un contador propio del parser
-  // — se usa directo para ordenar, no se re-cuenta acá. Si por algún
-  // motivo dos bloques compartieran el mismo idx (HTML corrupto/editado
-  // a mano), se ordena por idx numérico y listo: el último en aparecer
-  // con ese idx pisa al anterior en el sort, no se intenta adivinar
-  // cuál de los dos es el "correcto".
-  const bloqueRegex = /<!--BLOQUE\s+slug="([^"]+)"\s+idx="(\d+)"(?:\s+\w+="[^"]*")*\s*-->([\s\S]*?)<!--\/BLOQUE-->/g
-  const bloquesEncontrados = []
-  let bloqueMatch
-  while ((bloqueMatch = bloqueRegex.exec(html)) !== null) {
-    const [, slug, idxStr, contenido] = bloqueMatch
-    bloquesEncontrados.push({ slug, idx: Number(idxStr), contenido: contenido.trim() })
+  // El orden final se define por POSICIÓN REAL en el texto, no por el
+  // valor de idx declarado en cada marcador — idx lo pone generarExport
+  // en base a la posición del array canvas al momento de exportar, pero
+  // una pieza editada a mano después (filas agregadas/duplicadas fuera
+  // del editor) puede traer valores repetidos o inconsistentes. Ordenar
+  // por posición real en el HTML resuelve ese caso de raíz (dos
+  // marcadores con el mismo idx quedan ordenados igual según cuál
+  // aparece primero en el documento, sin ambigüedad) y de paso es lo
+  // que permite intercalar correctamente los tramos SIN marcador del
+  // punto siguiente. El idx declarado no se usa para nada más adelante
+  // en el pipeline (una vez armado el canvas, cualquier reexportación
+  // le asigna posiciones nuevas basadas en el array ya reconstruido).
+  //
+  // Zona de contenido: se delimita con encontrarTablaContenido, la
+  // misma función que ya usa importarHeuristico para encontrar la tabla
+  // real de contenido (por id="Show" o por la tabla de 530px que
+  // escribe generarExport) — reusarla acá evita reinventar esa
+  // detección y garantiza que los "huecos" sin marcador que se busquen
+  // more abajo sean solo dentro del área real de contenido, nunca en el
+  // header, legales o footer.
+  const tablaContenido = encontrarTablaContenido(html)
+
+  let segmentos
+  if (tablaContenido) {
+    const interiorDeZona = (inicioTag, finTag) => {
+      const apertura = html.slice(inicioTag).match(/^<table\b[^>]*>/)[0]
+      return { inicio: inicioTag + apertura.length, fin: finTag - '</table>'.length }
+    }
+    const zonas = [interiorDeZona(tablaContenido.inicioTag, tablaContenido.finTag)]
+    for (const adicional of tablaContenido.contenedoresAdicionales) {
+      zonas.push(interiorDeZona(adicional.inicioTag, adicional.finTag))
+    }
+    segmentos = zonas.flatMap(z => extraerSegmentosDeZona(html.slice(z.inicio, z.fin)))
+  } else {
+    // No se pudo delimitar la tabla de contenido real (no debería pasar
+    // en una pieza realmente exportada por este editor) — se preserva
+    // el comportamiento anterior a este fix como respaldo: solo
+    // marcadores, buscados en todo el documento, sin recuperación
+    // heurística de huecos (evita clasificar por error contenido de
+    // header/legales/footer como si fueran filas de contenido sueltas).
+    segmentos = extraerSegmentosDeZona(html).filter(s => s.tipo === 'marcador')
   }
 
-  if (bloquesEncontrados.length === 0) {
+  if (!segmentos.some(s => s.tipo === 'marcador')) {
     // Ni un solo <!--BLOQUE--> en todo el HTML — no es una pieza
     // exportada por este editor (o es una versión tan vieja que no
     // tenía marcadores todavía). No es el caso de "bloques
@@ -138,53 +252,37 @@ export function importarDesdeHtml(html) {
     return { resultado: null, avisos: [{ texto: 'No se encontró ningún marcador de bloque en el HTML — no parece ser una pieza exportada por este editor.', tipo: 'general', canvasIdx: null }] }
   }
 
-  bloquesEncontrados.sort((a, b) => a.idx - b.idx)
-  const canvas = bloquesEncontrados.map(({ slug, contenido }, posicionFinal) => {
-    // Revertir el color del tema al neutro #333333 ANTES de guardar
-    // como htmlEditado — ver comentario completo junto a
-    // revertirColorTexto(). Se aplica siempre, incluso para bloques
-    // sin template conocido (Código personalizado), porque el mismo
-    // problema de recoloreo futuro aplica igual a esos bloques.
-    const contenidoNeutro = revertirColorTexto(contenido, colorTextoDetectado)
-    const original = BLOQUES.find(b => b.slug === slug)
-    if (!original) {
-      // Slug que ya no existe en BLOQUES (template renombrado o
-      // borrado desde que se exportó esta pieza) — el contenido real
-      // sigue estando completo entre los marcadores, así que no se
-      // pierde nada: entra como bloque de tipo "Código personalizado"
-      // (el mismo que ya existe para HTML escrito a mano), conservando
-      // su posición y contenido exactos, solo sin los campos
-      // detectados de un template que ya no está.
-      avisos.push({ texto: `El bloque "${slug}" no coincide con ningún template actual — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: posicionFinal })
-      return { id: 'codigo', instanceId: `codigo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: contenidoNeutro, htmlEditado: contenidoNeutro, tipo: 'codigo', slug: 'codigo' }
+  // Se arma en un solo loop, en orden de aparición: los tramos marcados
+  // se procesan igual que siempre (construirBloqueDesdeMarcador, 100%
+  // determinístico); los huecos sin marcador se separan en filas de
+  // nivel superior y cada una pasa por el MISMO clasificador que usa
+  // importarHeuristico para piezas externas (clasificarFilaHeuristica)
+  // — si matchea un template, entra reconocido y editable, igual que
+  // cualquier otro bloque; si no matchea nada, recién ahí cae a Código
+  // personalizado, como último recurso real y no como primera
+  // respuesta. Sin ninguna marca visual distinta para estos bloques
+  // recuperados — una pieza sin ningún marcador tampoco distingue sus
+  // bloques heurísticos de ningún modo especial, así que un bloque
+  // recuperado acá se trata exactamente igual.
+  const canvas = []
+  for (const segmento of segmentos) {
+    if (segmento.tipo === 'marcador') {
+      canvas.push(construirBloqueDesdeMarcador(segmento.slug, segmento.contenido, canvas.length, colorTextoDetectado, avisos))
+      continue
     }
-    // htmlEditado = el contenido real tal cual quedó en la pieza
-    // exportada (ya revertido al color neutro) — puede diferir del
-    // html original del template si el usuario editó campos. html =
-    // el original, igual que crearInstancia, para que "Reiniciar
-    // campo" siga teniendo a qué volver. Para Imagen_Libre se
-    // normaliza además el <img> para garantizar los estilos base.
-    //
-    // Atributos rotos: mismo tratamiento exacto que en
-    // importarHeuristico (ver el comentario grande allá) — se detecta
-    // y avisa SIEMPRE, sobre contenidoNeutro (que es literalmente lo
-    // que se guarda como htmlEditado, así tagOriginal siempre matchea
-    // al aplicar), y solo se fuerza código personalizado si la
-    // clasificación es Imagen_Libre: normalizarImagenLibre reescribe
-    // el <img> entero en silencio y pisaría el tag roto antes de que
-    // el aviso pueda ofrecer nada.
-    const problemasAtributos = avisosDeAtributosRotos(contenidoNeutro, posicionFinal)
-    avisos.push(...problemasAtributos)
-    const slugFinal = corregirSlugIcono(slug, contenidoNeutro)
-    if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
-      return { id: 'codigo', instanceId: `codigo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: contenidoNeutro, htmlEditado: contenidoNeutro, tipo: 'codigo', slug: 'codigo' }
+    const filasDelHueco = separarFilasDeNivelSuperior(segmento.html)
+    for (const filaHtml of filasDelHueco) {
+      // Mismo orden de pasos que construirBloqueDesdeMarcador: revertir
+      // color de tema primero, recién después detectar/avisar
+      // atributos rotos — así tagOriginal matchea byte a byte el
+      // htmlEditado que efectivamente queda guardado (ver comentario
+      // grande en construirBloqueDesdeMarcador).
+      const filaConColorRevertido = revertirColorTexto(filaHtml, colorTextoDetectado)
+      const { bloque } = clasificarFilaHeuristica(filaConColorRevertido, canvas.length, avisos)
+      avisos.push(...avisosDeAtributosRotos(bloque.htmlEditado ?? bloque.html ?? '', canvas.length))
+      canvas.push(bloque)
     }
-    const originalFinal = slugFinal !== slug ? (BLOQUES.find(b => b.slug === slugFinal) || original) : original
-    const htmlEditadoFinal = slugFinal === 'Imagen_Libre'
-      ? normalizarImagenLibre(contenidoNeutro)
-      : contenidoNeutro
-    return { ...originalFinal, instanceId: `${originalFinal.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, htmlEditado: htmlEditadoFinal }
-  })
+  }
 
   // ── Header ─────────────────────────────────────────────────────────
   // Único marcador sin idx — solo hay una banda de header por pieza.
@@ -1598,6 +1696,144 @@ export function clasificarModuloDoble(interior) {
 // cuánto advertir. confianza 'baja' o resultado null deben mostrarse
 // como "no se pudo reconocer con seguridad — preferible armar la
 // pieza a mano", nunca como un resultado parcial silencioso.
+// Clasifica una única fila de contenido (`<tr>` de nivel superior) contra
+// los templates conocidos — misma lógica que antes vivía inline dentro del
+// `filas.map` de importarHeuristico, extraída para poder reusarla también
+// desde importarDesdeHtml en los tramos de contenido que le llegan SIN
+// marcador (ver comentario grande junto a extraerSegmentosDeZona). Devuelve
+// el bloque de canvas resultante y si contó como "coincidencia" real contra
+// un template (lo usa importarHeuristico para su proporciónReconocida).
+//
+// A propósito NO revierte el color de tema ni empuja avisos de atributos
+// rotos acá adentro — cada llamador lo hace en su propio momento porque el
+// orden relativo respecto al resto del pipeline difiere entre los dos
+// caminos de importación (importarHeuristico lo hace en un pase único al
+// final sobre TODO el canvas; importarDesdeHtml lo hace por marcador, en el
+// momento de construir cada bloque — ver construirBloqueDesdeMarcador).
+// Normaliza un bloque clasificado como Espaciador a la estructura
+// canónica del template (id="espaciador" data-alto="N" + los estilos
+// completos), conservando únicamente el alto real detectado en el HTML
+// original — mismo criterio que normalizarImagenLibre ya aplica para
+// Imagen_Libre (reconstruir con la estructura completa del template en
+// vez de guardar tal cual vino la fila reconocida).
+//
+// Hace falta porque una fila reconocida por FORMA (ver
+// clasificarFilaHeuristica) puede venir de una pieza externa con un
+// espaciador "pelado" — ej. <td height="28"></td>, sin ningún style ni
+// data-alto — que matchea bien contra el template porque el shape (una
+// fila, una celda sin texto) es idéntico, pero sin este HTML completo el
+// panel de edición del espaciador (esEspaciador en EditorPiezas.jsx) no
+// puede leer ni escribir el alto: su detección busca la propiedad CSS
+// "height: Npx", que un espaciador así de externo nunca tuvo. Bug real
+// reportado: el selector de alto siempre mostraba 14px por default sin
+// importar el valor real, y elegir otro chip no se reflejaba en la UI
+// (aunque por debajo sí llegaba a pisar el atributo height crudo).
+function normalizarEspaciador(filaHtml) {
+  const alto = parseInt(
+    filaHtml.match(/height:\s*(\d+)px/)?.[1] ??
+    filaHtml.match(/\sheight="(\d+)"/)?.[1] ??
+    '14',
+    10
+  )
+  const template = BLOQUES.find(b => b.slug === 'Espaciador')?.html ?? ''
+  return template
+    .replace(/data-alto="\d+"/, `data-alto="${alto}"`)
+    .replace(/height:\s*\d+px/g, `height: ${alto}px`)
+    .replace(/line-height:\s*\d+px/g, `line-height: ${alto}px`)
+    .replace(/mso-line-height-alt:\s*\d+px/g, `mso-line-height-alt: ${alto}px`)
+    .replace(/height="\d+"/g, `height="${alto}"`)
+}
+
+
+// Decide el htmlEditado final para un slug ya reconocido — comparte el
+// mismo criterio en los dos puntos de match de clasificarFilaHeuristica
+// (clasificación directa y por similitud de forma): la mayoría de los
+// templates guarda la fila tal cual vino (normalizarNegritas es lo único
+// que le aplica, para que <strong> quede representado igual que en
+// cualquier bloque armado nativamente), pero Imagen_Libre y Espaciador
+// necesitan reconstruirse con la estructura completa del template — ver
+// los comentarios grandes junto a cada normalizador.
+function htmlEditadoParaMatch(slugFinal, filaHtml) {
+  if (slugFinal === 'Imagen_Libre') return normalizarImagenLibre(normalizarNegritas(filaHtml.trim()))
+  if (slugFinal === 'Espaciador') return normalizarEspaciador(filaHtml)
+  return normalizarNegritas(filaHtml.trim())
+}
+
+
+function clasificarFilaHeuristica(filaHtml, idx, avisos) {
+  const problemasAtributos = DetectarAtributosConDosPuntos(filaHtml)
+
+  const slugDirecto = clasificarPorEstructuraDirecta(filaHtml)
+  if (slugDirecto === 'codigo') {
+    avisos.push({ texto: `El bloque ${idx + 1} tiene una estructura de tabla de datos sin template equivalente — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: idx })
+    return { bloque: { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }, coincidio: false }
+  }
+  if (slugDirecto) {
+    const slugFinal = corregirSlugIcono(slugDirecto, filaHtml)
+    if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+      return { bloque: { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }, coincidio: false }
+    }
+    const match = BLOQUES_CONTENIDO.find(b => b.slug === slugFinal)
+    if (match) {
+      let htmlEditadoFinal
+      if (slugFinal === 'Modulo_Doble_Con_Imagen_Punteada') {
+        const imgsEditables = [...filaHtml.matchAll(/<img([^>]*)>/gi)]
+          .map(m => m[1])
+          .filter(attrs => !/puntos-128-blanco|MediaLineaPunteada/i.test(attrs))
+        const bgcolorSegmento = filaHtml.match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? null
+        let editableIdx = 0
+        let htmlBase = match.html.replace(/<img([^>]*)>/gi, (m, attrs) => {
+          if (/puntos-128-blanco|MediaLineaPunteada/i.test(attrs)) return m
+          if (editableIdx >= imgsEditables.length) return m
+          return `<img${imgsEditables[editableIdx++]}>`
+        })
+        if (bgcolorSegmento) {
+          htmlBase = htmlBase.replace(/bgcolor="#c4161c"/gi, `bgcolor="${bgcolorSegmento}"`)
+        }
+        htmlEditadoFinal = htmlBase
+      } else {
+        htmlEditadoFinal = htmlEditadoParaMatch(slugFinal, filaHtml)
+      }
+      return { bloque: { ...match, instanceId: `${match.id}-${Date.now()}-${idx}`, htmlEditado: htmlEditadoFinal }, coincidio: true }
+    }
+  }
+
+  let mejorMatch = null
+  let mejorPuntaje = 0
+  const formaFila = formaDeTags(filaHtml)
+  const idxMargen = formaFila.length - 2
+  let mejorPuntajeConMargenIgual = -1
+  let mejorMatchConMargenIgual = null
+  for (const candidato of BLOQUES_CONTENIDO) {
+    const formaCandidato = formaDeTags(candidato.html)
+    const puntaje = similitudDeForma(formaFila, formaCandidato)
+    if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejorMatch = candidato }
+    if (formaCandidato[idxMargen] === formaFila[idxMargen] && puntaje > mejorPuntajeConMargenIgual) {
+      mejorPuntajeConMargenIgual = puntaje
+      mejorMatchConMargenIgual = candidato
+    }
+  }
+  if (
+    mejorMatchConMargenIgual &&
+    mejorPuntajeConMargenIgual >= UMBRAL_SIMILITUD_BLOQUE &&
+    mejorPuntaje - mejorPuntajeConMargenIgual <= 0.15
+  ) {
+    mejorMatch = mejorMatchConMargenIgual
+    mejorPuntaje = mejorPuntajeConMargenIgual
+  }
+  if (mejorMatch && mejorPuntaje >= UMBRAL_SIMILITUD_BLOQUE) {
+    const slugFinal = corregirSlugIcono(mejorMatch.slug, filaHtml)
+    if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
+      return { bloque: { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }, coincidio: true }
+    }
+    const matchFinal = slugFinal !== mejorMatch.slug ? BLOQUES_CONTENIDO.find(b => b.slug === slugFinal) || mejorMatch : mejorMatch
+    return { bloque: { ...matchFinal, instanceId: `${matchFinal.id}-${Date.now()}-${idx}`, htmlEditado: htmlEditadoParaMatch(matchFinal.slug, filaHtml) }, coincidio: true }
+  }
+  avisos.push({ texto: `El bloque ${idx + 1} no coincide con ningún template — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: idx })
+  return { bloque: { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }, coincidio: false }
+}
+
+
 export function importarHeuristico(html) {
   const avisos = []
 
@@ -1678,201 +1914,9 @@ export function importarHeuristico(html) {
 
   let coincidencias = 0
   const canvas = filas.map((filaHtml, idx) => {
-    // Atributos rotos por style con comillas anidadas — SIEMPRE se
-    // detectan y avisan acá, sin importar en qué termine
-    // clasificándose la fila (ver DetectarAtributosConDosPuntos,
-    // generales.js). Solo se fuerza código personalizado más abajo
-    // cuando la clasificación final es Imagen_Libre — el único
-    // template cuya normalización (normalizarImagenLibre) reescribe
-    // el <img> en silencio. El resto de los templates solo pasan por
-    // normalizarNegritas, que jamás toca atributos de ningún otro tag
-    // — el HTML roto sobrevive intacto igual sea Bloque_Texto_Base,
-    // Bullet, etc., así que clasificarlos normal ahí no tiene ningún
-    // riesgo. Forzar código de más (como hacía la versión anterior de
-    // este fix) le quitaba la edición linda a bloques de texto
-    // simples sin necesidad real — bug real reportado por Santi
-    // (2026-07-20): un párrafo de texto simple con un atributo roto
-    // se importaba como código personalizado en vez de Bloque_Texto_Base.
-    //
-    // Acá adentro la detección se usa SOLO para la decisión de
-    // Imagen_Libre — los avisos se arman al final, en un pase único
-    // sobre el canvas YA revertido de color (ver el comentario junto a
-    // ese pase): el tagOriginal del aviso tiene que matchear byte a
-    // byte el htmlEditado que efectivamente queda guardado, y este
-    // filaHtml todavía no pasó por revertirColorTexto.
-    const problemasAtributos = DetectarAtributosConDosPuntos(filaHtml)
-
-    // Clasificación estructural directa primero — cubre los casos
-    // donde formaDeTags es demasiado pobre para distinguir bien (ver
-    // comentario completo junto a clasificarPorEstructuraDirecta). Si
-    // no aplica (null), sigue al flujo normal de comparación de forma
-    // contra todos los templates. 'codigo' es una señal distinta de
-    // null: significa "es estructuralmente inequívoco que esto NO
-    // puede ser ningún template real" (ver comentario grande dentro
-    // de clasificarPorEstructuraDirecta) — se fuerza directo a Código
-    // personalizado, sin pasar por la comparación de puntajes, para
-    // no terminar forzando un match "menos malo" contra un template
-    // que en los hechos no tiene nada que ver.
-    const slugDirecto = clasificarPorEstructuraDirecta(filaHtml)
-    if (slugDirecto === 'codigo') {
-      avisos.push({ texto: `El bloque ${idx + 1} tiene una estructura de tabla de datos sin template equivalente — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: idx })
-      return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
-    }
-    if (slugDirecto) {
-      const slugFinal = corregirSlugIcono(slugDirecto, filaHtml)
-      // Único punto de riesgo real: Imagen_Libre reescribe el <img>
-      // entero vía normalizarImagenLibre (ver comentario grande más
-      // arriba) — con un atributo roto en el medio, esa reescritura
-      // lo pisaría en silencio antes de que el aviso pueda ofrecer
-      // nada. Se fuerza código personalizado ACÁ, puntual, en vez de
-      // para cualquier clasificación como antes.
-      if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
-        return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
-      }
-      const match = BLOQUES_CONTENIDO.find(b => b.slug === slugFinal)
-      if (match) {
-        coincidencias++
-        // Modulo_Doble_Con_Imagen_Punteada: el htmlEditado NO puede venir
-        // de filaHtml porque importarHeuristico limpia todos los comentarios
-        // MSO al inicio — el bloque <!--[if !mso]><!--> que contiene la
-        // línea punteada (MediaLineaPunteada530x4.png) ya no está en filaHtml.
-        // Si se usara filaHtml como base, el export final quedaría sin esa
-        // sección y la pieza se vería mal en mobile (sin separador entre
-        // las dos imágenes al apilar en 1 columna). Solución: usar el
-        // match.html (template original con el bloque MSO intacto) como
-        // base del htmlEditado, trasplantando las URLs reales (src, alt,
-        // title) de las imágenes editables desde filaHtml. Las imágenes
-        // estructurales (puntos-128-blanco.png, MediaLineaPunteada) nunca
-        // se editan y no se trasplantan — quedan del template, que es lo
-        // correcto. bgcolor y otras propiedades de layout tampoco cambian
-        // entre segmentos en esta estructura; si en el futuro cambiaran,
-        // este criterio habría que extenderlo.
-        let htmlEditadoFinal
-        if (slugFinal === 'Modulo_Doble_Con_Imagen_Punteada') {
-          // Extraer src/alt/title de las imágenes EDITABLES de filaHtml
-          // (las dos imágenes principales, NO puntos-128-blanco ni MediaLinea)
-          const imgsEditables = [...filaHtml.matchAll(/<img([^>]*)>/gi)]
-            .map(m => m[1])
-            .filter(attrs => !/puntos-128-blanco|MediaLineaPunteada/i.test(attrs))
-          // Extraer el color de segmento desde filaHtml — todas las celdas
-          // que rodean imágenes en este bloque comparten el mismo bgcolor
-          // (CG: #c4161c, EB: #000000, Pay: #635843, Start: #f58220).
-          // Se toma el primer bgcolor no-blanco encontrado en las celdas
-          // que sobrevivieron la limpieza MSO.
-          const bgcolorSegmento = filaHtml.match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? null
-          // Trasplantar imágenes editables por posición, bgcolor en todas
-          // las celdas que el template tiene con su color base (#c4161c).
-          // Las imgs estructurales y el bloque <!--[if !mso]--> quedan
-          // intactos desde el template.
-          let editableIdx = 0
-          let htmlBase = match.html.replace(/<img([^>]*)>/gi, (m, attrs) => {
-            if (/puntos-128-blanco|MediaLineaPunteada/i.test(attrs)) return m
-            if (editableIdx >= imgsEditables.length) return m
-            return `<img${imgsEditables[editableIdx++]}>`
-          })
-          if (bgcolorSegmento) {
-            htmlBase = htmlBase.replace(/bgcolor="#c4161c"/gi, `bgcolor="${bgcolorSegmento}"`)
-          }
-          htmlEditadoFinal = htmlBase
-        } else {
-          htmlEditadoFinal = slugFinal === 'Imagen_Libre'
-            ? normalizarImagenLibre(normalizarNegritas(filaHtml.trim()))
-            : normalizarNegritas(filaHtml.trim())
-        }
-        return { ...match, instanceId: `${match.id}-${Date.now()}-${idx}`, htmlEditado: htmlEditadoFinal }
-      }
-    }
-
-    let mejorMatch = null
-    let mejorPuntaje = 0
-    const formaFila = formaDeTags(filaHtml)
-    // La última posición del vector es "tiene margen lateral" (ver
-    // formaDeTags) — entre candidatos casi empatados en puntaje
-    // general, ese detalle puntual puede ser justo lo que distingue
-    // dos variantes reales del mismo bloque (ej. un Bullet con <td>
-    // de margen dedicado vs. el mismo Bullet con padding-left, sin
-    // tabla anidada para el margen). Bug real encontrado: la similitud
-    // por conteo de tags le daba más peso a "tiene tabla anidada o
-    // no" (una diferencia estructural grande) que a "coincide en
-    // margen" (una sola dimensión de diez) — el resultado era que la
-    // variante con padding matcheaba contra el Bullet SIN margen
-    // (0.900) en vez del Bullet CON margen (0.783), aun cuando ambos
-    // tienen margen real, solo que uno lo hace con tabla y el otro con
-    // padding. Por eso la selección no es solo "el de mayor puntaje" a
-    // secas: entre los candidatos dentro de un margen chico (0.15) del
-    // mejor puntaje encontrado, se prioriza el que coincide
-    // exactamente en esta dimensión puntual.
-    //
-    // idxMargen apunta al PENÚLTIMO elemento del vector, no al último
-    // — formaDeTags devuelve [...conteoTags, bucketTexto, tieneMargen,
-    // esIconoBulletCaracter], en ese orden exacto. Si en el futuro se
-    // agrega o reordena alguna dimensión en formaDeTags, este índice
-    // hay que revisarlo a mano (no hay una forma más robusta sin
-    // nombrar las dimensiones del vector, que se dejó como array
-    // posicional simple a propósito).
-    const idxMargen = formaFila.length - 2
-    let mejorPuntajeConMargenIgual = -1
-    let mejorMatchConMargenIgual = null
-    for (const candidato of BLOQUES_CONTENIDO) {
-      const formaCandidato = formaDeTags(candidato.html)
-      const puntaje = similitudDeForma(formaFila, formaCandidato)
-      if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejorMatch = candidato }
-      if (formaCandidato[idxMargen] === formaFila[idxMargen] && puntaje > mejorPuntajeConMargenIgual) {
-        mejorPuntajeConMargenIgual = puntaje
-        mejorMatchConMargenIgual = candidato
-      }
-    }
-    // Bug real encontrado con una pieza real: un bloque "Destacado
-    // Icono Texto" (caja con ícono 100x100 + texto, puntaje 0.818)
-    // perdía el match contra "Btn" (un botón completamente distinto,
-    // puntaje 0.679) solo porque Btn coincidía en la dimensión binaria
-    // "tiene margen" y la diferencia de puntaje (0.139) caía dentro
-    // del margen de tolerancia de 0.15 — la regla de abajo,
-    // pensada para distinguir entre DOS VARIANTES CERCANAS de un mismo
-    // tipo de bloque (ver comentario grande más arriba, caso real:
-    // Bullet con margen por tabla vs. por padding, ambos con puntaje
-    // alto), no estaba protegida contra el caso en que el candidato de
-    // "margen igual" sea de una familia totalmente distinta y mediocre
-    // (0.679 ni siquiera llega al umbral por sí solo). El resultado
-    // era peor que no aplicar la regla en absoluto: pasaba de un match
-    // correcto y por encima del umbral a "Código personalizado".
-    // Fix: la regla de margen solo puede GANARLE al mejor puntaje puro
-    // si ese candidato de margen-igual también supera el umbral por su
-    // cuenta — si no, no tiene sentido preferirlo a costa de perder un
-    // match que ya era válido.
-    if (
-      mejorMatchConMargenIgual &&
-      mejorPuntajeConMargenIgual >= UMBRAL_SIMILITUD_BLOQUE &&
-      mejorPuntaje - mejorPuntajeConMargenIgual <= 0.15
-    ) {
-      mejorMatch = mejorMatchConMargenIgual
-      mejorPuntaje = mejorPuntajeConMargenIgual
-    }
-    if (mejorMatch && mejorPuntaje >= UMBRAL_SIMILITUD_BLOQUE) {
-      coincidencias++
-      // Normalizar <strong> a <span style="font-weight:bold;"> solo
-      // en este caso (matcheó contra un template real) — el HTML
-      // guardado tiene que ser coherente con cómo ese template
-      // representa la negrita, igual que si el bloque se hubiera
-      // armado nativamente en el editor. En el caso de "Código
-      // personalizado" (más abajo) NO se normaliza — ahí no hay
-      // ningún template de referencia con el que ser coherente, así
-      // que el HTML se conserva tal cual vino de la pieza original.
-      const slugFinal = corregirSlugIcono(mejorMatch.slug, filaHtml)
-      // Mismo criterio puntual que en la clasificación directa (ver
-      // comentario grande más arriba) — solo Imagen_Libre reescribe
-      // el <img> en silencio.
-      if (slugFinal === 'Imagen_Libre' && problemasAtributos.length > 0) {
-        return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
-      }
-      const matchFinal = slugFinal !== mejorMatch.slug ? BLOQUES_CONTENIDO.find(b => b.slug === slugFinal) || mejorMatch : mejorMatch
-      return { ...matchFinal, instanceId: `${matchFinal.id}-${Date.now()}-${idx}`, htmlEditado: matchFinal.slug === 'Imagen_Libre' ? normalizarImagenLibre(normalizarNegritas(filaHtml.trim())) : normalizarNegritas(filaHtml.trim()) }
-    }
-    // Por debajo del umbral — entra como Código personalizado en vez
-    // de forzar un match incorrecto o descartar el bloque (mismo
-    // criterio fail-soft que importarDesdeHtml con slugs desconocidos).
-    avisos.push({ texto: `El bloque ${idx + 1} no coincide con ningún template — se importó como código personalizado.`, tipo: 'no-reconocido', canvasIdx: idx })
-    return { id: 'codigo', instanceId: `codigo-${Date.now()}-${idx}`, categoria: 'Personalizado', nombre: 'Código personalizado', html: filaHtml.trim(), htmlEditado: filaHtml.trim(), tipo: 'codigo', slug: 'codigo' }
+    const { bloque, coincidio } = clasificarFilaHeuristica(filaHtml, idx, avisos)
+    if (coincidio) coincidencias++
+    return bloque
   })
 
   const proporcionReconocida = coincidencias / filas.length
