@@ -3,6 +3,7 @@ import { useLockAppScroll } from '@/hooks/useLockAppScroll'
 import { useHysteresisBelow } from '@/hooks/useHysteresisBelow'
 import { useLayoutMetrics } from '@/context/useLayoutMetrics'
 import { useState, useRef, useEffect, forwardRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info, Save, FolderOpen, User } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
@@ -2391,12 +2392,66 @@ export default function EditorPiezas() {
     setImportarProgreso(0)
     setImportarEtapa('marcadores')
     setAvisoActivo(null)
+    // Limpia el nombre traído por deep-link, confirme o cancele — un
+    // import manual posterior no tiene que heredarlo (ver comentario
+    // en deepLinkImportarNombre).
+    deepLinkImportarNombre.current = null
   }
 
-  async function analizarImportacion() {
+  // ── Deep-link: "Importar al editor" desde una pieza de un pedido ──
+  // EntregablesSection navega acá con state { importarPiezaUrl } —
+  // mismo patrón que Base de datos → Revisión de envíos. Se abre el
+  // modal de importar en modo URL con el link ya cargado y se dispara
+  // el análisis solo, pero SE FRENA en el paso de resumen/preview:
+  // aplicar la importación sigue requiriendo el clic final de siempre,
+  // porque ese botón es también la confirmación explícita de que el
+  // resultado pisa lo que haya armado en el canvas — un deep-link
+  // nunca tiene que destruir trabajo en curso por sí solo.
+  const { state: navState } = useLocation()
+  const navigate = useNavigate()
+  const deepLinkImportarConsumido = useRef(false)
+  // Nombre de la pieza tal como está cargada en el pedido — se guarda
+  // en un ref (no en el estado 'nombre' directamente) porque el nombre
+  // recién debe aplicarse SI Y CUANDO el usuario confirma la
+  // importación: setearlo al llegar pisaría el nombre del trabajo en
+  // curso aunque después cancele el modal. Ciclo de vida: se setea acá,
+  // lo consume confirmarImportacion (en vez del genérico "Pieza
+  // importada"), y cerrarModalImportar lo limpia SIEMPRE (confirme o
+  // cancele) — así un import manual posterior en la misma sesión
+  // vuelve al genérico y nunca hereda el nombre de un deep-link viejo.
+  const deepLinkImportarNombre = useRef(null)
+  useEffect(() => {
+    const url = navState?.importarPiezaUrl
+    if (!url || deepLinkImportarConsumido.current) return
+    deepLinkImportarConsumido.current = true
+    deepLinkImportarNombre.current = navState?.importarPiezaNombre?.trim() || null
+    // Consume el state de navegación en el historial: un F5 parado en
+    // /editor-piezas no tiene que volver a disparar el import.
+    navigate('.', { replace: true, state: null })
+    setShowImportar(true)
+    setImportarModo('url')
+    setImportarUrlInput(url)
+    // modo/entrada van por parámetro: los setState de arriba no están
+    // commiteados todavía (ver comentario en analizarImportacion).
+    analizarImportacion({ modo: 'url', entrada: url })
+    // analizarImportacion/navigate se recrean por render — incluirlos
+    // re-dispararía el efecto; el ref de arriba ya garantiza one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navState])
+
+  async function analizarImportacion(deepLink) {
+    // deepLink viene SOLO del efecto de deep-link (importar una pieza
+    // desde un pedido): { modo: 'url', entrada: link }. Hace falta por
+    // parámetro porque ese efecto setea importarModo/importarUrlInput
+    // e inmediatamente llama acá — los setState todavía no están
+    // commiteados y leeríamos los valores viejos del render actual.
+    // Los onClick de "Analizar" llaman sin args (React les pasa el
+    // click event, que no tiene .entrada, así que el guard lo ignora).
+    const esDeepLink = !!(deepLink && typeof deepLink.entrada === 'string' && deepLink.entrada.trim())
+    const modo = esDeepLink ? deepLink.modo : importarModo
     setImportarError('')
-    const entrada = importarModo === 'html' ? importarHtmlInput.trim() : importarUrlInput.trim()
-    if (!entrada) { setImportarError(importarModo === 'html' ? 'Pegá el HTML de la pieza.' : 'Ingresá el link de la pieza.'); return }
+    const entrada = esDeepLink ? deepLink.entrada.trim() : (modo === 'html' ? importarHtmlInput.trim() : importarUrlInput.trim())
+    if (!entrada) { setImportarError(modo === 'html' ? 'Pegá el HTML de la pieza.' : 'Ingresá el link de la pieza.'); return }
 
     setImportarCargando(true)
     setImportarProgreso(8)
@@ -2416,7 +2471,7 @@ export default function EditorPiezas() {
       // necesita ningún cambio acá. Solo corre en el deploy de Vercel
       // (ver nota en README, "Correr localmente") — en local, probar
       // con el modo HTML.
-      const html = importarModo === 'html'
+      const html = modo === 'html'
         ? entrada
         : await fetch(`/api/proxy?url=${encodeURIComponent(entrada)}`).then(r => {
             if (!r.ok) throw new Error('No se pudo obtener el HTML de ese link.')
@@ -2594,7 +2649,12 @@ export default function EditorPiezas() {
   function confirmarImportacion() {
     if (!importarResultado?.resultado) return
     const r = importarResultado.resultado
-    setNombre('Pieza importada')
+    // Si el import vino por deep-link desde una pieza de un pedido, se
+    // usa el nombre real con el que está cargada ahí — coherencia entre
+    // el pedido y el editor. Si no (import manual por HTML/URL), el
+    // genérico de siempre. Se lee ANTES del cerrarModalImportar del
+    // final, que limpia el ref.
+    setNombre(deepLinkImportarNombre.current || 'Pieza importada')
     setTema(r.tema)
     setBandaHeader(r.bandaHeader)
     // redesOrden viene calculado desde el HTML REAL de la pieza

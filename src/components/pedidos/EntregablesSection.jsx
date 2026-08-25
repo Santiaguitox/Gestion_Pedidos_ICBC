@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useNotificaciones } from '@/context/useNotificaciones'
 import { CopyBtn } from '@/components/pedidos/CopyBtn'
-import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2, Download } from 'lucide-react'
+import { ExternalLink, Plus, Trash2, Lock, Unlock, Copy, Check, RefreshCw, Loader2, Download, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
@@ -32,6 +32,7 @@ function CopyAllBtn({ entregables }) {
 }
 
 function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otrosEntregables, setConfirm, revisionEnCurso, onVerDetalle, dispararRevision, onDescargaIndividual }) {
+  const navigate = useNavigate()
   const { showError } = useNotificaciones()
   const [form, setForm] = useState({ nombre_pieza: ent.nombre_pieza ?? '', link_online: ent.link_online ?? '' })
   const [saving, setSaving] = useState(false)
@@ -167,6 +168,26 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
               >
                 <Download size={13} />
               </button>
+              {/* Importar al Editor de piezas — navega con el link en
+                  el state (mismo patrón que Base de datos → Revisión
+                  de envíos): el editor abre su modal de importar en
+                  modo URL con el link precargado y corre el análisis
+                  solo. Aplicar sigue requiriendo la confirmación final
+                  de siempre allá, así que este botón nunca pisa nada
+                  por sí solo. Gateado por canWrite (role !== viewer):
+                  /editor-piezas está protegido por ProtectedRoute con
+                  esos mismos roles, así que a un viewer el botón solo
+                  lo rebotaría al home — mejor ni mostrárselo, igual
+                  que el resto de las acciones que no puede usar. */}
+              {canWrite && (
+                <button
+                  onClick={() => navigate('/editor-piezas', { state: { importarPiezaUrl: ent.link_online, importarPiezaNombre: ent.nombre_pieza } })}
+                  className="entregable-link-icon"
+                  title="Importar al Editor de piezas"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
             </div>
           )}
           {ent.aprobado && ent.aprobado_at && (

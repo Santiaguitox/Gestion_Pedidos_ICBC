@@ -137,3 +137,42 @@ export function contarNoLeidas(notificaciones) {
   }
   return count
 }
+
+// ── Presentación del mensaje "cambió de estado" ──────────────────────
+// El trigger de la base arma el mensaje con los VALUES crudos de los
+// estados ('"Asunto" cambió de estado: entregable_aprobado, en_qa') —
+// inmutable una vez escrito, como todo evento. La traducción a algo
+// legible (label + color de la tabla estados) es 100% presentación y
+// vive acá, en el front: así también las notificaciones VIEJAS ya
+// guardadas se muestran lindas, sin migrar ni reescribir nada.
+
+// Parte un mensaje de cambio de estado en { antes, valores }:
+//   antes:   todo hasta el marcador inclusive ('"Asunto" cambió de estado: ')
+//   valores: los values crudos ('entregable_aprobado', ...)
+// Devuelve null si el mensaje no es de cambio de estado — el caller
+// renderiza el texto plano como siempre. Usa lastIndexOf a propósito:
+// si un asunto contuviera literalmente la frase del marcador, el
+// marcador real (el que agrega el trigger) es siempre el último.
+export function partirMensajeCambioEstado(mensaje) {
+  if (typeof mensaje !== 'string') return null
+  const marca = 'cambió de estado: '
+  const idx = mensaje.lastIndexOf(marca)
+  if (idx === -1) return null
+  const resto = mensaje.slice(idx + marca.length).trim()
+  if (!resto) return null
+  return {
+    antes: mensaje.slice(0, idx + marca.length),
+    // El trigger une con ', ' (array_to_string) y los values no
+    // contienen comas — split simple alcanza.
+    valores: resto.split(',').map(v => v.trim()).filter(Boolean),
+  }
+}
+
+// Fallback de label cuando el value no está en la tabla estados (el
+// estado se eliminó/renombró después de emitida la notificación, o la
+// caché todavía no cargó): guiones bajos a espacios + primera en
+// mayúscula. 'entregable_aprobado' → 'Entregable aprobado'.
+export function labelDesdeValue(value) {
+  const plano = String(value ?? '').replace(/_/g, ' ').trim()
+  return plano ? plano[0].toUpperCase() + plano.slice(1) : String(value ?? '')
+}

@@ -4,6 +4,8 @@ import {
   contarNoLeidas,
   grupoKeyDe,
   rutaDeNotificacion,
+  partirMensajeCambioEstado,
+  labelDesdeValue,
   TIPO_NOTIFICACION,
 } from '@/lib/notificaciones.js'
 
@@ -209,5 +211,46 @@ describe('rutaDeNotificacion', () => {
   it('tolera data null (filas viejas sin jsonb)', () => {
     const n = notif({ tipo: TIPO_NOTIFICACION.MENCION, data: null })
     expect(rutaDeNotificacion(n)).toBe('/pedidos/pedido-A')
+  })
+})
+
+describe('partirMensajeCambioEstado', () => {
+  it('parte prefijo y values con un solo estado', () => {
+    const r = partirMensajeCambioEstado('"Campaña X" cambió de estado: entregable_aprobado')
+    expect(r).toEqual({ antes: '"Campaña X" cambió de estado: ', valores: ['entregable_aprobado'] })
+  })
+
+  it('parte múltiples estados separados por coma', () => {
+    const r = partirMensajeCambioEstado('"Y" cambió de estado: en_desarrollo, esperando_respuesta')
+    expect(r.valores).toEqual(['en_desarrollo', 'esperando_respuesta'])
+  })
+
+  it('devuelve null para mensajes que no son de cambio de estado', () => {
+    expect(partirMensajeCambioEstado('Juan te mencionó en un comentario')).toBeNull()
+    expect(partirMensajeCambioEstado('')).toBeNull()
+    expect(partirMensajeCambioEstado(undefined)).toBeNull()
+  })
+
+  it('usa el ÚLTIMO marcador si el asunto contiene la frase literal', () => {
+    const r = partirMensajeCambioEstado('"raro cambió de estado: x" cambió de estado: en_qa')
+    expect(r.antes).toBe('"raro cambió de estado: x" cambió de estado: ')
+    expect(r.valores).toEqual(['en_qa'])
+  })
+
+  it('devuelve null si no hay nada después del marcador', () => {
+    expect(partirMensajeCambioEstado('"Z" cambió de estado: ')).toBeNull()
+  })
+})
+
+describe('labelDesdeValue', () => {
+  it('reemplaza guiones bajos y capitaliza la primera letra', () => {
+    expect(labelDesdeValue('entregable_aprobado')).toBe('Entregable aprobado')
+    expect(labelDesdeValue('en_qa')).toBe('En qa')
+    expect(labelDesdeValue('finalizado')).toBe('Finalizado')
+  })
+
+  it('tolera valores raros sin explotar', () => {
+    expect(labelDesdeValue('')).toBe('')
+    expect(labelDesdeValue(undefined)).toBe('')
   })
 })

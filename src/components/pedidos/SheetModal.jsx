@@ -165,10 +165,24 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // ni se usa) y armarFilas() registra una única fila con
   // dia_programacion/hora_programacion vacíos.
   const [sinProgramacion, setSinProgramacion] = useState(false)
+  // true desde que el usuario tipea "Cantidad envíos" a mano. Mientras
+  // esté en true, el recálculo automático de más abajo NO pisa el
+  // valor — antes bastaba con completar día/hora DESPUÉS de haber
+  // escrito la cantidad (el orden natural de llenado del formulario)
+  // para que el contador la sobreescribiera con 1 (o con 0 al
+  // borrar/re-tipear la hora), y si no se notaba quedaba mal
+  // registrada en la planilla.
+  const [cantidadManual, setCantidadManual] = useState(false)
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
 
   function toggleSinProgramacion(checked) {
     setSinProgramacion(checked)
+    // El toggle resetea la marca de edición manual en ambos sentidos:
+    // es un cambio de modo explícito, lo esperable es que la cantidad
+    // vuelva a reflejar el estado del modo nuevo (0 sin programación;
+    // el total configurado al volver a mostrar la sección) y que el
+    // auto-recálculo quede activo de nuevo hasta la próxima edición.
+    setCantidadManual(false)
     if (checked) {
       // Sin envío programado no hay "cantidad de envíos" real — se
       // resetea a 0 pero queda editable por si el usuario la quiere
@@ -176,6 +190,12 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
       // autocompletar nada, el usuario decide si quiere aclarar algo.
       set('cantidad_envios', '0')
       setErrorSinFilas(false)
+    } else {
+      // Al volver a habilitar la programación, se re-sincroniza con lo
+      // que haya configurado (prevTotalEnvios no cambió mientras la
+      // sección estuvo oculta, así que el ajuste del render no lo haría
+      // solo).
+      set('cantidad_envios', String(totalEnviosConfigurados))
     }
   }
 
@@ -199,13 +219,16 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // cuerpo (dispara un render en cascada), se compara contra el valor
   // del render anterior y se ajusta ahí mismo — React re-corre el
   // render con el estado nuevo antes de pintar. cantidad_envios se
-  // recalcula solo cuando totalEnviosConfigurados cambia; si el
-  // usuario lo edita a mano sin tocar día/horario, ese valor manual no
-  // se pisa (ver comentario de arriba).
+  // recalcula solo cuando totalEnviosConfigurados cambia Y el usuario
+  // no la editó a mano (cantidadManual): sin ese guard, escribir la
+  // cantidad primero y completar día/hora después — el orden natural
+  // del formulario — la pisaba con el contador automático. El error de
+  // "sin filas" sí se limpia siempre que aparezca al menos un horario
+  // completo, sea manual la cantidad o no.
   const [prevTotalEnvios, setPrevTotalEnvios] = useState(totalEnviosConfigurados)
   if (prevTotalEnvios !== totalEnviosConfigurados) {
     setPrevTotalEnvios(totalEnviosConfigurados)
-    set('cantidad_envios', String(totalEnviosConfigurados))
+    if (!cantidadManual) set('cantidad_envios', String(totalEnviosConfigurados))
     if (totalEnviosConfigurados > 0) setErrorSinFilas(false)
   }
 
@@ -375,7 +398,17 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
                   </div>
                   <div className="sheet-field">
                     <label className="field-label">Cantidad envíos</label>
-                    <input value={data.cantidad_envios} onChange={e => set('cantidad_envios', e.target.value)} placeholder="Cantidad…" />
+                    <input
+                      value={data.cantidad_envios}
+                      onChange={e => {
+                        // Marca la cantidad como editada a mano: a partir de acá
+                        // el recálculo automático (contador de día/horarios
+                        // completos) deja de pisar este valor.
+                        setCantidadManual(true)
+                        set('cantidad_envios', e.target.value)
+                      }}
+                      placeholder="Cantidad…"
+                    />
                   </div>
                 </div>
                 <div className="sheet-grid-2">

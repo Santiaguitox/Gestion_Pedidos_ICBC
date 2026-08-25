@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificaciones } from '@/context/useNotificaciones'
 import { agruparNotificaciones, rutaDeNotificacion } from '@/lib/notificaciones'
+import { MensajeNotificacion } from '@/components/ui/MensajeNotificacion'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
@@ -369,7 +370,7 @@ export default function Notificaciones() {
 
                       <div className="notif-item-content" onClick={() => handleClick(entrada)}>
                         <p className={`notif-item-msg ${entrada.leida ? 'notif-item-msg-leida' : 'notif-item-msg-nueva'}`}>
-                          {n.mensaje}
+                          <MensajeNotificacion mensaje={n.mensaje} />
                           {agrupada && <span className="notif-chip-count">×{entrada.count}</span>}
                         </p>
                         <span className="notif-item-time">
@@ -408,7 +409,7 @@ export default function Notificaciones() {
                                   if (item.pedido_id) navigate(rutaDeNotificacion(item), { state: { from: '/notificaciones' } })
                                 }}
                               >
-                                <span className="notif-subitem-msg">{item.mensaje}</span>
+                                <span className="notif-subitem-msg"><MensajeNotificacion mensaje={item.mensaje} /></span>
                                 <span className="notif-subitem-time">
                                   {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: es })}
                                 </span>

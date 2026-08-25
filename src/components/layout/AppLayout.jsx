@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
+import { MensajeNotificacion } from '@/components/ui/MensajeNotificacion'
 import { useLockAppScroll } from '@/hooks/useLockAppScroll'
 import { LayoutMetricsProvider } from '@/context/LayoutMetricsContext'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
@@ -32,7 +33,7 @@ function NotifToast({ toast, onDismiss, onNavigate }) {
           <button onClick={onDismiss} className="toast-dismiss"><X size={15} /></button>
         </div>
         <div className="toast-body">
-          <p className="toast-mensaje">{toast.mensaje}</p>
+          <p className="toast-mensaje"><MensajeNotificacion mensaje={toast.mensaje} /></p>
           {toast.pedido_id && (
             <button onClick={() => { onNavigate(toast); onDismiss() }} className="toast-link">
               <ExternalLink size={12} />Ver pedido
