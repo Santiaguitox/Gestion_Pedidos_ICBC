@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { X, Plus, Trash2 } from 'lucide-react'
@@ -173,29 +173,53 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // borrar/re-tipear la hora), y si no se notaba quedaba mal
   // registrada en la planilla.
   const [cantidadManual, setCantidadManual] = useState(false)
+  // Valor de cantidad_envios al momento de tildar "sin programación" —
+  // para restaurarlo tal cual al destildar, en vez de pisarlo con el
+  // contador (misma filosofía que el ajuste automático: solo se pisa lo
+  // que el propio código escribió, acá el '0' del tilde).
+  const cantidadPreSinProgRef = useRef(null)
   const set = (k, v) => setData(d => ({ ...d, [k]: v }))
 
   function toggleSinProgramacion(checked) {
     setSinProgramacion(checked)
-    // El toggle resetea la marca de edición manual en ambos sentidos:
-    // es un cambio de modo explícito, lo esperable es que la cantidad
-    // vuelva a reflejar el estado del modo nuevo (0 sin programación;
-    // el total configurado al volver a mostrar la sección) y que el
-    // auto-recálculo quede activo de nuevo hasta la próxima edición.
+    // El toggle resetea la marca de edición manual: es un cambio de
+    // modo explícito y el ajuste automático queda re-armado (la regla
+    // de "solo pisa su propio valor" sigue protegiendo cualquier valor
+    // restaurado que difiera del contador).
     setCantidadManual(false)
     if (checked) {
       // Sin envío programado no hay "cantidad de envíos" real — se
       // resetea a 0 pero queda editable por si el usuario la quiere
-      // ajustar a mano. Aclaraciones se deja tal cual está — sin
-      // autocompletar nada, el usuario decide si quiere aclarar algo.
+      // ajustar a mano. Se guarda el valor previo para restaurarlo si
+      // destilda. Aclaraciones se deja tal cual está — sin autocompletar
+      // nada, el usuario decide si quiere aclarar algo.
+      cantidadPreSinProgRef.current = data.cantidad_envios
       set('cantidad_envios', '0')
       setErrorSinFilas(false)
     } else {
-      // Al volver a habilitar la programación, se re-sincroniza con lo
-      // que haya configurado (prevTotalEnvios no cambió mientras la
-      // sección estuvo oculta, así que el ajuste del render no lo haría
-      // solo).
-      set('cantidad_envios', String(totalEnviosConfigurados))
+      const campoActual = String(data.cantidad_envios ?? '').trim()
+      if (campoActual !== '0' && campoActual !== '') {
+        // El usuario escribió una cantidad ESTANDO tildado (pisando el
+        // '0' del tilde) — misma regla que en todos lados: un valor del
+        // usuario no se pisa; la restauración solo repone lo que el
+        // propio tilde escribió. ('0' es indistinguible del '0' del
+        // tilde, así que se trata como del tilde y se restaura.)
+        cantidadPreSinProgRef.current = null
+      } else if (cantidadPreSinProgRef.current != null) {
+        // Al volver a habilitar la programación se restaura lo que
+        // había antes del tilde (prefill del pedido o valor tipeado) —
+        // su procedencia no cambia, así que ultimoValorAuto queda
+        // como estaba: si lo restaurado era del usuario, sigue
+        // protegido; si era del propio auto, sigue siendo pisable.
+        set('cantidad_envios', cantidadPreSinProgRef.current)
+        cantidadPreSinProgRef.current = null
+      } else {
+        // Sin nada guardado se cae al contador, y ESO sí es una
+        // escritura del auto: se registra en el ref para que pueda
+        // seguir ajustándola.
+        setUltimoValorAuto(String(totalEnviosConfigurados))
+        set('cantidad_envios', String(totalEnviosConfigurados))
+      }
     }
   }
 
@@ -218,17 +242,44 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
   // prevFiltrosKey): en vez de un useEffect que llama setState en su
   // cuerpo (dispara un render en cascada), se compara contra el valor
   // del render anterior y se ajusta ahí mismo — React re-corre el
-  // render con el estado nuevo antes de pintar. cantidad_envios se
-  // recalcula solo cuando totalEnviosConfigurados cambia Y el usuario
-  // no la editó a mano (cantidadManual): sin ese guard, escribir la
-  // cantidad primero y completar día/hora después — el orden natural
-  // del formulario — la pisaba con el contador automático. El error de
-  // "sin filas" sí se limpia siempre que aparezca al menos un horario
-  // completo, sea manual la cantidad o no.
+  // render con el estado nuevo antes de pintar.
+  //
+  // REGLA: el recálculo automático solo puede pisar (a) el valor
+  // EXACTO que él mismo escribió la última vez — guardado literal en
+  // ultimoValorAuto (estado), null = nunca escribió — o (b) un campo vacío.
+  // Cualquier otro valor se respeta, venga de donde venga. Esto cierra
+  // los TRES caminos por los que el contador pisaba un valor del
+  // usuario:
+  //   1. tipeado dentro del modal (cubierto además por cantidadManual) —
+  //      primer reporte del bug;
+  //   2. PREFILLADO al abrir: pedido.cantidad_envios o, si está vacía,
+  //      la cantidad de piezas del entregable — el usuario llegaba con
+  //      2 en el campo sin haber tipeado nada, y al completar el primer
+  //      día/hora el contador (0→1) lo pisaba. Segundo reporte del bug
+  //      (caso real: prefill por piezas cargadas);
+  //   3. COINCIDENCIA: comparar contra el contador anterior (la regla
+  //      previa a esta) pisaba un valor del usuario que casualmente
+  //      fuera igual al total configurado — ej. prefill 2, dos
+  //      repeticiones cargadas, y al borrar una el "2" del usuario se
+  //      confundía con el "2" del contador. ultimoValorAuto guarda lo
+  //      que el auto escribió DE VERDAD, no lo que podría haber
+  //      escrito. Es estado y no ref a propósito: este bloque corre en
+  //      fase de render y react-hooks/refs prohíbe (con razón) tocar
+  //      refs ahí — actualizar estado dentro del ajuste es el patrón
+  //      sancionado que ya usa prevTotalEnvios.
+  // El costo aceptado: con un valor ajeno en el campo el contador no
+  // sincroniza solo nunca (el gesto para reactivarlo es explícito:
+  // vaciar el campo). El error de "sin filas" se limpia siempre que
+  // aparezca al menos un horario completo, sea cual sea la cantidad.
+  const [ultimoValorAuto, setUltimoValorAuto] = useState(null)
   const [prevTotalEnvios, setPrevTotalEnvios] = useState(totalEnviosConfigurados)
   if (prevTotalEnvios !== totalEnviosConfigurados) {
+    const campo = String(data.cantidad_envios ?? '').trim()
     setPrevTotalEnvios(totalEnviosConfigurados)
-    if (!cantidadManual) set('cantidad_envios', String(totalEnviosConfigurados))
+    if (!cantidadManual && (campo === ultimoValorAuto || campo === '')) {
+      setUltimoValorAuto(String(totalEnviosConfigurados))
+      set('cantidad_envios', String(totalEnviosConfigurados))
+    }
     if (totalEnviosConfigurados > 0) setErrorSinFilas(false)
   }
 
@@ -401,10 +452,14 @@ export function SheetModal({ pedido, entregables, onClose, onConfirm }) {
                     <input
                       value={data.cantidad_envios}
                       onChange={e => {
-                        // Marca la cantidad como editada a mano: a partir de acá
-                        // el recálculo automático (contador de día/horarios
-                        // completos) deja de pisar este valor.
-                        setCantidadManual(true)
+                        // Tipear un valor marca la cantidad como editada a mano
+                        // (el recálculo automático deja de pisarla); VACIAR el
+                        // campo levanta la marca — es el gesto explícito de
+                        // "volvé a contar vos", coherente con la regla del
+                        // ajuste (un campo vacío es pisable) y con su
+                        // comentario ("borrar el campo vuelve a habilitar el
+                        // auto"), que sin esto quedaba bloqueado por el flag.
+                        setCantidadManual(e.target.value.trim() !== '')
                         set('cantidad_envios', e.target.value)
                       }}
                       placeholder="Cantidad…"
