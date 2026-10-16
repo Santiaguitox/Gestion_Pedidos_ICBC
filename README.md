@@ -1,6 +1,6 @@
 # Gestión de Pedidos ICBC × icomm
 
-App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación y auditoría (BBDD, piezas HTML, campos de personalización, escaneo masivo de piezas), un editor visual de piezas, comentarios internos por pedido con menciones y reacciones, una pantalla de estadísticas del equipo, notificaciones en tiempo real con Web Push (PWA) y un buscador global.
+App interna para gestionar pedidos de email marketing del cliente ICBC. Permite crear, asignar, trackear y finalizar pedidos con un flujo completo desde la solicitud hasta el registro en Google Sheets. Incluye además un set de herramientas de validación y auditoría (BBDD, piezas HTML, campos de personalización, escaneo masivo de piezas), un editor visual de piezas, comentarios internos por pedido con menciones y reacciones, una pantalla de estadísticas del equipo, notificaciones en tiempo real con Web Push (PWA) y un buscador global. Suma además una página pública sin login (`/analisis`) para revisar la calidad de una pieza a partir de su URL.
 
 ---
 
@@ -123,6 +123,31 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 - **Borrador automático** en `localStorage` con debounce de 500ms — persiste al cambiar de sección y se restaura al volver. Botón "Reiniciar" con confirmación borra el borrador y resetea todo el estado.
 - **Importación de piezas** (desde HTML pegado o URL): reconstruye el estado completo del editor a partir de una pieza ya exportada o de una pieza externa de la plataforma — ver sección dedicada más abajo.
 
+### Análisis público de piezas (`/analisis`)
+
+Página **pública, sin login**, pensada para que cualquiera de icomm con el link pueda revisar una pieza sin entrar a TeamWorkHub. Vive en la misma app y dominio, pero es **independiente del resto del código**: no usa Supabase, ni la sesión, ni `src/lib/revision` (tiene su propia copia de los validadores en `src/lib/externo`). La ruta es un `lazy` fuera de `ProtectedRoute` en `App.jsx`.
+
+**Flujo:** se pega la URL de una pieza (solo `icommarketing.com` y subdominios) → el HTML se trae por un proxy propio → se muestra la vista previa y el informe de calidad → se puede descargar o copiar el HTML ya corregido.
+
+- **Informe de calidad, "X de 7"**: 7 pruebas, cada una con estado Correcto / Advertencia / Error, detalle expandible y agrupación de ítems repetidos (`×N`):
+  1. **Estructura HTML**: elementos mal anidados (`<table>` dentro de otro tag, hijos sueltos de `<table>`/`<tr>`), imágenes sin `src`, `style` partidos por comillas, bloques `<style>` duplicados, comentarios del editor (CKEditor) sin decodificar, restos de extensiones del navegador, estructuras de Outlook.
+  2. **Clases utilizadas en el HTML**: clases usadas que no están definidas en el `<style>` de la pieza (ignora las que genera la propia plataforma, ver `CLASES_DE_PLATAFORMA`).
+  3. **Links**: vacíos, con `href="#"` (se nombran por el texto o el alt de la imagen), sin protocolo, etc. Incluye un inventario por tipo de link.
+  4. **Alt de imágenes**.
+  5. **Dimensiones de imágenes**: proporción real vs. declarada, y atributo `width`/`height` vs. `style` (solo se comparan medidas en px; `%` y `max-width` no cuentan como medida).
+  6. **Peso de imágenes**: se miden por el proxy (límite por imagen y total). Las imágenes con variable de personalización (`<*Campo*>`) no se miden.
+  7. **Peso del HTML**.
+- **Datos adicionales** (no suman al puntaje): resumen de la pieza (tipo "HTML custom" o "Editor de icomm", peso, cantidad de imágenes y links), **dominios de imágenes** (avisos agrupados: `http`, sin protocolo, `data:`, ruta relativa, no medibles; e imágenes dinámicas aparte) y **variables de personalización** con generación de una **base de test** (CSV con una columna por variable y una fila por email de prueba, igual a "Generar base de test" de Revisión de envíos).
+- **Vista previa** en iframe con `sandbox` sin `allow-scripts`, con cambio Desktop/Mobile.
+- **Descarga y copia del HTML con arreglos automáticos**: se recorta el contenedor de la pieza (`Table_01` o `backgroundTable`) más sus `<style>`, **sobre el texto crudo** (nunca se re-serializa el DOM, para no escapar las variables `<*Campo*>`). Click normal descarga minificado; Shift+click, indentado. Qué se corrige solo:
+  - `style` rotos por comillas (simples o dobles) del mismo tipo que lo envuelven: se reconstruyen las propiedades, incluyendo tipografías de varias palabras y valores huérfanos.
+  - Comentarios `<!--{cke_protected}…-->` del editor: se decodifican y se restituyen el CSS y los condicionales de Outlook.
+  - Elementos inyectados por extensiones del navegador (`<lt-highlighter>`, `<lt-div>` de LanguageTool, `<grammarly-*>`): se sacan, porque suman peso sin aportar nada en el mail.
+  
+  Los problemas que se corrigen llevan el sello "Se corrige al descargar o copiar". Los bloques `<style>` idénticos y duplicados **no** se tocan: se reportan como error.
+- **Seguridad del proxy** (`api/externo/proxy.js`): endpoint público, así que valida el host contra el dominio permitido, bloquea IPs privadas/metadata de la nube validando la IP **al conectar** (anti DNS rebinding), y limita tamaño (HTML 3 MB) y tiempo (8 s). El límite de consultas por IP **no está en el código**: se configura como regla de rate limit en el Firewall de Vercel sobre `/api/externo/proxy`.
+- **Tema** claro/oscuro propio (`useTemaExterno`), independiente del `ThemeContext` de la app.
+
 ### Arranque y errores
 - **Splash de arranque** estático en `index.html`: CSS crítico embebido (pinta en el primer frame, sin esperar el bundle), isotipo armado 100% en CSS con animación "breathe". Vive **fuera** de `#root` para que React no lo pise al montar; `main.jsx` lo retira con fade garantizando un mínimo de exhibición de 2s (antes duraba lo que tardaba el bundle — con caché era un flash que parecía un error). La ruta `/PreviewDeCarga` (⚠️ temporal) permite verlo sin recargar.
 - **Fondo de marca en toda la app**: `AuthBrandBackdrop` (el isotipo asomando en dos esquinas, bien clarito) se renderiza una sola vez en `AppLayout` para todas las páginas, y también en Login/SetPassword/ErrorPage.
@@ -167,6 +192,7 @@ La suite (Vitest, `src/**/__tests__/*.test.js`, entorno node — sin DOM) cubre 
 - **Comentarios** (`lib/comentarios.js`): formato de mención `@[Nombre](uuid)`, detección de links e imágenes.
 - **Fechas** (`lib/fechas.js`): el criterio único de "vencido" compartido por toda la app.
 - **Imágenes estructurales** (`lib/imagenesEstructurales.js`): el criterio compartido entre editor y revisión.
+- **Análisis público** (`lib/externo/__tests__`): reconstrucción de `style` rotos (fixtures reales de piezas de producción), comentarios del editor, extensiones, dominios, links, dimensiones, recorte, puntaje, base de test, seguridad del proxy y un test de **aislamiento** que falla si algo de `externo` importa código del resto de la app. Los tests que necesitan DOM usan `jsdom` y se saltean solos si no está instalado.
 
 La config vive en `vitest.config.js` (separada de `vite.config.js` para no cargar los plugins de React/Tailwind al testear). Al agregar lógica nueva a `lib/editor`, `lib/revision` o cualquier módulo puro de `lib/` (notificaciones, comentarios, fechas…), sumá el caso ahí — estas funciones se rompen en silencio al ajustar una regex, y la suite es lo único que lo hace visible.
 
@@ -269,6 +295,11 @@ Matices por fuera de la tabla: el **borrado definitivo** desde la Papelera es so
 ## Estructura del proyecto
 
 ```
+api/
+├── proxy.js                         # Proxy de la app (Vercel, runtime Node)
+└── externo/                         # Proxy PÚBLICO de /analisis (proxy.js + _cliente.js, _imagen.js, _seguridad.js)
+scripts/
+└── externo-proxy-local.mjs          # Proxy local (puerto 3001) para probar /analisis con npm run dev
 src/
 ├── components/
 │   ├── ErrorBoundary.jsx           # Captura errores de render; auto-reload único si el chunk quedó viejo tras un deploy
@@ -298,6 +329,7 @@ src/
 │   │   ├── Section.jsx             # Acordeón genérico reusable (usado fuera de Detalle de Pedido)
 │   │   ├── SuccessModal.jsx        # Modal de confirmación genérico (ícono ✓ + mensaje)
 │   │   └── CopyBtn.jsx             # Botón "copiar al portapapeles" con feedback de 1.5s
+│   ├── externo/                    # UI de /analisis (formulario, progreso, vista previa, informe, descarga, base de test)
 │   ├── revision/
 │   │   └── ResultadoPanel.jsx      # Cards de resultado de Revisión de emails
 │   ├── revision-base/
@@ -361,12 +393,23 @@ src/
 │   │   ├── helpers.js
 │   │   ├── imagenes.js
 │   │   └── templates.js
-│   └── revision-envios/             # Lógica de Revisión de envíos
-│       ├── comparar.js              # Modo "Comparar con mi base"
-│       ├── generarBase.js           # Modo "Generar base de test"
-│       ├── animarProgreso.js        # Animación de progreso compartida por los dos modos
-│       └── versionesPieza.js        # Detecta sufijos _v1/_v2/etc. en el nombre y filtra a la última versión (usado por BaseDatosSection)
+│   ├── revision-envios/             # Lógica de Revisión de envíos
+│   │   ├── comparar.js              # Modo "Comparar con mi base"
+│   │   ├── generarBase.js           # Modo "Generar base de test"
+│   │   ├── animarProgreso.js        # Animación de progreso compartida por los dos modos
+│   │   └── versionesPieza.js        # Detecta sufijos _v1/_v2/etc. en el nombre y filtra a la última versión (usado por BaseDatosSection)
+│   └── externo/                     # Motor de /analisis — COPIA independiente, no importa nada del resto de la app (lo verifica aislamiento.test.js)
+│       ├── ejecutarAnalisis.js      # Orquesta: trae la pieza, corre los 7 chequeos, arma el recorte y aplica los arreglos
+│       ├── generales.js / imagenes.js / helpers.js   # Validadores (copia de lib/revision con ajustes marcados "EXTERNO:")
+│       ├── recorte.js               # Recorte del contenedor (Table_01 / backgroundTable) sobre texto crudo
+│       ├── arreglos.js              # Orquesta los arreglos de la descarga/copia
+│       ├── reconstruirAtributos.js  # Reconstrucción de style partidos por comillas
+│       ├── protegidos.js            # Decodifica los comentarios cke_protected
+│       ├── extensiones.js           # Saca los elementos que inyectan extensiones del navegador
+│       ├── dominios.js / inventarioLinks.js / variables.js / baseTest.js   # Datos adicionales
+│       └── puntaje.js / formato.js / url.js / ordenar.js / config.js
 ├── pages/
+│   ├── Analisis.jsx                 # /analisis — página pública sin login (ver Funcionalidades)
 │   ├── AuditoriaPiezas.jsx          # Auditoría de Piezas
 │   ├── Calendario.jsx
 │   ├── Configuracion.jsx
@@ -392,6 +435,7 @@ src/
 │   └── worker-utils.js              # Lectura/parseo de archivos compartido entre los 3 workers
 └── styles/
     ├── global.css                   # Variables CSS, componentes, dark/light
+    ├── Externo.css                  # Aislado, propio de /analisis (prefijo ex-)
     ├── RevisionEmail.css            # Aislado, propio de esa herramienta
     ├── RevisionBase.css             # Aislado, propio de esa herramienta
     ├── RevisionEnvios.css           # Aislado, propio de esa herramienta
@@ -447,11 +491,15 @@ npm run dev
 
 **Nota:** el modo URL de Revisión de emails, Revisión de envíos, Auditoría de Piezas, "Base de datos" del pedido y la descarga de piezas dependen todos de la misma función serverless de Vercel `/api/proxy.js` (no confundir con las Edge Functions de Supabase de la tabla arriba — corre como función Node normal porque usa `dns`/`net`, incompatibles con runtime edge), que solo corre en el deploy de Vercel — en local, el modo URL puede no funcionar; usar el modo "Pegar HTML" (donde esté disponible) para probar esa lógica sin depender del proxy.
 
+**`/analisis` en local:** usa su propio proxy, que sí se puede correr en la máquina. En una terminal `node scripts/externo-proxy-local.mjs` (escucha en el puerto 3001) y en otra `npm run dev`; en desarrollo la página apunta automáticamente a ese puerto.
+
 ---
 
 ## Deploy
 
 El proyecto se deploya automáticamente en Vercel al hacer push a `main`. Las variables de entorno se configuran desde el panel de Vercel.
+
+`/analisis` es pública: configurar en el Firewall de Vercel una regla de **rate limit** sobre `/api/externo/proxy` (el endpoint trae URLs a pedido de cualquiera y el código no limita la cantidad de consultas).
 
 ---
 

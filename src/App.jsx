@@ -1,4 +1,4 @@
-import { lazy, useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
@@ -41,6 +41,8 @@ const Estadisticas = lazy(() => import('@/pages/Estadisticas'))
 const Usuarios = lazy(() => import('@/pages/Usuarios'))
 const Papelera = lazy(() => import('@/pages/Papelera'))
 const Configuracion = lazy(() => import('@/pages/Configuracion'))
+// Página pública (sin login) de análisis de piezas — ver src/pages/Analisis.jsx
+const Analisis = lazy(() => import('@/pages/Analisis'))
 
 
 export default function App() {
@@ -60,6 +62,7 @@ export default function App() {
             <ErrorBoundary>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/analisis" element={<Suspense fallback={null}><Analisis /></Suspense>} />
               {/* ⚠️ TEMPORAL — borrar junto con PreviewCarga.jsx una vez
                   aprobado el splash de arranque (ver index.html). */}
               <Route path="/PreviewDeCarga" element={<PreviewCarga />} />
