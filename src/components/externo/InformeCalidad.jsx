@@ -80,6 +80,13 @@ function agruparRepetidos(items) {
   return grupos
 }
 
+// Texto con `fragmentos de código` entre comillas invertidas.
+function TextoConCodigo({ texto }) {
+  const partes = String(texto).split('`')
+  if (partes.length < 3) return texto
+  return partes.map((parte, i) => (i % 2 === 1 ? <code key={i} className="ex-codigo">{parte}</code> : parte))
+}
+
 function Items({ items, clase, Icono }) {
   return (
     <ul className="ex-lista-items">
@@ -97,7 +104,7 @@ function Items({ items, clase, Icono }) {
               <SelloCorreccion total={it.corrige.total} corregidas={it.corrige.corregidas} />
             </div>
           ) : (
-            <span className="ex-nombre-largo">{typeof it === 'string' ? it : it.detalle}</span>
+            <span className="ex-nombre-largo"><TextoConCodigo texto={typeof it === 'string' ? it : it.detalle} /></span>
           )}
           {veces > 1 && <span className="ex-item__veces" title={`Aparece ${veces} veces`}>×{formatoNumero(veces)}</span>}
         </li>

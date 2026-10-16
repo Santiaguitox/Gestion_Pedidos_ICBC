@@ -35,10 +35,18 @@ describe('comentarios {cke_protected} del editor', () => {
 })
 
 describe('comillas de los style dentro de lo repuesto', () => {
-  it("style='...font-family: 'Ubuntu'...' pasa a comillas dobles, y los style sanos no cambian", () => {
+  it("style='...font-family: 'Ubuntu'...' pasa a comillas dobles con la tipografía SIN comillas, y los style sanos no cambian", () => {
     const mso = "<!--[if (gte mso 9)|(IE)]><table width='600' align='center' style='border-spacing:0;font-family: 'Ubuntu', sans-serif;color:#333333;' ><tr><td style='padding-top:0;padding-left:0;' ><![endif]-->"
     const r = decodificarProtegidos(enc(mso))
-    expect(r.html).toBe("<!--[if (gte mso 9)|(IE)]><table width='600' align='center' style=\"border-spacing:0;font-family: 'Ubuntu', sans-serif;color:#333333;\" ><tr><td style='padding-top:0;padding-left:0;' ><![endif]-->")
+    expect(r.html).toBe("<!--[if (gte mso 9)|(IE)]><table width='600' align='center' style=\"border-spacing:0;font-family: Ubuntu, sans-serif;color:#333333;\" ><tr><td style='padding-top:0;padding-left:0;' ><![endif]-->")
+  })
+})
+
+describe('tipografías sin comillas dentro de lo repuesto', () => {
+  it("tipografía de varias palabras: font-family: 'Open Sans', Arial pasa a Open Sans, Arial", () => {
+    const mso = "<!--[if mso]><td style='color:#000;font-family: 'Open Sans', Arial, sans-serif;margin:0' ><![endif]-->"
+    const r = decodificarProtegidos(enc(mso))
+    expect(r.html).toBe('<!--[if mso]><td style="color:#000;font-family: Open Sans, Arial, sans-serif;margin:0" ><![endif]-->')
   })
 })
 

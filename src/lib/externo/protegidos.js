@@ -30,9 +30,16 @@ function decodificar(codificado) {
 // toca si el valor trae comillas simples adentro; los style sanos no cambian.
 const STYLE_COMILLA_SIMPLE = /(\sstyle=)'([^"<>]*?)'(?=\s*(?:\/?>|[a-zA-Z-]+\s*=))/g
 
+// Además de re-envolver, el nombre de la tipografía queda SIN comillas
+// (font-family: 'Ubuntu', sans-serif -> font-family: Ubuntu, sans-serif): la
+// regla de la herramienta es que ninguna tipografía lleva comillas en el style.
+function sinComillasEnTipografias(valor) {
+  return valor.replace(/(font-family:\s*)([^;]*)/gi, (_, prefijo, lista) => prefijo + lista.replace(/'/g, ''))
+}
+
 function repararComillasDeStyle(texto) {
   return texto.replace(STYLE_COMILLA_SIMPLE, (completo, prefijo, valor) =>
-    valor.includes("'") ? `${prefijo}"${valor}"` : completo)
+    valor.includes("'") ? `${prefijo}"${sinComillasEnTipografias(valor)}"` : completo)
 }
 
 // Devuelve { html, cantidad } con todos los comentarios protegidos repuestos.

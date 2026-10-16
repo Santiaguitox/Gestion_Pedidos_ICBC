@@ -328,6 +328,33 @@ export function tipografiasCargadas(htmlString) {
   return [...nombres].filter(Boolean)
 }
 
+// Nombres que NO cuentan como "tipografía que hay que cargar": las de sistema
+// y las genéricas. Sirve para elegir qué tipografía real mostrar en el ejemplo.
+const TIPOGRAFIAS_DE_SISTEMA = new Set([
+  'arial', 'helvetica', 'helvetica neue', 'verdana', 'tahoma', 'trebuchet ms', 'times new roman', 'times',
+  'georgia', 'courier new', 'courier', 'segoe ui', 'calibri', 'cambria', 'impact', 'lucida sans',
+  'lucida grande', 'palatino', 'garamond', 'comic sans ms', 'sans-serif', 'serif', 'monospace', 'cursive',
+  'fantasy', 'system-ui', 'inherit', 'initial',
+])
+
+const aTitulo = nombre => nombre.replace(/(^|\s)(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase())
+
+// Primera tipografía que no es de sistema entre los style partidos de la pieza
+// (para el ejemplo del consejo). Si no hay ninguna, la primera que carga la
+// pieza por <link>/@import; y si tampoco, "Open Sans".
+export function tipografiaDeEjemplo(estilos, familias = []) {
+  for (const style of estilos) {
+    for (const m of String(style || '').matchAll(/font-family:\s*([^;]*)/gi)) {
+      for (const parte of m[1].split(',')) {
+        const nombre = parte.replace(/["']/g, '').trim()
+        if (!nombre || TIPOGRAFIAS_DE_SISTEMA.has(nombre.toLowerCase())) continue
+        return familias.find(f => f.toLowerCase() === nombre.toLowerCase()) ?? aTitulo(nombre)
+      }
+    }
+  }
+  return familias[0] ?? 'Open Sans'
+}
+
 export function conTipografiasCargadas(style, familias) {
   if (!familias.length) return style
   return style.replace(/(font-family:\s*)([^;]*)/gi, (_, prefijo, lista) => {
@@ -335,7 +362,9 @@ export function conTipografiasCargadas(style, familias) {
       const limpio = t.trim()
       const f = familias.find(n => n.toLowerCase() === limpio.toLowerCase())
       if (!f) return limpio
-      return /\s/.test(f) ? `'${f}'` : f
+      // EXTERNO: el nombre va SIN comillas (ni simples ni dobles), también las
+      // de varias palabras: "Open Sans" es válido en CSS sin ellas.
+      return f
     }).join(', ')
     return prefijo + corregida
   })
@@ -740,7 +769,7 @@ export function ValidarEstructuraHTML(doc, htmlString) {
     })
     consejos = [{
       titulo: 'Cómo se arregla',
-      texto: 'Casi siempre pasa al sumar una tipografía que no es de sistema con comillas del mismo tipo que las que envuelven el style, simples o dobles (ej. style="font-family: "Open Sans", Arial" o style=\'font-family: \'Barlow\', Arial\'). La primera comilla de la tipografía cierra el style antes de tiempo y el resto del CSS queda como atributos sueltos. Se corrige usando comillas distintas para el style y para la tipografía (style="font-family: \'Open Sans\', Arial, sans-serif;"), o sacándole las comillas al nombre. En la columna "Dónde se corta" está marcada la comilla exacta.',
+      texto: `Cuando un atributo \`style\` contiene comillas que interfieren con su interpretación, parte del CSS puede quedar fuera del atributo y dejar de aplicarse correctamente. Una causa frecuente es copiar nombres de tipografías con comillas simples o dobles, como suele ocurrir al utilizar Google Fonts. Para evitar este problema, revisá que los valores CSS no incluyan comillas innecesarias y escribí los nombres de las tipografías sin ellas. Ejemplo correcto: \`style="font-family: ${tipografiaDeEjemplo(partidos.map(p => p.sugerido ?? p.reconstruccion?.styleFinal), tipografiasCargadas(htmlString))}, Arial, sans-serif;"\`. La columna “Dónde se corta” indica el punto donde se interrumpe el estilo.`,
     }]
   }
 

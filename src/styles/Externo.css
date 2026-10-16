@@ -2029,3 +2029,13 @@ input) {
 }
 
 .ex-pie__logo { height: 14px; }
+
+.ex-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--texto);
+  overflow-wrap: anywhere;
+}
