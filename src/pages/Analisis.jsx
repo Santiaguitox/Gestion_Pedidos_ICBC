@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import '../styles/Externo.css'
+import AccesoDesdeApp from '../components/externo/AccesoDesdeApp.jsx'
 import Encabezado from '../components/externo/Encabezado.jsx'
 import FormularioUrl from '../components/externo/FormularioUrl.jsx'
 import GuiaPruebas from '../components/externo/GuiaPruebas.jsx'
@@ -154,6 +155,7 @@ export default function Analisis() {
     <div className="ex-pantalla" data-theme={tema}>
       <MarcaFondo />
       <div className="ex-pantalla__interior">
+        <AccesoDesdeApp />
         <Encabezado tema={tema} onAlternarTema={alternar} />
 
         <FormularioUrl

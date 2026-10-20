@@ -383,6 +383,18 @@ input) {
   color: color-mix(in srgb, #fff 85%, transparent);
 }
 
+.ex-boton--chico {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.ex-acceso-app {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .ex-boton--secundario {
   background: var(--superficie);
   border-color: var(--borde-fuerte);

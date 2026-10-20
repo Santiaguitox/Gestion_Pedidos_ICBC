@@ -1,16 +1,17 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useState, useRef, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
-import { Search, Trash2, RotateCcw } from 'lucide-react'
+import { Search, Trash2, RotateCcw, ExternalLink } from 'lucide-react'
 import '@/styles/RevisionEmail.css'
 
 export default function RevisionEmail() {
   useDocumentTitle('Revisión HTML')
 
   const location = useLocation()
+  const navigate = useNavigate()
   // Si se llega desde la pieza de un pedido ("Ver detalle"), state.url
   // trae el link a precargar — se arranca directo en modo 'url' con ese
   // valor, y se dispara el análisis automáticamente al montar (ver
@@ -169,9 +170,16 @@ export default function RevisionEmail() {
     <div className="page-root re-root">
 
       {/* Header */}
-      <div>
-        <h1 className="page-title">Revisión de emails</h1>
-        <p className="page-subtitle">Validá la estructura, links, imágenes y legales de una pieza ICBC</p>
+      <div className="re-header-fila">
+        <div>
+          <h1 className="page-title">Revisión de emails</h1>
+          <p className="page-subtitle">Validá la estructura, links, imágenes y legales de una pieza ICBC</p>
+        </div>
+        {/* La señal desdeApp hace que /analisis muestre "Volver" y "Copiar link público" */}
+        <button type="button" className="re-btn-publico" onClick={() => navigate('/analisis', { state: { desdeApp: true } })}>
+          <ExternalLink size={15} aria-hidden="true" />
+          Análisis público
+        </button>
       </div>
 
       {/* Panel de carga */}

@@ -141,6 +141,30 @@
   cursor: pointer;
   flex: none;
 }
+.re-header-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.re-btn-publico {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex: none;
+}
+.re-btn-publico:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
 .re-btn-reset:hover { color: var(--text-primary); border-color: var(--text-muted); }
 
 
