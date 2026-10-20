@@ -322,7 +322,7 @@ export function importarDesdeHtml(html) {
   // mismo shape que usa el estado inicial del editor.
   const imgPrincipalBloque = html.match(/<!--IMG_PRINCIPAL-->([\s\S]*?)<!--\/IMG_PRINCIPAL-->/)?.[1] ?? ''
   const imgPrincipalSrc = imgPrincipalBloque.match(/<img[^>]*\ssrc="([^"]*)"/)?.[1] ?? ''
-  const imgPrincipal = imgPrincipalSrc
+  const imgPrincipalPorMarcador = imgPrincipalSrc
     ? {
         activo: true,
         src: imgPrincipalSrc,
@@ -338,17 +338,29 @@ export function importarDesdeHtml(html) {
         alto: parseInt(imgPrincipalBloque.match(/<img[^>]*\sheight="(\d+)"/)?.[1] ?? '425', 10),
       }
     : { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
+  // Sin marcador <!--IMG_PRINCIPAL--> (pieza armada o retocada a mano) se
+  // busca por estructura, solo ANTES del primer bloque, igual que en las
+  // piezas externas.
+  const imgPrincipal = imgPrincipalPorMarcador.activo || imgPrincipalBloque
+    ? imgPrincipalPorMarcador
+    : leerImgPrincipalPorEstructura(idxPrimerBloque === -1 ? html : html.slice(0, idxPrimerBloque)).imgPrincipal
 
   const imgFooterBloque = html.match(/<!--IMG_FOOTER-->([\s\S]*?)<!--\/IMG_FOOTER-->/)?.[1] ?? ''
   const imgFooterSrc = imgFooterBloque.match(/<img[^>]*\ssrc="([^"]*)"/)?.[1] ?? ''
-  const imgFooter = imgFooterSrc
+  const imgFooterPorMarcador = imgFooterSrc
     ? {
         activo: true,
         src: imgFooterSrc,
         alt: imgFooterBloque.match(/\salt="([^"]*)"/)?.[1] ?? '',
-        link: imgFooterBloque.match(/<a\s+href="([^"]*)"/)?.[1] ?? '',
+        link: imgFooterBloque.match(/<a\b[^>]*\shref="([^"]*)"/)?.[1] ?? '',
       }
     : { activo: false, src: '', alt: '', link: '' }
+  // Sin marcador <!--IMG_FOOTER--> se busca por estructura, solo DESPUÉS
+  // del último bloque, para no confundirla con una imagen del contenido.
+  const finUltimoBloque = html.lastIndexOf('<!--/BLOQUE-->')
+  const imgFooter = imgFooterPorMarcador.activo || imgFooterBloque || finUltimoBloque === -1
+    ? imgFooterPorMarcador
+    : leerImgFooterPorEstructura(html.slice(finUltimoBloque))
 
   // ── Legales adicionales ──────────────────────────────────────────────
   // data-legal-idx ordena el array reconstruido — mismo criterio que
@@ -364,7 +376,7 @@ export function importarDesdeHtml(html) {
     legalesEncontrados.push({ idx: Number(legalMatch[1]), texto: legalMatch[2].trim() })
   }
   legalesEncontrados.sort((a, b) => a.idx - b.idx)
-  const legalesAdicionales = legalesEncontrados.map(l => ({ id: Date.now() + l.idx, texto: l.texto }))
+  let legalesAdicionales = legalesEncontrados.map(l => ({ id: Date.now() + l.idx, texto: l.texto }))
 
   // legalesSeparados no tiene marcador propio — se infiere de cuántas
   // filas <tr> hay entre el primer y el último legal: en modo separado
@@ -379,7 +391,7 @@ export function importarDesdeHtml(html) {
   while ((trMatch = trRegex.exec(html)) !== null) {
     if (trMatch[1].includes('data-legal-especifico') || trMatch[1].includes('data-legal-fijo')) filasConLegal.add(trMatch[0])
   }
-  const legalesSeparados = filasConLegal.size > 1
+  let legalesSeparados = filasConLegal.size > 1
 
   // ── Firma institucional ─────────────────────────────────────────────
   // Mismo criterio que Indicadores: marcador propio que envuelve el
@@ -389,7 +401,7 @@ export function importarDesdeHtml(html) {
   // queda null -> el toggle nace apagado, igual que cualquier pieza
   // sin esta sección.
   const firmaInstitucionalBloque = html.match(/<!--FIRMA_INSTITUCIONAL-->([\s\S]*?)<!--\/FIRMA_INSTITUCIONAL-->/)?.[1] ?? null
-  const firmaInstitucional = firmaInstitucionalBloque ? {
+  let firmaInstitucional = firmaInstitucionalBloque ? {
     activo: true,
     fila1Izq: firmaInstitucionalBloque.match(/<span data-firma-fila1-izq="true">([\s\S]*?)<\/span>/)?.[1]?.trim() ?? FIRMA_INSTITUCIONAL_DEFAULT.fila1Izq,
     fila1Der: firmaInstitucionalBloque.match(/<span data-firma-fila1-der="true">([\s\S]*?)<\/span>/)?.[1]?.trim() ?? FIRMA_INSTITUCIONAL_DEFAULT.fila1Der,
@@ -415,7 +427,7 @@ export function importarDesdeHtml(html) {
   // como fallback, para no perder la capacidad de reimportar piezas ya
   // generadas con la versión anterior del editor.
   const indicadoresBloque = html.match(/<!--INDICADORES-->([\s\S]*?)<!--\/INDICADORES-->/)?.[1] ?? ''
-  const indicadores = []
+  let indicadores = []
   const filaIndicadorRegex = /<sup[^>]*>([\s\S]*?)<\/sup>([\s\S]*?)<\/td>/g
   let indMatch
   while ((indMatch = filaIndicadorRegex.exec(indicadoresBloque)) !== null) {
@@ -435,6 +447,39 @@ export function importarDesdeHtml(html) {
       valor = resto.slice(1).join(' ')
     }
     indicadores.push({ id: Date.now() + indicadores.length, ref, sigla, valor })
+  }
+
+  // ── Respaldo por estructura ─────────────────────────────────────────
+  // Si la pieza no trae el marcador de una sección (armada a mano o a
+  // medias), se la busca por estructura en la zona posterior al último
+  // bloque, igual que el importador heurístico. El marcador, cuando
+  // existe, gana siempre: el respaldo solo corre para lo que quedó
+  // vacío, y cada sección recuperada así deja un aviso.
+  const tieneIndicadoresMarcados = html.includes('<!--INDICADORES-->')
+  const faltaLegales = legalesAdicionales.length === 0 && !html.includes('data-legal-especifico')
+  const faltaFirma = !firmaInstitucionalBloque
+  const faltaIndicadores = !tieneIndicadoresMarcados
+  if (faltaLegales || faltaFirma || faltaIndicadores) {
+    const marcaFin = '<!--/BLOQUE-->'
+    const zona = finUltimoBloque === -1 ? html : html.slice(finUltimoBloque + marcaFin.length)
+    const porEstructura = leerLegalesFirmaIndicadoresPorEstructura(zona, zona)
+    const recuperadas = []
+    if (faltaLegales && porEstructura.legalesAdicionales.length > 0) {
+      legalesAdicionales = porEstructura.legalesAdicionales
+      legalesSeparados = porEstructura.legalesSeparados
+      recuperadas.push(porEstructura.legalesAdicionales.length === 1 ? 'el legal adicional' : `los ${porEstructura.legalesAdicionales.length} legales adicionales`)
+    }
+    if (faltaFirma && porEstructura.firmaInstitucional) {
+      firmaInstitucional = porEstructura.firmaInstitucional
+      recuperadas.push('la firma institucional')
+    }
+    if (faltaIndicadores && porEstructura.indicadores.length > 0) {
+      indicadores = porEstructura.indicadores
+      recuperadas.push(porEstructura.indicadores.length === 1 ? 'el indicador' : `los ${porEstructura.indicadores.length} indicadores`)
+    }
+    if (recuperadas.length > 0) {
+      avisos.push({ texto: `Se detectó por estructura (la pieza no traía marcadores): ${recuperadas.join(', ')}. Revisá que el texto importado sea correcto.`, tipo: 'general', canvasIdx: null })
+    }
   }
 
   return {
@@ -1845,6 +1890,199 @@ export function encontrarImgPrincipal(htmlAntesDeContenido) {
   return null
 }
 
+// Imagen principal por estructura: devuelve { imgPrincipal, sinUrl } —
+// imgPrincipal inactivo si no hay ninguna. La usan los dos caminos de
+// importación (con y sin marcadores) para no duplicar la regla.
+export function leerImgPrincipalPorEstructura(htmlAntesDeContenido) {
+  const vacia = { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
+  const match = encontrarImgPrincipal(htmlAntesDeContenido)
+  if (!match) return { imgPrincipal: vacia, encontrada: false, sinUrl: false }
+  const tag = match[0]
+  const src = tag.match(/\ssrc="([^"]*)"/)?.[1] ?? ''
+  if (!src) return { imgPrincipal: vacia, encontrada: true, sinUrl: true }
+  // Si la imagen está envuelta en un <a>, ese link se considera el link
+  // de la imagen — mismo criterio que generarExport.
+  const ventanaPrevia = htmlAntesDeContenido.slice(Math.max(0, match.index - 300), match.index)
+  const linkMatch = ventanaPrevia.match(/<a\b[^>]*\shref="([^"]*)"[^>]*>(?:(?!<\/a>)[\s\S])*$/)
+  return {
+    imgPrincipal: {
+      activo: true,
+      src,
+      alt: tag.match(/\salt="([^"]*)"/)?.[1] ?? '',
+      title: tag.match(/\stitle="([^"]*)"/)?.[1] ?? '',
+      link: linkMatch?.[1] ?? '',
+      // Alto real de la imagen en la pieza (antes fijo en 425).
+      alto: parseInt(tag.match(/\sheight="(\d+)"/)?.[1] ?? '425', 10),
+    },
+    encontrada: true,
+    sinUrl: false,
+  }
+}
+
+// Imagen de footer por estructura: un <td colspan="3"> con un
+// <img class="img-max"> adentro, en la zona que viene DESPUÉS del
+// contenido (legales/footer). Inactivo si no hay.
+export function leerImgFooterPorEstructura(htmlDespuesDeContenido) {
+  const match = htmlDespuesDeContenido.match(/<td[^>]*\scolspan="3"[^>]*>(?:(?!<\/td>)[\s\S])*?<img\b[^>]*class="img-max"[^>]*>/)
+  if (!match) return { activo: false, src: '', alt: '', link: '' }
+  const imgTag = match[0].match(/<img\b[^>]*>/)?.[0] ?? ''
+  const src = imgTag.match(/\ssrc="([^"]*)"/)?.[1] ?? ''
+  if (!src) return { activo: false, src: '', alt: '', link: '' }
+  return {
+    activo: true,
+    src,
+    alt: imgTag.match(/\salt="([^"]*)"/)?.[1] ?? '',
+    link: match[0].match(/<a\b[^>]*\shref="([^"]*)"/)?.[1] ?? '',
+  }
+}
+
+// Lectura estructural (sin marcadores data-*) de legales adicionales,
+// firma institucional e indicadores. La comparten el importador
+// heurístico y el de marcadores: este último la usa como respaldo,
+// sección por sección, cuando la pieza no trae el marcador de esa
+// sección (piezas armadas a mano o a medias, que antes perdían esos
+// datos sin ningún aviso).
+//   html                  → zona donde buscar legales y firma
+//   htmlDespuesDeContenido → zona donde buscar indicadores
+export function leerLegalesFirmaIndicadoresPorEstructura(html, htmlDespuesDeContenido) {
+  // Legales adicionales / legal fijo: sin marcador data-legal-* en
+  // piezas externas. El ancla disponible es el texto del legal fijo
+  // en sí (LEGAL_FIJO_HTML) — es siempre el mismo texto institucional
+  // en toda la app.
+  //
+  // CRÍTICO: en modo SEPARADO (Mall, cada legal en su propio
+  // <tbody>), el legal fijo vive solo, en su propio <td> — ahí basta
+  // con descartar el <td> que ENTERO sea el legal fijo. Pero en modo
+  // CORRIDO (la mayoría de las piezas: todos los legales y el legal
+  // fijo en una sola celda, ver generarExport →
+  // `${especificosHtml}<span data-legal-fijo="true">${LEGAL_FIJO_HTML}
+  // </span>`), el legal fijo no está SOLO en su <td>, está PEGADO al
+  // final del texto del último legal adicional, en el mismo bloque.
+  // Bug real encontrado: comparar si el <td> completo EMPIEZA con el
+  // legal fijo solo cubre el caso separado — en modo corrido el <td>
+  // empieza con el legal adicional, así que nunca matcheaba ese
+  // `startsWith`, y el bloque entero (adicional + fijo concatenados)
+  // se guardaba como "legal adicional", duplicando el habeas data en
+  // el editor (que ya lo agrega aparte, siempre).
+  //
+  // Fix: buscar DÓNDE aparece el texto del legal fijo DENTRO de cada
+  // <td> (no solo si el <td> entero empieza así) y cortar el bloque
+  // ahí — todo lo que esté ANTES de ese punto es el legal adicional
+  // real (puede ser texto vacío, si el <td> es 100% el legal fijo sin
+  // nada más, y en ese caso no se guarda nada).
+  //
+  // Segundo bug real encontrado, con una pieza real de Fondos Comunes
+  // de Inversión (FCI): esa pieza trae, DESPUÉS del legal fijo, una
+  // firma institucional de 2 filas — cada fila con DOS <td
+  // class="Texto_Legales"> propios (uno alineado a la izquierda, otro
+  // a la derecha; ej. "ICBC Investments SAU SGFCI" / "Industrial and
+  // Commercial Bank..."), sin relación con el legal largo de texto
+  // corrido. El regex de abajo, al buscar CUALQUIER
+  // <td class="Texto_Legales">, encontraba estas 4 celdas sueltas y
+  // las trataba como 4 "legales adicionales" independientes — y como
+  // terminaba habiendo más de una fila con esa clase, activaba por
+  // error el modo "legales separados" (texto apilado con espaciador),
+  // en vez de reconocer la firma de 2 columnas real. La señal
+  // estructural que distingue una fila de firma institucional de una
+  // fila de legal real: tiene EXACTAMENTE 2 <td class="Texto_Legales">
+  // en la misma fila, sin colspan, uno con text-align:left y el otro
+  // con text-align:right — un legal real nunca tiene 2 celdas así (va
+  // solo, con colspan, o con text-align:justify). Esas filas se
+  // separan ANTES de buscar legales sueltos, para que el regex
+  // genérico de abajo nunca llegue a verlas.
+  const filaFirmaRegex = /<tr>([\s\S]*?)<\/tr>/g
+  const tdsTextoLegalesRegex = /<td(?![^>]*\scolspan=)[^>]*\sclass="Texto_Legales"[^>]*\stext-align:\s*(left|right)[^>]*>([\s\S]*?)<\/td>/g
+  let filaFirmaMatch
+  const rangosFirmaInstitucional = [] // [inicio, fin] de cada <tr> que es fila de firma, para excluirlos del html antes de buscar legales sueltos
+  const filasFirmaEncontradas = []
+  // Si el HTML ya viene de un export previo de ESTE editor (ej. el
+  // usuario reimporta una pieza propia pegándola de nuevo, sin que el
+  // sistema use la vía con marcador <!--FIRMA_INSTITUCIONAL-->), cada
+  // celda trae su texto envuelto en <span data-firma-filaN-izq/der=
+  // "true">...</span> — hay que despojar ese wrapper antes de guardar
+  // el texto, o el usuario vería el span crudo en el panel de edición.
+  const limpiarSpanFirma = t => t.replace(/^<span\s+data-firma-fila\d-(?:izq|der)="true">([\s\S]*)<\/span>$/, '$1').trim()
+  while ((filaFirmaMatch = filaFirmaRegex.exec(html)) !== null) {
+    const filaCompleta = filaFirmaMatch[0]
+    const celdas = [...filaCompleta.matchAll(tdsTextoLegalesRegex)]
+    if (celdas.length === 2 && celdas[0][1].toLowerCase() === 'left' && celdas[1][1].toLowerCase() === 'right') {
+      filasFirmaEncontradas.push({ izq: limpiarSpanFirma(celdas[0][2].trim()), der: limpiarSpanFirma(celdas[1][2].trim()) })
+      rangosFirmaInstitucional.push([filaFirmaMatch.index, filaFirmaMatch.index + filaCompleta.length])
+    }
+  }
+  // Si la pieza real solo trae UNA fila con este patrón (no las 2
+  // habituales), la segunda queda vacía en vez de completarse con el
+  // texto default — forzar "Sociedad Gerente"/"Sociedad Depositaria"
+  // cuando el HTML real no los trajo sería inventar contenido que el
+  // usuario no escribió. Los valores default solo se usan como
+  // placeholder al crear la sección DESDE CERO (toggle "+Agregar" en
+  // el panel), no al importar.
+  const firmaInstitucional = filasFirmaEncontradas.length >= 1 ? {
+    activo: true,
+    fila1Izq: filasFirmaEncontradas[0]?.izq ?? '',
+    fila1Der: filasFirmaEncontradas[0]?.der ?? '',
+    fila2Izq: filasFirmaEncontradas[1]?.izq ?? '',
+    fila2Der: filasFirmaEncontradas[1]?.der ?? '',
+  } : null
+  // html sin las filas de firma institucional, para que el regex de
+  // legales sueltos de abajo no las vuelva a contar.
+  let htmlSinFirmaInstitucional = html
+  for (let i = rangosFirmaInstitucional.length - 1; i >= 0; i--) {
+    const [inicio, fin] = rangosFirmaInstitucional[i]
+    htmlSinFirmaInstitucional = htmlSinFirmaInstitucional.slice(0, inicio) + htmlSinFirmaInstitucional.slice(fin)
+  }
+
+  const inicioLegalFijo = LEGAL_FIJO_HTML.slice(0, 60)
+  const legalesTdRegex = /<td[^>]*\sclass="Texto_Legales"[^>]*>([\s\S]*?)<\/td>/g
+  const legalesEncontrados = []
+  let legalMatch
+  while ((legalMatch = legalesTdRegex.exec(htmlSinFirmaInstitucional)) !== null) {
+    let texto = legalMatch[1].trim()
+    const idxLegalFijo = texto.indexOf(inicioLegalFijo)
+    if (idxLegalFijo !== -1) texto = texto.slice(0, idxLegalFijo).trim()
+    // Piezas exportadas por este editor: el legal fijo viene envuelto en
+    // <span data-legal-fijo>, y al cortar queda el tag de apertura suelto.
+    texto = texto.replace(/<span[^>]*data-legal-fijo[^>]*>\s*$/, '').trim()
+    if (texto) legalesEncontrados.push(texto)
+  }
+  const legalesAdicionales = legalesEncontrados.map((texto, idx) => ({ id: Date.now() + idx, texto }))
+
+  const filasConLegalHeur = new Set()
+  const trRegexHeur = /<tr>([\s\S]*?)<\/tr>/g
+  let trMatchHeur
+  while ((trMatchHeur = trRegexHeur.exec(htmlSinFirmaInstitucional)) !== null) {
+    if (trMatchHeur[1].includes('class="Texto_Legales"')) filasConLegalHeur.add(trMatchHeur[0])
+  }
+  const legalesSeparados = filasConLegalHeur.size > 1
+
+  // Indicadores: mismo patrón que importarDesdeHtml (un <sup> con la
+  // referencia, seguido de sigla y valor), pero sin el marcador
+  // <!--INDICADORES--> que acota dónde buscar — se busca en toda la
+  // zona DESPUÉS de la tabla de contenido (misma zona que imgFooter),
+  // que es donde viven los indicadores en todas las piezas vistas.
+  // Se excluye explícitamente cualquier <sup> que ya forme parte de
+  // un legal adicional (las referencias "(1)", "(2)" dentro del texto
+  // de los legales también usan <sup>, y no son indicadores).
+  const indicadorRegexHeur = /<sup[^>]*>([\s\S]*?)<\/sup>\s*([^<]+)/g
+  const indicadores = []
+  let indMatchHeur
+  while ((indMatchHeur = indicadorRegexHeur.exec(htmlDespuesDeContenido)) !== null) {
+    const resto = indMatchHeur[2].trim()
+    // Un indicador real tiene contenido sustancial después del <sup>
+    // (ej. "CFTNA 0,00%") — las referencias de legales casi siempre
+    // van seguidas de texto largo de párrafo, no de una sigla corta,
+    // así que se descarta cualquier match cuyo "resto" sea
+    // sospechosamente largo (más de 60 caracteres no es una sigla de
+    // indicador, es el inicio de un párrafo de legal).
+    if (resto.length > 0 && resto.length <= 60) {
+      const partes = resto.split(/\s+/)
+      indicadores.push({ id: Date.now() + indicadores.length, ref: indMatchHeur[1].trim(), sigla: partes[0] ?? '', valor: partes.slice(1).join(' ') })
+    }
+  }
+
+  return { legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores }
+}
+
 export function importarHeuristico(html) {
   const avisos = []
 
@@ -2079,30 +2317,11 @@ export function importarHeuristico(html) {
   // conserva el real. Acotar a "antes de la tabla de contenido" evita
   // confundirla con una imagen de igual ancho dentro de un bloque.
   const htmlAntesDeContenido = html.slice(0, tabla.inicioTag)
-  const imgPrincipalMatch = encontrarImgPrincipal(htmlAntesDeContenido)
-  let imgPrincipal = { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
-  if (imgPrincipalMatch) {
-    const tag = imgPrincipalMatch[0]
-    const src = tag.match(/\ssrc="([^"]*)"/)?.[1] ?? ''
-    if (src) {
-      // Si la imagen está envuelta en un <a>, ese link se considera
-      // el link de la imagen — mismo criterio que generarExport.
-      const idx = imgPrincipalMatch.index
-      const ventanaPrevia = htmlAntesDeContenido.slice(Math.max(0, idx - 300), idx)
-      const linkMatch = ventanaPrevia.match(/<a\b[^>]*\shref="([^"]*)"[^>]*>(?:(?!<\/a>)[\s\S])*$/)
-      imgPrincipal = {
-        activo: true,
-        src,
-        alt: tag.match(/\salt="([^"]*)"/)?.[1] ?? '',
-        title: tag.match(/\stitle="([^"]*)"/)?.[1] ?? '',
-        link: linkMatch?.[1] ?? '',
-        // Alto real de la imagen en la pieza (antes fijo en 425).
-        alto: parseInt(tag.match(/\sheight="(\d+)"/)?.[1] ?? '425', 10),
-      }
-    } else {
-      avisos.push({ texto: 'Se detectó una imagen principal pero no se pudo leer su URL — revisala manualmente.', tipo: 'general', canvasIdx: null })
-    }
-  } else {
+  const lecturaImgPrincipal = leerImgPrincipalPorEstructura(htmlAntesDeContenido)
+  const imgPrincipal = lecturaImgPrincipal.imgPrincipal
+  if (lecturaImgPrincipal.sinUrl) {
+    avisos.push({ texto: 'Se detectó una imagen principal pero no se pudo leer su URL — revisala manualmente.', tipo: 'general', canvasIdx: null })
+  } else if (!lecturaImgPrincipal.encontrada) {
     avisos.push({ texto: 'No se pudo identificar automáticamente la imagen principal — revisá si corresponde agregarla manualmente.', tipo: 'general', canvasIdx: null })
   }
 
@@ -2117,154 +2336,11 @@ export function importarHeuristico(html) {
   // encontrar nada acá no genera aviso — queda inactivo en silencio,
   // igual que una pieza nueva sin footer agregado.
   const htmlDespuesDeContenido = html.slice(tabla.finTag)
-  const imgFooterMatch = htmlDespuesDeContenido.match(/<td[^>]*\scolspan="3"[^>]*>(?:(?!<\/td>)[\s\S])*?<img\b[^>]*class="img-max"[^>]*>/)
-  let imgFooter = { activo: false, src: '', alt: '', link: '' }
-  if (imgFooterMatch) {
-    const imgTag = imgFooterMatch[0].match(/<img\b[^>]*>/)?.[0] ?? ''
-    const src = imgTag.match(/\ssrc="([^"]*)"/)?.[1] ?? ''
-    if (src) {
-      const linkMatch = imgFooterMatch[0].match(/<a\b[^>]*\shref="([^"]*)"/)
-      imgFooter = {
-        activo: true,
-        src,
-        alt: imgTag.match(/\salt="([^"]*)"/)?.[1] ?? '',
-        link: linkMatch?.[1] ?? '',
-      }
-    }
-  }
+  const imgFooter = leerImgFooterPorEstructura(htmlDespuesDeContenido)
 
-  // Legales adicionales / legal fijo: sin marcador data-legal-* en
-  // piezas externas. El ancla disponible es el texto del legal fijo
-  // en sí (LEGAL_FIJO_HTML) — es siempre el mismo texto institucional
-  // en toda la app.
-  //
-  // CRÍTICO: en modo SEPARADO (Mall, cada legal en su propio
-  // <tbody>), el legal fijo vive solo, en su propio <td> — ahí basta
-  // con descartar el <td> que ENTERO sea el legal fijo. Pero en modo
-  // CORRIDO (la mayoría de las piezas: todos los legales y el legal
-  // fijo en una sola celda, ver generarExport →
-  // `${especificosHtml}<span data-legal-fijo="true">${LEGAL_FIJO_HTML}
-  // </span>`), el legal fijo no está SOLO en su <td>, está PEGADO al
-  // final del texto del último legal adicional, en el mismo bloque.
-  // Bug real encontrado: comparar si el <td> completo EMPIEZA con el
-  // legal fijo solo cubre el caso separado — en modo corrido el <td>
-  // empieza con el legal adicional, así que nunca matcheaba ese
-  // `startsWith`, y el bloque entero (adicional + fijo concatenados)
-  // se guardaba como "legal adicional", duplicando el habeas data en
-  // el editor (que ya lo agrega aparte, siempre).
-  //
-  // Fix: buscar DÓNDE aparece el texto del legal fijo DENTRO de cada
-  // <td> (no solo si el <td> entero empieza así) y cortar el bloque
-  // ahí — todo lo que esté ANTES de ese punto es el legal adicional
-  // real (puede ser texto vacío, si el <td> es 100% el legal fijo sin
-  // nada más, y en ese caso no se guarda nada).
-  //
-  // Segundo bug real encontrado, con una pieza real de Fondos Comunes
-  // de Inversión (FCI): esa pieza trae, DESPUÉS del legal fijo, una
-  // firma institucional de 2 filas — cada fila con DOS <td
-  // class="Texto_Legales"> propios (uno alineado a la izquierda, otro
-  // a la derecha; ej. "ICBC Investments SAU SGFCI" / "Industrial and
-  // Commercial Bank..."), sin relación con el legal largo de texto
-  // corrido. El regex de abajo, al buscar CUALQUIER
-  // <td class="Texto_Legales">, encontraba estas 4 celdas sueltas y
-  // las trataba como 4 "legales adicionales" independientes — y como
-  // terminaba habiendo más de una fila con esa clase, activaba por
-  // error el modo "legales separados" (texto apilado con espaciador),
-  // en vez de reconocer la firma de 2 columnas real. La señal
-  // estructural que distingue una fila de firma institucional de una
-  // fila de legal real: tiene EXACTAMENTE 2 <td class="Texto_Legales">
-  // en la misma fila, sin colspan, uno con text-align:left y el otro
-  // con text-align:right — un legal real nunca tiene 2 celdas así (va
-  // solo, con colspan, o con text-align:justify). Esas filas se
-  // separan ANTES de buscar legales sueltos, para que el regex
-  // genérico de abajo nunca llegue a verlas.
-  const filaFirmaRegex = /<tr>([\s\S]*?)<\/tr>/g
-  const tdsTextoLegalesRegex = /<td(?![^>]*\scolspan=)[^>]*\sclass="Texto_Legales"[^>]*\stext-align:\s*(left|right)[^>]*>([\s\S]*?)<\/td>/g
-  let filaFirmaMatch
-  const rangosFirmaInstitucional = [] // [inicio, fin] de cada <tr> que es fila de firma, para excluirlos del html antes de buscar legales sueltos
-  const filasFirmaEncontradas = []
-  // Si el HTML ya viene de un export previo de ESTE editor (ej. el
-  // usuario reimporta una pieza propia pegándola de nuevo, sin que el
-  // sistema use la vía con marcador <!--FIRMA_INSTITUCIONAL-->), cada
-  // celda trae su texto envuelto en <span data-firma-filaN-izq/der=
-  // "true">...</span> — hay que despojar ese wrapper antes de guardar
-  // el texto, o el usuario vería el span crudo en el panel de edición.
-  const limpiarSpanFirma = t => t.replace(/^<span\s+data-firma-fila\d-(?:izq|der)="true">([\s\S]*)<\/span>$/, '$1').trim()
-  while ((filaFirmaMatch = filaFirmaRegex.exec(html)) !== null) {
-    const filaCompleta = filaFirmaMatch[0]
-    const celdas = [...filaCompleta.matchAll(tdsTextoLegalesRegex)]
-    if (celdas.length === 2 && celdas[0][1].toLowerCase() === 'left' && celdas[1][1].toLowerCase() === 'right') {
-      filasFirmaEncontradas.push({ izq: limpiarSpanFirma(celdas[0][2].trim()), der: limpiarSpanFirma(celdas[1][2].trim()) })
-      rangosFirmaInstitucional.push([filaFirmaMatch.index, filaFirmaMatch.index + filaCompleta.length])
-    }
-  }
-  // Si la pieza real solo trae UNA fila con este patrón (no las 2
-  // habituales), la segunda queda vacía en vez de completarse con el
-  // texto default — forzar "Sociedad Gerente"/"Sociedad Depositaria"
-  // cuando el HTML real no los trajo sería inventar contenido que el
-  // usuario no escribió. Los valores default solo se usan como
-  // placeholder al crear la sección DESDE CERO (toggle "+Agregar" en
-  // el panel), no al importar.
-  const firmaInstitucional = filasFirmaEncontradas.length >= 1 ? {
-    activo: true,
-    fila1Izq: filasFirmaEncontradas[0]?.izq ?? '',
-    fila1Der: filasFirmaEncontradas[0]?.der ?? '',
-    fila2Izq: filasFirmaEncontradas[1]?.izq ?? '',
-    fila2Der: filasFirmaEncontradas[1]?.der ?? '',
-  } : null
+  const { legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores } =
+    leerLegalesFirmaIndicadoresPorEstructura(html, htmlDespuesDeContenido)
   if (firmaInstitucional) avisos.push({ texto: 'Se detectó una firma institucional (ICBC Investments / Sociedad Gerente-Depositaria) — revisá que el texto importado sea correcto.', tipo: 'general', canvasIdx: null })
-  // html sin las filas de firma institucional, para que el regex de
-  // legales sueltos de abajo no las vuelva a contar.
-  let htmlSinFirmaInstitucional = html
-  for (let i = rangosFirmaInstitucional.length - 1; i >= 0; i--) {
-    const [inicio, fin] = rangosFirmaInstitucional[i]
-    htmlSinFirmaInstitucional = htmlSinFirmaInstitucional.slice(0, inicio) + htmlSinFirmaInstitucional.slice(fin)
-  }
-
-  const inicioLegalFijo = LEGAL_FIJO_HTML.slice(0, 60)
-  const legalesTdRegex = /<td[^>]*\sclass="Texto_Legales"[^>]*>([\s\S]*?)<\/td>/g
-  const legalesEncontrados = []
-  let legalMatch
-  while ((legalMatch = legalesTdRegex.exec(htmlSinFirmaInstitucional)) !== null) {
-    let texto = legalMatch[1].trim()
-    const idxLegalFijo = texto.indexOf(inicioLegalFijo)
-    if (idxLegalFijo !== -1) texto = texto.slice(0, idxLegalFijo).trim()
-    if (texto) legalesEncontrados.push(texto)
-  }
-  const legalesAdicionales = legalesEncontrados.map((texto, idx) => ({ id: Date.now() + idx, texto }))
-
-  const filasConLegalHeur = new Set()
-  const trRegexHeur = /<tr>([\s\S]*?)<\/tr>/g
-  let trMatchHeur
-  while ((trMatchHeur = trRegexHeur.exec(htmlSinFirmaInstitucional)) !== null) {
-    if (trMatchHeur[1].includes('class="Texto_Legales"')) filasConLegalHeur.add(trMatchHeur[0])
-  }
-  const legalesSeparados = filasConLegalHeur.size > 1
-
-  // Indicadores: mismo patrón que importarDesdeHtml (un <sup> con la
-  // referencia, seguido de sigla y valor), pero sin el marcador
-  // <!--INDICADORES--> que acota dónde buscar — se busca en toda la
-  // zona DESPUÉS de la tabla de contenido (misma zona que imgFooter),
-  // que es donde viven los indicadores en todas las piezas vistas.
-  // Se excluye explícitamente cualquier <sup> que ya forme parte de
-  // un legal adicional (las referencias "(1)", "(2)" dentro del texto
-  // de los legales también usan <sup>, y no son indicadores).
-  const indicadorRegexHeur = /<sup[^>]*>([\s\S]*?)<\/sup>\s*([^<]+)/g
-  const indicadores = []
-  let indMatchHeur
-  while ((indMatchHeur = indicadorRegexHeur.exec(htmlDespuesDeContenido)) !== null) {
-    const resto = indMatchHeur[2].trim()
-    // Un indicador real tiene contenido sustancial después del <sup>
-    // (ej. "CFTNA 0,00%") — las referencias de legales casi siempre
-    // van seguidas de texto largo de párrafo, no de una sigla corta,
-    // así que se descarta cualquier match cuyo "resto" sea
-    // sospechosamente largo (más de 60 caracteres no es una sigla de
-    // indicador, es el inicio de un párrafo de legal).
-    if (resto.length > 0 && resto.length <= 60) {
-      const partes = resto.split(/\s+/)
-      indicadores.push({ id: Date.now() + indicadores.length, ref: indMatchHeur[1].trim(), sigla: partes[0] ?? '', valor: partes.slice(1).join(' ') })
-    }
-  }
 
   // Header: sin marcador <!--HEADER:slug--> en piezas externas. Se
   // reconoce por el nombre de archivo de sus logos y por el color de

@@ -241,6 +241,10 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 /<!--BLOQUE\s+slug="([^"]+)"\s+idx="(\d+)"-->/g
 ```
 
+### Respaldo por estructura (marcadores faltantes)
+
+Si una pieza trae `<!--BLOQUE-->` pero no los marcadores de legales adicionales, firma institucional o indicadores, el importador por marcadores busca esas secciones por estructura (`leerLegalesFirmaIndicadoresPorEstructura`, la misma regla del importador heurístico) en la zona posterior al último bloque. El marcador, cuando existe, gana siempre. Cada sección recuperada así deja un aviso "Se detectó por estructura" para que se revise.
+
 ### Estado de implementación
 
 1. **Parser de marcadores** — **implementado** (`importarDesdeHtml()` en `src/lib/editor/importar.js`). Lee el HTML completo buscando cada marcador de la tabla arriba y reconstruye el estado equivalente al que recibe `generarExport`. El bloque de contenido se reconstruye cruzando el `slug` contra `BLOQUES` (mismo patrón que ya usa `headerDesdeSlug()` al restaurar el borrador de `localStorage`), tomando el HTML interno del marcador como `htmlEditado`.

@@ -396,3 +396,73 @@ describe('pieza real: redes + logo icbc-Pymes-HOR.png + imagen principal 600x421
     expect(encontrarImgPrincipal('<img src="https://x.com/a.png" width="300" height="425">')).toBeNull()
   })
 })
+
+describe('imagen principal y footer en piezas con marcadores pero sin <!--IMG_PRINCIPAL--> / <!--IMG_FOOTER-->', () => {
+  // La UI normaliza las comillas simples de los atributos antes de importar.
+  const normalizar = h => h.replace(/(\s[a-zA-Z-]+)='([^']*)'/g, (_m, attr, val) => `${attr}="${val}"`)
+  const caso = normalizar(PIEZAS['./fixtures/pieza-con-marcadores-sin-img-principal.html'])
+
+  it('pieza real (BLOQUE + HEADER, sin marcador de imagen principal): la encuentra por estructura', () => {
+    const { resultado } = importarDesdeHtml(caso)
+    expect(resultado).not.toBeNull()
+    expect(resultado.imgPrincipal.activo).toBe(true)
+    expect(resultado.imgPrincipal.src).toContain('EML-FAL-1200x850px.jpg')
+    expect(resultado.imgPrincipal.alto).toBe(425)
+  })
+  it('con el marcador <!--IMG_PRINCIPAL--> sigue mandando el marcador', () => {
+    const conMarcador = caso.replace(/(<tr>\s*<td[^>]*>)(<img src="[^"]*EML-FAL[^>]*>)(<\/td>\s*<\/tr>)/, '$1<!--IMG_PRINCIPAL--><a href="https://x.com/l">$2</a><!--/IMG_PRINCIPAL-->$3')
+    expect(conMarcador).toContain('<!--IMG_PRINCIPAL-->')
+    const { resultado } = importarDesdeHtml(conMarcador)
+    expect(resultado.imgPrincipal.link).toBe('https://x.com/l')
+  })
+  it('una imagen de 600 de ancho dentro del contenido (después del primer bloque) no se toma como principal', () => {
+    const sinPrincipal = caso.replace(/<img src="[^"]*EML-FAL[^>]*>/, '')
+    const conImagenEnBloque = sinPrincipal.replace('<!--/BLOQUE-->', '<tr><td><img src="https://x.com/otra.png" width="600" height="425"></td></tr><!--/BLOQUE-->')
+    const { resultado } = importarDesdeHtml(conImagenEnBloque)
+    expect(resultado.imgPrincipal.activo).toBe(false)
+  })
+  it('el footer sin marcador se busca por estructura, solo después del último bloque', () => {
+    const footer = '<tr><td colspan="3" style="font-size: 0;" valign="middle" align="center"><a href="https://www.multipay.com.ar"><img src="https://x.com/footer.png" alt="Multipay" class="img-max" width="600" height="110"></a></td></tr>'
+    const conFooter = caso.replace(/(<td width="35"><\/td>\s*<td class="Texto_Legales")/, `${footer}</tbody></table><table><tbody><tr>$1`)
+    const { resultado } = importarDesdeHtml(conFooter)
+    expect(resultado.imgFooter.activo).toBe(true)
+    expect(resultado.imgFooter.src).toBe('https://x.com/footer.png')
+    expect(resultado.imgFooter.link).toBe('https://www.multipay.com.ar')
+    // sin footer: sigue inactivo
+    expect(importarDesdeHtml(caso).resultado.imgFooter.activo).toBe(false)
+  })
+})
+
+describe('legales, firma e indicadores por estructura cuando faltan los marcadores (importador por marcadores)', () => {
+  const normalizar = h => h.replace(/(\s[a-zA-Z-]+)='([^']*)'/g, (_m, attr, val) => `${attr}="${val}"`)
+  const caso = normalizar(PIEZAS['./fixtures/pieza-con-marcadores-sin-img-principal.html'])
+
+  it('pieza real: recupera los 12 legales (separados), la firma y los 2 indicadores, y avisa', () => {
+    const { resultado, avisos } = importarDesdeHtml(caso)
+    expect(resultado.legalesAdicionales).toHaveLength(12)
+    expect(resultado.legalesSeparados).toBe(true)
+    expect(resultado.firmaInstitucional?.activo).toBe(true)
+    expect(resultado.indicadores).toHaveLength(2)
+    const aviso = avisos.find(a => a.texto.includes('por estructura'))
+    expect(aviso).toBeDefined()
+    expect(aviso.texto).toContain('12 legales adicionales')
+    expect(aviso.texto).toContain('la firma institucional')
+    expect(aviso.texto).toContain('2 indicadores')
+  })
+  it('coincide con lo que lee el importador heurístico', () => {
+    const marcadores = importarDesdeHtml(caso).resultado
+    const heuristico = importarHeuristico(caso).resultado
+    expect(marcadores.legalesAdicionales.map(l => l.texto)).toEqual(heuristico.legalesAdicionales.map(l => l.texto))
+    expect(marcadores.indicadores.map(i => [i.ref, i.sigla, i.valor])).toEqual(heuristico.indicadores.map(i => [i.ref, i.sigla, i.valor]))
+  })
+  it('si la pieza no tiene legales/firma/indicadores no inventa nada ni avisa', () => {
+    const sin = caso
+      .replace(/<td[^>]*class="Texto_Legales"[\s\S]*?<\/td>/g, '')
+      .replace(/<sup[^>]*>[\s\S]*?<\/sup>[^<]*/g, '')
+    const { resultado, avisos } = importarDesdeHtml(sin)
+    expect(resultado.legalesAdicionales).toHaveLength(0)
+    expect(resultado.firmaInstitucional).toBeNull()
+    expect(resultado.indicadores).toHaveLength(0)
+    expect(avisos.some(a => a.texto.includes('por estructura'))).toBe(false)
+  })
+})
