@@ -1,6 +1,7 @@
 // Miniaturas SVG descriptivas para la biblioteca de bloques.
 
 import { colorPorPrefijoHeader } from './constantes.js'
+import { ROJO_ACENTO } from './colores.js'
 
 // ─── Miniatura visual para la biblioteca ───────────────────────────────────
 // En lugar de renderizar el HTML complejo (que se ve raro a tamaño miniatura),
@@ -9,8 +10,8 @@ import { colorPorPrefijoHeader } from './constantes.js'
 export function generarThumbSVG(bloque) {
   const colores = {
     Header: { bg: colorPorPrefijoHeader(bloque.slug), fg: '#ffffff', accent: '#ffffff' },
-    Contenido: { bg: '#f5f5f5', fg: '#333333', accent: '#c4161c' },
-    Botones: { bg: '#f5f5f5', fg: '#333333', accent: '#c4161c' },
+    Contenido: { bg: '#f5f5f5', fg: '#333333', accent: ROJO_ACENTO },
+    Botones: { bg: '#f5f5f5', fg: '#333333', accent: ROJO_ACENTO },
   }
   const { bg, fg, accent } = colores[bloque.categoria] || colores.Contenido
 
@@ -25,12 +26,8 @@ export function generarThumbSVG(bloque) {
   let contenido
 
   // Cualquier banda de Header usa el MISMO thumb (4 círculos blancos
-  // simulando los íconos de redes + 2 líneas simulando el logo/firma)
-  // — antes solo CG_Banda_Roja_Header lo tenía, y los demás headers
-  // (Mall, Comex, y los nuevos Pay/EB) caían al genérico de 4 barras
-  // grises sin sentido, ya que las 3 (ahora 5) bandas de header
-  // comparten exactamente la misma estructura visual, solo cambia el
-  // color de fondo (ya resuelto arriba con bgHeaderPorPrefijo).
+  // simulando los íconos de redes + 2 líneas simulando el logo/firma);
+  // solo cambia el color de fondo, ya resuelto arriba por segmento.
   if (bloque.categoria === 'Header') {
     contenido = `
       <circle cx="30" cy="40" r="9" fill="white" opacity="0.9"/>
@@ -57,31 +54,31 @@ export function generarThumbSVG(bloque) {
     // "tasa/dato numérico destacado en caja", separadas por un punto
     // vertical, igual al bloque real (tasa nominal anual + porcentaje).
     contenido = `
-      <rect x="15" y="8" width="75" height="64" rx="2" fill="none" stroke="#c4161c" stroke-width="3"/>
+      <rect x="15" y="8" width="75" height="64" rx="2" fill="none" stroke="${ROJO_ACENTO}" stroke-width="3"/>
       <rect x="22" y="30" width="61" height="6" rx="2" fill="#ffffff" opacity="0.9"/>
       <circle cx="100" cy="40" r="2" fill="${accent}" opacity="0.6"/>
-      <rect x="110" y="8" width="75" height="64" rx="2" fill="none" stroke="#c4161c" stroke-width="3"/>
+      <rect x="110" y="8" width="75" height="64" rx="2" fill="none" stroke="${ROJO_ACENTO}" stroke-width="3"/>
       <text x="147" y="48" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="bold" font-family="Arial">%</text>`
   } else if (bloque.slug === 'Destacado_Topes_Promo') {
     contenido = `
-      <rect x="10" y="10" width="180" height="60" rx="3" fill="none" stroke="#c4161c" stroke-width="2"/>
+      <rect x="10" y="10" width="180" height="60" rx="3" fill="none" stroke="${ROJO_ACENTO}" stroke-width="2"/>
       <rect x="20" y="22" width="120" height="8" rx="2" fill="${fg}" opacity="0.5"/>
       <rect x="20" y="36" width="100" height="6" rx="2" fill="${fg}" opacity="0.3"/>
-      <rect x="20" y="48" width="80" height="6" rx="2" fill="#c4161c" opacity="0.5"/>`
+      <rect x="20" y="48" width="80" height="6" rx="2" fill="${ROJO_ACENTO}" opacity="0.5"/>`
   } else if (bloque.slug === 'Destacado_GiftCard_BigBox') {
     // Imagen a la izq, texto a la der, todo con borde rojo — invertido al Topes_Promo
     contenido = `
-      <rect x="10" y="10" width="180" height="60" rx="3" fill="none" stroke="#c4161c" stroke-width="2"/>
-      <rect x="18" y="18" width="55" height="44" rx="2" fill="#c4161c" opacity="0.2"/>
+      <rect x="10" y="10" width="180" height="60" rx="3" fill="none" stroke="${ROJO_ACENTO}" stroke-width="2"/>
+      <rect x="18" y="18" width="55" height="44" rx="2" fill="${ROJO_ACENTO}" opacity="0.2"/>
       <rect x="82" y="22" width="100" height="8" rx="2" fill="${fg}" opacity="0.5"/>
       <rect x="82" y="36" width="80" height="6" rx="2" fill="${fg}" opacity="0.3"/>
-      <rect x="82" y="48" width="60" height="6" rx="2" fill="#c4161c" opacity="0.5"/>`
+      <rect x="82" y="48" width="60" height="6" rx="2" fill="${ROJO_ACENTO}" opacity="0.5"/>`
   } else if (esEspaciador) {
     contenido = `<line x1="10" y1="40" x2="190" y2="40" stroke="${accent}" stroke-width="2" stroke-dasharray="4,3"/><text x="100" y="55" text-anchor="middle" fill="${fg}" font-size="10" font-family="Arial">ESPACIADOR</text>`
   } else if (esBoton) {
     contenido = `<rect x="50" y="25" width="100" height="28" rx="4" fill="${accent}"/><text x="100" y="44" text-anchor="middle" fill="#fff" font-size="11" font-family="Arial" font-weight="bold">BOTÓN</text>`
   } else if (esBullet) {
-    const color = /rojo|red/i.test(bloque.nombre) ? '#c4161c' : '#333333'
+    const color = /rojo|red/i.test(bloque.nombre) ? ROJO_ACENTO : '#333333'
     contenido = `
       <circle cx="20" cy="28" r="4" fill="${color}"/>
       <rect x="32" y="24" width="120" height="8" rx="2" fill="${fg}" opacity="0.3"/>

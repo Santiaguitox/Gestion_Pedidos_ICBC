@@ -15,15 +15,15 @@ import '@/styles/EditorPiezas.css'
 import {
   FIRMA_INSTITUCIONAL_DEFAULT,
   LEGAL_FIJO_HTML,
-  REDES_SOCIALES,
   TEMAS,
   TEMA_DEFAULT,
 } from '@/lib/editor/constantes.js'
 import { esImagenEstructural } from '@/lib/imagenesEstructurales'
-import { BLOQUES, BLOQUES_CONTENIDO, BLOQUES_HEADER, BLOQUE_ESPACIADOR } from '@/lib/editor/bloques.js'
+import { BLOQUES, BLOQUES_CONTENIDO, BLOQUE_ESPACIADOR, bandasHeaderBiblioteca, etiquetaHeaderBiblioteca, OPCIONES_MARCA_HEADER, bandaHeaderDeSeleccion, headerPorDefecto, resolverHeaderPorSlug, seleccionDeBandaHeader } from '@/lib/editor/bloques.js'
+import { SEGMENTOS } from '@/lib/editor/headers.js'
+import { NEGRO_EB, ROJO_ACENTO, migrarHtmlEditadoGuardado } from '@/lib/editor/colores.js'
 import { extraerTdsConBalance, limpiarHtmlEditor, validarUrl } from '@/lib/editor/htmlUtils.js'
 import { actualizarCampoEnHtml, detectarCampos } from '@/lib/editor/campos.js'
-import { detectarRedesSociales, reordenarRedesSociales } from '@/lib/editor/redesSociales.js'
 import { generarExport, wrapPreview } from '@/lib/editor/exportar.js'
 
 import { generarThumbSVG } from '@/lib/editor/thumbs.js'
@@ -164,72 +164,6 @@ function SugerenciaFixAtributo({ aviso, onSolicitarAplicar }) {
   )
 }
 
-// ─── Redes sociales en bandas de Header ────────────────────────────────────
-// Cualquier banda de header (ICBC, Mall, Comex, las que se sumen a
-// futuro) puede traer hasta 4 íconos de redes — algunas comunicaciones
-// puntuales no las usan (ver CG_Banda_Roja_Header_Comex.html, que ya
-// viene con los <td class="IconoRedes"> vacíos). En vez de modelar 2
-// versiones de cada header (con/sin redes), se detectan las redes
-// presentes por el dominio del <a href> dentro de cada
-// <td class="IconoRedes">, y se reordenan/desactivan al vuelo al
-// exportar/previsualizar — mismo criterio que aplicarColorTexto: la
-// transformación se aplica recién al generar el HTML final, nunca se
-// "quema" en el bandaHeader guardado. El ORDEN del array de abajo es
-// el orden real en el que aparecen hoy en los headers existentes —
-// no tiene ningún significado especial más que ser el default antes
-// de que el usuario reordene.
-// Íconos de redes sociales como SVG propios — lucide-react eliminó
-// todos los íconos de marca registrada (Twitter/X, Facebook,
-// Instagram, GitHub, etc.) en su versión 1.0 por motivos legales y de
-// mantenimiento, recomendando reemplazarlos por un SVG propio o el
-// paquete aparte Simple Icons. Como son solo 4 íconos chicos y fijos,
-// se escriben acá inline en vez de sumar una dependencia nueva al
-// proyecto solo para esto. Mismo patrón de props (size, currentColor
-// vía CSS) que los íconos de lucide-react que ya se usan en el resto
-// del archivo, para que el resto del código no tenga que tratarlos
-// distinto.
-function IconoTwitter({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.9 1.9h3.7l-8.1 9.3 9.5 12.6h-7.5l-5.9-7.7-6.7 7.7H.2l8.7-9.9L0 1.9h7.6l5.3 7.1zM17 22h2L7.1 3.6H5z" />
-    </svg>
-  )
-}
-function IconoFacebook({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M22 12.06C22 6.5 17.5 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.91h2.54V9.84c0-2.5 1.49-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.78l-.45 2.91h-2.33V22c4.78-.79 8.44-4.94 8.44-9.94z" />
-    </svg>
-  )
-}
-function IconoInstagram({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-    </svg>
-  )
-}
-function IconoLinkedin({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.34 18.34V9.75H5.67v8.59zM7 8.6a1.55 1.55 0 1 0 0-3.1 1.55 1.55 0 0 0 0 3.1zm11.34 9.74v-4.7c0-2.52-1.35-3.69-3.15-3.69a2.72 2.72 0 0 0-2.46 1.35h-.04V9.75H10v8.59h2.67v-4.27c0-1.13.21-2.22 1.61-2.22 1.38 0 1.4 1.29 1.4 2.29v4.2z" />
-    </svg>
-  )
-}
-
-// Mapa key → componente de ícono de cada red. La DATA (key, dominio,
-// label) vive en lib/editor/constantes (REDES_SOCIALES) para que
-// detectarRedesSociales/reordenarRedesSociales sean libs puras sin
-// React — acá queda solo la parte visual, resuelta por key.
-const REDES_ICONOS = {
-  twitter: IconoTwitter,
-  facebook: IconoFacebook,
-  instagram: IconoInstagram,
-  linkedin: IconoLinkedin,
-}
-
 // ─── Mini editor rich text ──────────────────────────────────────────────────
 
 // ─── Envolver una selección en un elemento, con fallback ───────────
@@ -269,7 +203,7 @@ function RichEditor({ value, onChange }) {
   const ref = useRef(null)
   const [showLink, setShowLink] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
-  const [linkColor, setLinkColor] = useState('#c4161c')
+  const [linkColor, setLinkColor] = useState(ROJO_ACENTO)
   const savedRange = useRef(null)
   const isInternalChange = useRef(false)
   // Solo para el caso extremo en que ni siquiera el fallback de
@@ -394,9 +328,9 @@ function RichEditor({ value, onChange }) {
           <span style={{ textDecoration: 'line-through', fontSize: 11 }}>U</span>
         </button>
         <div className="ep-rich-separator" />
-        <button type="button" className="ep-rich-btn" title="Color rojo #c4161c"
-          onMouseDown={e => { e.preventDefault(); guardarRango(); aplicarEstilo({ color: '#c4161c' }) }}>
-          <span className="ep-color-dot" style={{ background: '#c4161c' }} />
+        <button type="button" className="ep-rich-btn" title={`Color rojo ${ROJO_ACENTO}`}
+          onMouseDown={e => { e.preventDefault(); guardarRango(); aplicarEstilo({ color: ROJO_ACENTO }) }}>
+          <span className="ep-color-dot" style={{ background: ROJO_ACENTO }} />
         </button>
         <button type="button" className="ep-rich-btn" title="Color negro #333333"
           onMouseDown={e => { e.preventDefault(); guardarRango(); aplicarEstilo({ color: '#333333' }) }}>
@@ -419,9 +353,9 @@ function RichEditor({ value, onChange }) {
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>Color link:</span>
             <button type="button"
-              className={`ep-rich-btn ${linkColor === '#c4161c' ? 'active' : ''}`}
-              onClick={() => setLinkColor('#c4161c')} title="Rojo">
-              <span className="ep-color-dot" style={{ background: '#c4161c' }} />
+              className={`ep-rich-btn ${linkColor === ROJO_ACENTO ? 'active' : ''}`}
+              onClick={() => setLinkColor(ROJO_ACENTO)} title="Rojo">
+              <span className="ep-color-dot" style={{ background: ROJO_ACENTO }} />
             </button>
             <button type="button"
               className={`ep-rich-btn ${linkColor === '#333333' ? 'active' : ''}`}
@@ -582,65 +516,65 @@ function CampoImagen({ campo, onActualizar }) {
   )
 }
 
-// ─── Panel de edición de la banda Header (redes sociales) ──────────────────
-// Una sola lista de pills (uno por red detectada en el header actual),
-// cada pill con el ícono de la red en gris neutro (sin colores de
-// marca — desentonaban del resto del diseño del editor, que usa un
-// único acento violeta para todo estado activo/hover) — click para
-// tachar/activar (igual idea visual que ya usa el resto del editor
-// para "incluida/no incluida"), arrastrable para reordenar. El orden
-// del array ES el orden final en el export — no hay una zona separada
-// de "disponibles" vs "activas", todo vive en una sola lista, más
-// simple de entender de un vistazo.
-function PanelEditorHeader({ redesOrden, onToggle, onReordenar }) {
-  const [dragKey, setDragKey] = useState(null)
-  const redes = redesOrden ?? []
+// ─── Selectores de header: marca + segmento ────────────────────────────────
+// La banda de header es un logo (la marca o submarca de la comunicación)
+// sobre el color de un segmento (CG, EB, Pay). Las opciones salen del
+// catálogo (lib/editor/headers.js): sumar una marca allá la suma acá
+// sola. Cambiar la marca conserva el segmento si esa marca existe en él;
+// si no (Exclusive solo existe en EB) salta al primero disponible.
+function SelectoresHeader({ bandaHeader, onCambiar, resaltar = false }) {
+  const { marcaId, segmentoId } = seleccionDeBandaHeader(bandaHeader)
+  const opcionActual = OPCIONES_MARCA_HEADER.find(m => m.id === marcaId)
 
-  if (redes.length === 0) {
-    return (
-      <div className="ep-editor-empty">
-        <Layout size={28} style={{ color: 'var(--border)' }} />
-        <span>Esta banda de header no tiene redes sociales para editar.</span>
-      </div>
-    )
+  function cambiarMarca(nuevaMarcaId) {
+    const opcion = OPCIONES_MARCA_HEADER.find(m => m.id === nuevaMarcaId)
+    if (!opcion) return
+    const segmento = opcion.segmentos.includes(segmentoId) ? segmentoId : opcion.segmentos[0]
+    const banda = bandaHeaderDeSeleccion(nuevaMarcaId, segmento)
+    if (banda) onCambiar(banda)
+  }
+  function cambiarSegmento(nuevoSegmentoId) {
+    const banda = bandaHeaderDeSeleccion(marcaId, nuevoSegmentoId)
+    if (banda) onCambiar(banda)
   }
 
   return (
-    <div className="ep-editor-body">
+    <div className={`ep-header-selectores ${resaltar ? 'resaltado' : ''}`}>
+      <label className="ep-campo">
+        <span className="ep-campo-label">Marca</span>
+        <select className="ep-campo-input" value={marcaId ?? ''} onChange={e => cambiarMarca(e.target.value)}>
+          {OPCIONES_MARCA_HEADER.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+        </select>
+      </label>
       <div className="ep-campo">
-        <label className="ep-campo-label">Redes sociales</label>
-        <p className="ep-header-redes-hint">
-          Click para mostrar/ocultar — arrastrá para reordenar.
-        </p>
-        <div className="ep-header-redes-pills">
-          {redes.map(r => {
-            const red = REDES_SOCIALES.find(s => s.key === r.key)
-            if (!red) return null
-            const Icono = REDES_ICONOS[red.key]
-            return (
-              <div
-                key={r.key}
-                className={`ep-header-red-pill ${!r.activa ? 'inactiva' : ''} ${dragKey === r.key ? 'dragging' : ''}`}
-                draggable
-                onDragStart={() => setDragKey(r.key)}
-                onDragEnd={() => setDragKey(null)}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                  e.preventDefault()
-                  if (dragKey && dragKey !== r.key) onReordenar(dragKey, redes.findIndex(x => x.key === r.key))
-                  setDragKey(null)
-                }}
-                onClick={() => onToggle(r.key)}
-                title={r.activa ? `Ocultar ${red.label}` : `Mostrar ${red.label}`}
-              >
-                <GripVertical size={12} className="ep-header-red-grip" />
-                <Icono size={14} />
-                <span>{red.label}</span>
-              </div>
-            )
-          })}
+        <span className="ep-campo-label">Segmento</span>
+        <div className="ep-header-segmentos">
+          {SEGMENTOS.map(seg => (
+            <button
+              key={seg.id}
+              type="button"
+              className={`ep-header-segmento ${segmentoId === seg.id ? 'activo' : ''}`}
+              style={{ '--color-segmento': seg.color }}
+              disabled={!opcionActual?.segmentos.includes(seg.id)}
+              onClick={() => cambiarSegmento(seg.id)}
+            >
+              {seg.nombre}
+            </button>
+          ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Panel de edición de la banda Header ───────────────────────────────────
+function PanelEditorHeader({ bandaHeader, onCambiar }) {
+  return (
+    <div className="ep-editor-body">
+      <p className="ep-header-hint">
+        La banda mide siempre 70px de alto: el logo se ajusta al espacio y el color lo define el segmento.
+      </p>
+      <SelectoresHeader bandaHeader={bandaHeader} onCambiar={onCambiar} />
     </div>
   )
 }
@@ -1102,8 +1036,8 @@ function PanelEditor({ bloque, onActualizar, onSwap, onActualizarEstilos }) {
           // imagen de este bloque siempre son el mismo color (el del segmento).
           // Se lee el color actual de htmlLocal para marcar el chip activo.
           const SEGMENTOS = [
-            { label: 'CG',    color: '#c4161c' },
-            { label: 'EB',    color: '#000000' },
+            { label: 'CG',    color: ROJO_ACENTO },
+            { label: 'EB',    color: NEGRO_EB },
             { label: 'Pay',   color: '#635843' },
             { label: 'Start', color: '#f58220' },
           ]
@@ -1306,28 +1240,6 @@ function CategoriaColapsable({ titulo, children, count = null, busqueda = '' }) 
   )
 }
 
-// ─── Selector de pestañas (CG / EB / Pay dentro de "Header") ───────────────
-// No es un acordeón anidado: es un selector de una sola pestaña activa a la
-// vez — debajo se muestra la lista plana de bloques de esa pestaña. Cada
-// opción puede traer su propio color de marca (mismos valores que el
-// selector de segmento de Modulo_Doble_Con_Imagen_Punteada: CG rojo, EB
-// negro, Pay marrón) para que la pestaña activa se pinte con ese color en
-// vez de quedar siempre roja.
-function SelectorPestanas({ opciones, activa, onCambiar }) {
-  return (
-    <div className="ep-pestanas-header">
-      {opciones.map(op => (
-        <button key={op.key}
-          className={`ep-pestana-chip ${activa === op.key ? 'activa' : ''}`}
-          style={activa === op.key && op.color ? { borderColor: op.color, background: op.color, color: '#fff' } : undefined}
-          onClick={() => onCambiar(op.key)}>
-          {op.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ─── Menú desplegable genérico (botón gatillo + popover) ──────────────────
 // Usado para el selector de Tema y el split button de Exportación de la
 // barra superior. Se cierra solo al hacer click afuera — comportamiento
@@ -1458,25 +1370,26 @@ function ModalMisPiezas({ open, piezas, cargando, userId, onCerrar, onAbrir, onD
 }
 
 // ─── Componente principal ───────────────────────────────────────────────────
-// Reconstruye el objeto bandaHeader completo a partir del slug guardado
-// — localStorage solo guarda el slug (string liviano), no el HTML
-// completo del template (que ya vive en BLOQUES y no tiene sentido
-// duplicar en storage).
-function headerDesdeSlag(slug) {
-  return BLOQUES_HEADER.find(b => b.slug === slug) ?? BLOQUES_HEADER[0] ?? null
-}
-
 // Reconstruye el html original de cada bloque desde BLOQUES — no se
 // guarda ni en localStorage ni en la columna `data` de
 // piezas_borradores (solo htmlEditado y metadata viajan), así que hay
 // que cruzarlo de vuelta con la fuente real. Compartido entre el
 // borrador local (useState de canvas) y cargarPiezaGuardada (piezas
 // guardadas en Supabase) — mismo shape en los dos casos.
+// Borradores y piezas guardadas antes del rediseño traen el rojo
+// anterior (y el negro EB del Módulo Doble) en su htmlEditado: se pasan
+// a los colores nuevos al cargarlos. El template (html) ya sale nuevo.
+function migrarColoresGuardados(bloque) {
+  const htmlEditado = migrarHtmlEditadoGuardado(bloque.slug, bloque.htmlEditado)
+  return htmlEditado === bloque.htmlEditado ? bloque : { ...bloque, htmlEditado }
+}
+
 function reconstruirCanvasDesdeGuardado(canvasGuardado) {
   if (!canvasGuardado) return []
   return canvasGuardado.map(b => {
     const original = BLOQUES.find(x => x.id === b.id)
-    return original ? { ...b, html: original.html } : b
+    const conHtml = original ? { ...b, html: original.html } : b
+    return migrarColoresGuardados(conHtml)
   }).filter(b => b.html != null) // descartar bloques cuyo template ya no existe
 }
 
@@ -1516,7 +1429,6 @@ export default function EditorPiezas() {
   // Pestaña activa del selector CG/EB/Pay dentro de "Header" en la
   // biblioteca — no es parte del borrador persistido, es solo un
   // estado de navegación de la UI (se resetea al recargar la página).
-  const [pestanaHeaderActiva, setPestanaHeaderActiva] = useState('CG')
 
   // ── Borrador persistido en localStorage ────────────────────────────
   // useLocalStorage encapsula lectura lazy + try/catch de escritura.
@@ -1538,25 +1450,15 @@ export default function EditorPiezas() {
   // crear la pieza), ya que afecta solo colores en el momento de
   // exportar/previsualizar, nunca el contenido editado por el usuario.
   const [tema, setTema] = useState(() => borrador?.tema ?? TEMA_DEFAULT)
-  const [bandaHeader, setBandaHeader] = useState(() => borrador?.bandaHeaderSlug ? headerDesdeSlag(borrador.bandaHeaderSlug) : (BLOQUES_HEADER[0] ?? null))
-  // Array de { key, activa } en el ORDEN elegido por el usuario
-  // (arrastrando los pills en el panel de edición del header) — null
-  // hasta que se inicializa por primera vez con las redes reales que
-  // trae el header actual (ver inicializarRedesOrdenSiHaceFalta), así
-  // se resetea automáticamente al cambiar a un header distinto.
-  const [redesOrden, setRedesOrden] = useState(() => borrador?.redesOrden ?? null)
-  function toggleRedActiva(key) {
-    setRedesOrden(prev => (prev ?? []).map(r => r.key === key ? { ...r, activa: !r.activa } : r))
-  }
-  function reordenarPillRed(fromKey, toIndex) {
-    setRedesOrden(prev => {
-      const arr = [...(prev ?? [])]
-      const fromIdx = arr.findIndex(r => r.key === fromKey)
-      if (fromIdx === -1) return prev
-      const [item] = arr.splice(fromIdx, 1)
-      arr.splice(toIndex, 0, item)
-      return arr
-    })
+  // El borrador solo guarda el slug del header (string liviano). Si es de
+  // un header del diseño anterior se lo reemplaza por su equivalente nuevo
+  // y se deja un aviso visible (avisoHeader) hasta que se lo cierre o se
+  // cambie el header.
+  const [bandaHeader, setBandaHeader] = useState(() => borrador?.bandaHeaderSlug ? resolverHeaderPorSlug(borrador.bandaHeaderSlug).bandaHeader : headerPorDefecto())
+  const [avisoHeader, setAvisoHeader] = useState(() => borrador?.bandaHeaderSlug ? (resolverHeaderPorSlug(borrador.bandaHeaderSlug).avisos[0]?.texto ?? null) : null)
+  function cambiarHeader(banda) {
+    setBandaHeader(banda)
+    setAvisoHeader(null)
   }
   const [canvas, setCanvas] = useState(() => reconstruirCanvasDesdeGuardado(borrador?.canvas))
   const [selectedId, setSelectedId] = useState(null)
@@ -1701,7 +1603,8 @@ export default function EditorPiezas() {
   // siempre se agregaba al final del canvas sin poder elegir posición.
   const [arrastrandoCodigoPersonalizado, setArrastrandoCodigoPersonalizado] = useState(false)
 
-  const bloquesFiltradosHeader = BLOQUES_HEADER.filter(b => b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+  const bloquesFiltradosHeader = bandasHeaderBiblioteca(seleccionDeBandaHeader(bandaHeader).marcaId ?? 'Base')
+    .filter(b => `header ${etiquetaHeaderBiblioteca(b)} ${b.nombre}`.toLowerCase().includes(busqueda.toLowerCase()))
   const bloquesFiltradosContenido = BLOQUES_CONTENIDO.filter(b =>
     b.slug !== 'Espaciador' && b.nombre.toLowerCase().includes(busqueda.toLowerCase()))
 
@@ -1716,7 +1619,6 @@ export default function EditorPiezas() {
       nombre,
       tema,
       bandaHeaderSlug: bandaHeader?.slug ?? null,
-      redesOrden,
       canvas: canvas.map(b => ({ ...b, html: undefined })),
       imgPrincipal,
       imgFooter,
@@ -1729,7 +1631,7 @@ export default function EditorPiezas() {
   useEffect(() => {
     const t = setTimeout(() => { setBorrador(construirBorrador()) }, 500)
     return () => clearTimeout(t)
-  }, [nombre, tema, bandaHeader, redesOrden, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores])
+  }, [nombre, tema, bandaHeader, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores])
 
   // Ref con el borrador de ESTE render — se reasigna en cada render (no
   // en un efecto), así el listener de beforeunload de más abajo siempre
@@ -1759,8 +1661,7 @@ export default function EditorPiezas() {
   function nuevaPieza() {
     setNombre('Nueva pieza')
     setTema(TEMA_DEFAULT)
-    setBandaHeader(BLOQUES_HEADER[0] ?? null)
-    setRedesOrden(null)
+    cambiarHeader(headerPorDefecto())
     setCanvas([])
     setSelectedId(null)
     setImgPrincipal({ activo: false, src: '', alt: '', title: '', link: '', alto: 425 })
@@ -1807,8 +1708,11 @@ export default function EditorPiezas() {
     const d = fila.data ?? {}
     setNombre(d.nombre ?? fila.nombre ?? 'Pieza sin nombre')
     setTema(d.tema ?? TEMA_DEFAULT)
-    setBandaHeader(d.bandaHeaderSlug ? headerDesdeSlag(d.bandaHeaderSlug) : (BLOQUES_HEADER[0] ?? null))
-    setRedesOrden(d.redesOrden ?? null)
+    // Una pieza guardada con un header del diseño anterior pasa al
+    // equivalente nuevo, con aviso.
+    const headerGuardado = d.bandaHeaderSlug ? resolverHeaderPorSlug(d.bandaHeaderSlug) : null
+    setBandaHeader(headerGuardado ? headerGuardado.bandaHeader : headerPorDefecto())
+    setAvisoHeader(headerGuardado?.avisos[0]?.texto ?? null)
     setCanvas(reconstruirCanvasDesdeGuardado(d.canvas))
     setSelectedId(null)
     setImgPrincipal(d.imgPrincipal ?? { activo: false, src: '', alt: '', title: '', link: '', alto: 425 })
@@ -2073,7 +1977,7 @@ export default function EditorPiezas() {
         .replace(/width="60" height="60" valign="middle"/g, 'width="80" height="80" valign="middle"')
         .replace(/width="60" height="60"\s*\/>/g, 'width="75" height="75" />')
         .replace(/style="width:\s*10px;"\s*width="10"(\s*valign="top"\s*align="left"><\/td>\s*<td\s+style="border-left)/g, 'style="width: 5px;" width="5"$1')
-        .replace(/border-left:\s*solid\s*2px\s*#c4161c;/g, 'border-left: solid 5px #c4161c;')
+        .replace(/border-left:\s*solid\s*2px\s*(#c(?:4161c|7000b));/gi, 'border-left: solid 5px $1;')
         .replace(/\b445(?=px|")/g, '425')
     }
     function aChico(html) {
@@ -2081,7 +1985,7 @@ export default function EditorPiezas() {
         .replace(/width="80" height="80" valign="middle"/g, 'width="60" height="60" valign="middle"')
         .replace(/width="75" height="75"\s*\/>/g, 'width="60" height="60" />')
         .replace(/style="width:\s*5px;"\s*width="5"(\s*valign="top"\s*align="left"><\/td>\s*<td\s+style="border-left)/g, 'style="width: 10px;" width="10"$1')
-        .replace(/border-left:\s*solid\s*5px\s*#c4161c;/g, 'border-left: solid 2px #c4161c;')
+        .replace(/border-left:\s*solid\s*5px\s*(#c(?:4161c|7000b));/gi, 'border-left: solid 2px $1;')
         .replace(/\b425(?=px|")/g, '445')
     }
     const esGrandeActual = /border-left:\s*solid\s*5px/i.test(
@@ -2145,7 +2049,7 @@ export default function EditorPiezas() {
     setDragOverHeader(false)
     if (!draggingBibliotecaId) return
     const bloque = BLOQUES.find(b => b.id === draggingBibliotecaId)
-    if (bloque?.categoria === 'Header') { setBandaHeader(bloque); setRedesOrden(null) }
+    if (bloque?.categoria === 'Header') cambiarHeader(bloque)
     setDraggingBibliotecaId(null)
   }
 
@@ -2188,7 +2092,7 @@ export default function EditorPiezas() {
   function eliminarIndicador(id) { setIndicadores(p => p.filter(i => i.id !== id)) }
 
   function generarHtmlActual() {
-    return generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })
+    return generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema })
   }
 
   function descargarHtml(html) {
@@ -2656,15 +2560,9 @@ export default function EditorPiezas() {
     // final, que limpia el ref.
     setNombre(deepLinkImportarNombre.current || 'Pieza importada')
     setTema(r.tema)
-    setBandaHeader(r.bandaHeader)
-    // redesOrden viene calculado desde el HTML REAL de la pieza
-    // importada (ver comentario en importarHeuristico/importarDesdeHtml)
-    // — usar null acá dispararía el useEffect que rellena automático
-    // desde el TEMPLATE del header, reintroduciendo redes que la pieza
-    // original no tenía (bug real reportado: una pieza sin ningún
-    // ícono de red social terminaba con las 4 redes del header
-    // agregadas de la nada).
-    setRedesOrden(r.redesOrden ?? [])
+    // El header ya viene resuelto (reconocido, reemplazado por su
+    // equivalente nuevo, o el que el usuario eligió en el resumen).
+    cambiarHeader(r.bandaHeader)
     // La detección/aviso de "estructura de layout obsoleta" sigue
     // pasando en el análisis (importarHeuristico) SIN tocar el HTML —
     // el preview de la pantalla de resumen la sigue marcando en rojo
@@ -2705,22 +2603,8 @@ export default function EditorPiezas() {
   }, [showPreview, showImportar])
 
   const selectedBloque = canvas.find(b => b.instanceId === selectedId)
-  const redesDetectadas = bandaHeader ? detectarRedesSociales(bandaHeader.html) : []
-
-  // Inicializa redesOrden la primera vez que se carga un header con
-  // redes reales — todas activas, en el orden en que aparecen en el
-  // HTML original. Se vuelve a disparar cada vez que redesOrden se
-  // resetea a null (cambio de header), no en cada render. Ajuste de
-  // estado DURANTE el render (patrón de React para estado derivado de
-  // otro estado), no en useEffect: la versión con efecto commiteaba
-  // primero un render con redesOrden todavía en null y recién después
-  // el bueno — dos pasadas en cascada por cada cambio de header.
-  if (redesOrden == null && redesDetectadas.length > 0) {
-    setRedesOrden(redesDetectadas.map(key => ({ key, activa: true })))
-  }
-
   const previewSrcdoc = showPreview
-    ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:99px}</style></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema, redesOrden })}</body></html>`
+    ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:99px}</style></head><body style="margin:0;padding:0;">${generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores, tema })}</body></html>`
     : ''
 
   // ── Mobile: árbol completamente aparte, no toca nada del return de
@@ -2741,8 +2625,7 @@ export default function EditorPiezas() {
         analizarImportacion={analizarImportacion} confirmarImportacion={confirmarImportacion}
         cerrarModalImportar={cerrarModalImportar}
         bandaHeader={bandaHeader} setBandaHeader={setBandaHeader}
-        redesOrden={redesOrden} setRedesOrden={setRedesOrden} redesDetectadas={redesDetectadas}
-        toggleRedActiva={toggleRedActiva} reordenarPillRed={reordenarPillRed}
+        cambiarHeader={cambiarHeader} avisoHeader={avisoHeader} setAvisoHeader={setAvisoHeader}
         canvas={canvas} selectedId={selectedId} setSelectedId={setSelectedId}
         selectedBloque={selectedBloque}
         nuevaPieza={nuevaPieza}
@@ -2907,64 +2790,19 @@ export default function EditorPiezas() {
 
           {bloquesFiltradosHeader.length > 0 && (
             <CategoriaColapsable titulo="Header" count={bloquesFiltradosHeader.length} busqueda={busqueda}>
-              {(() => {
-                // Mismos colores que el selector de segmento de
-                // Modulo_Doble_Con_Imagen_Punteada — así la pestaña activa
-                // se identifica con el color real de cada marca.
-                const GRUPOS_HEADER = [
-                  { prefijo: 'CG', label: 'CG', color: '#c4161c' },
-                  { prefijo: 'EB', label: 'EB', color: '#000000' },
-                  { prefijo: 'Pay', label: 'Pay', color: '#635843' },
-                ]
-                const agrupados = GRUPOS_HEADER.map(g => ({
-                  ...g,
-                  bloques: bloquesFiltradosHeader.filter(b => b.slug.startsWith(g.prefijo + '_')),
-                })).filter(g => g.bloques.length > 0)
-                // Bloques que no matchean ningún prefijo conocido (por si se agregan nuevos)
-                const prefijosConocidos = GRUPOS_HEADER.map(g => g.prefijo + '_')
-                const sinGrupo = bloquesFiltradosHeader.filter(b => !prefijosConocidos.some(p => b.slug.startsWith(p)))
-                // Si el grupo de la pestaña activa quedó vacío (por
-                // búsqueda, por ejemplo), caemos al primer grupo que
-                // sí tenga bloques para no mostrar una pestaña vacía.
-                const grupoActivo = agrupados.find(g => g.prefijo === pestanaHeaderActiva) ?? agrupados[0] ?? null
-                return (
-                  <>
-                    {agrupados.length > 1 && (
-                      <SelectorPestanas
-                        opciones={agrupados.map(g => ({ key: g.prefijo, label: g.label, color: g.color }))}
-                        activa={grupoActivo?.prefijo}
-                        onCambiar={setPestanaHeaderActiva}
-                      />
-                    )}
-                    {grupoActivo?.bloques.map(bloque => (
-                      <div key={bloque.id}
-                        className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
-                        draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
-                        <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
-                        <div className="ep-bloque-footer">
-                          <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                          <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
-                            {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {sinGrupo.map(bloque => (
-                      <div key={bloque.id}
-                        className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
-                        draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
-                        <img src={generarThumbSVG(bloque)} alt={bloque.nombre} className="ep-bloque-thumb" />
-                        <div className="ep-bloque-footer">
-                          <span className="ep-bloque-nombre">{bloque.nombre}</span>
-                          <button className="ep-bloque-add" onClick={() => { setBandaHeader(bloque); setRedesOrden(null) }}>
-                            {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )
-              })()}
+              {bloquesFiltradosHeader.map(bloque => (
+                <div key={bloque.id}
+                  className={`ep-bloque-card ${draggingBibliotecaId === bloque.id ? 'dragging-source' : ''} ${bandaHeader?.id === bloque.id ? 'en-uso' : ''}`}
+                  draggable onDragStart={e => onDragStartBiblioteca(e, bloque)} onDragEnd={() => setDraggingBibliotecaId(null)}>
+                  <img src={generarThumbSVG(bloque)} alt={etiquetaHeaderBiblioteca(bloque)} className="ep-bloque-thumb" />
+                  <div className="ep-bloque-footer">
+                    <span className="ep-bloque-nombre">{etiquetaHeaderBiblioteca(bloque)}</span>
+                    <button className="ep-bloque-add" onClick={() => cambiarHeader(bloque)}>
+                      {bandaHeader?.id === bloque.id ? <Check size={12} /> : '+'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </CategoriaColapsable>
           )}
 
@@ -3022,6 +2860,14 @@ export default function EditorPiezas() {
       <main className="ep-canvas-wrap">
         <div className="ep-canvas-body">
 
+          {avisoHeader && (
+            <div className="ep-aviso-header" role="status">
+              <AlertCircle size={14} />
+              <span>{avisoHeader}</span>
+              <button type="button" onClick={() => setAvisoHeader(null)} title="Cerrar aviso"><X size={13} /></button>
+            </div>
+          )}
+
           {/* Banda Header — seleccionable igual que cualquier bloque del
               canvas (click abre su edición en el panel derecho, mismo
               patrón que PanelEditor para bloques normales). 'HEADER' es
@@ -3033,12 +2879,12 @@ export default function EditorPiezas() {
             onDragLeave={() => setDragOverHeader(false)} onDrop={onDropHeader}>
             <div className="ep-zona-fija-header">
               <span className="ep-zona-fija-label"><Layout size={12} /> Banda Header</span>
-              <span className="ep-zona-fija-badge">{bandaHeader?.nombre || 'Sin seleccionar'}</span>
+              <span className="ep-zona-fija-badge">{bandaHeader?.nombreCompleto || bandaHeader?.nombre || 'Sin seleccionar'}</span>
             </div>
             {bandaHeader
               ? (
                 <div className="ep-zona-fija-preview-wrap">
-                  <AutoIframe className="ep-zona-fija-preview" srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="Banda header" />
+                  <AutoIframe className="ep-zona-fija-preview" srcDoc={wrapPreview(bandaHeader.html, true)} title="Banda header" />
                   {/* Overlay transparente — un <iframe> tiene su propio
                       documento interno, y los eventos dragover/drop del
                       navegador se entregan a ESE documento cuando el
@@ -3341,7 +3187,7 @@ export default function EditorPiezas() {
           <ContextCardEditor bloque={selectedId === 'HEADER' ? bandaHeader : selectedBloque} />
         )}
         {selectedId === 'HEADER'
-          ? <PanelEditorHeader bandaHeader={bandaHeader} redesOrden={redesOrden} onToggle={toggleRedActiva} onReordenar={reordenarPillRed} />
+          ? <PanelEditorHeader bandaHeader={bandaHeader} onCambiar={cambiarHeader} />
           : !selectedBloque
             ? <div className="ep-editor-empty"><FileText size={28} style={{ color: 'var(--border)' }} /><span>Seleccioná un bloque del canvas para editar su contenido</span></div>
             : <PanelEditor key={`${selectedBloque.instanceId}-${selectedBloque.slug}`} bloque={selectedBloque} onActualizar={actualizarBloque} onSwap={swapBloque} onActualizarEstilos={actualizarEstilosBloque} />}
@@ -3527,6 +3373,20 @@ export default function EditorPiezas() {
                           </div>
                         </div>
 
+                        {importarResultado.resultado.headerPendiente && (
+                          <div className="ep-importar-header-elegir">
+                            <span className="ep-importar-avisos-titulo">Header de la pieza</span>
+                            <p className="ep-header-hint">
+                              No se pudo identificar con seguridad el header de la pieza original. Elegí por cuál reemplazarlo: el preview se actualiza al instante.
+                            </p>
+                            <SelectoresHeader
+                              resaltar
+                              bandaHeader={importarResultado.resultado.bandaHeader}
+                              onCambiar={banda => setImportarResultado(prev => prev ? { ...prev, resultado: { ...prev.resultado, bandaHeader: banda } } : prev)}
+                            />
+                          </div>
+                        )}
+
                         {importarResultado.avisos?.length > 0 && (
                           <>
                             <span className="ep-importar-avisos-titulo">Avisos del análisis</span>
@@ -3580,19 +3440,7 @@ export default function EditorPiezas() {
                           // en el canvas — generarExport en sí queda
                           // intacto, marcarBloquesNoReconocidosParaPreview
                           // es un post-proceso aparte sobre el resultado.
-                          //
-                          // redesOrden: bug real reportado — este preview
-                          // usaba `redesOrden: null` a propósito (forzado),
-                          // lo cual hacía que reordenarRedesSociales usara
-                          // el header TAL CUAL viene (con todas sus redes
-                          // del template) — pero el canvas real, al
-                          // confirmar la importación, sí usa el
-                          // redesOrden REAL detectado de la pieza
-                          // (puede ser []). Resultado: el preview mostraba
-                          // redes que después desaparecían al confirmar,
-                          // muy confuso. Ahora el preview usa el mismo
-                          // redesOrden real que se va a aplicar de verdad.
-                          const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`
+                          const srcDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@keyframes ep-preview-pulso { 0%, 100% { box-shadow: none; } 50% { box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.06); } }</style></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`
                           return (
                             <div className={`ep-importar-preview-wrap ${importarModoPreview === 'mobile' ? 'modo-mobile' : ''}`}>
                               <AutoIframe ref={previewIframeRef} className="ep-importar-preview-iframe" title="Preview de la pieza importada" srcDoc={srcDoc} width={importarModoPreview === 'mobile' ? 375 : undefined} />
@@ -3722,7 +3570,7 @@ function EditorMobile(props) {
     sugerenciaAtributoPendiente, setSugerenciaAtributoPendiente, aplicarSugerenciaAtributo,
     analizarImportacion, confirmarImportacion, cerrarModalImportar,
     bandaHeader,
-    redesOrden, redesDetectadas, toggleRedActiva, reordenarPillRed,
+    avisoHeader, setAvisoHeader,
     canvas, setSelectedId, selectedBloque,
     nuevaPieza,
     agregarAlCanvas, agregarEspaciadorDespues, agregarCodigo, eliminarBloque, duplicarBloque,
@@ -3790,11 +3638,9 @@ function EditorMobile(props) {
     setScreen('canvas')
   }
   function seleccionarHeaderDesdeLibreria(headerBloque) {
-    // Mismo efecto que onDropZona en desktop cuando se suelta un header
-    // sobre la banda: reemplaza bandaHeader y resetea el orden de redes
-    // (se recalculan solas al detectar las redes del header nuevo).
-    props.setBandaHeader(headerBloque)
-    props.setRedesOrden(null)
+    // Mismo efecto que onDropHeader en desktop cuando se suelta un header
+    // sobre la banda: reemplaza bandaHeader.
+    props.cambiarHeader(headerBloque)
     setScreen('canvas')
   }
   function agregarBloqueDesdeLibreria(bloque) {
@@ -3818,11 +3664,11 @@ function EditorMobile(props) {
     setter(p => ({ ...p, [campo]: valor }))
   }
 
-  const bloquesFiltrados = q => (lista) => !q ? lista : lista.filter(b => b.nombre.toLowerCase().includes(q.toLowerCase()))
+  const bloquesFiltrados = q => (lista) => !q ? lista : lista.filter(b => `${b.nombre} ${b.categoria === 'Header' ? etiquetaHeaderBiblioteca(b) : ''}`.toLowerCase().includes(q.toLowerCase()))
   const filtro = bloquesFiltrados(busquedaLib)
 
   const CATEGORIAS_LIB = [
-    { key: 'Header', label: 'Header', lista: BLOQUES_HEADER, esHeader: true },
+    { key: 'Header', label: 'Header', lista: bandasHeaderBiblioteca(seleccionDeBandaHeader(bandaHeader).marcaId ?? 'Base'), esHeader: true },
     { key: 'Contenido', label: 'Contenido', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Contenido' && b.slug !== 'Espaciador') },
     { key: 'Botones', label: 'Botones', lista: BLOQUES_CONTENIDO.filter(b => b.categoria === 'Botones') },
   ]
@@ -3911,13 +3757,20 @@ function EditorMobile(props) {
       </div>
 
       <div className="ep-m-canvas-scroll">
+        {avisoHeader && (
+          <div className="ep-aviso-header" role="status">
+            <AlertCircle size={14} />
+            <span>{avisoHeader}</span>
+            <button type="button" onClick={() => setAvisoHeader(null)} title="Cerrar aviso"><X size={13} /></button>
+          </div>
+        )}
         {bandaHeader && (
           <div className="ep-m-card ep-m-card-header" onClick={() => setScreen('editHeader')}>
             <div className="ep-m-card-head">
               <span className="ep-m-badge-fijo"><Lock size={11} /> Fijo</span>
-              <span className="ep-m-card-nombre">{bandaHeader.nombre}</span>
+              <span className="ep-m-card-nombre">{bandaHeader.nombreCompleto || bandaHeader.nombre}</span>
             </div>
-            <AutoIframe srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="header" className="ep-m-preview-frame" />
+            <AutoIframe srcDoc={wrapPreview(bandaHeader.html, true)} title="header" className="ep-m-preview-frame" />
           </div>
         )}
 
@@ -4207,7 +4060,7 @@ function EditorMobile(props) {
                         >
                           <img src={generarThumbSVG(b)} alt="" className="ep-m-bloque-thumb" />
                           <span className="ep-m-bloque-nombre">
-                            {b.nombre}
+                            {cat.esHeader ? etiquetaHeaderBiblioteca(b) : b.nombre}
                             {cat.esHeader && bandaHeader?.slug === b.slug && <Check size={13} className="ep-m-check" />}
                           </span>
                         </button>
@@ -4265,24 +4118,11 @@ function EditorMobile(props) {
             <span>Editar header</span>
           </div>
           <div className="ep-m-screen-body">
-            <AutoIframe srcDoc={wrapPreview(reordenarRedesSociales(bandaHeader.html, redesOrden), true)} title="header" className="ep-m-preview-frame" />
-            <div className="ep-m-seccion-titulo">Redes sociales</div>
-            {redesDetectadas.length === 0 && <p className="ep-m-muted">Este header no tiene redes sociales.</p>}
-            {(redesOrden ?? []).map((r, idx) => {
-              const info = REDES_SOCIALES.find(rs => rs.key === r.key)
-              return (
-                <div key={r.key} className="ep-m-red-row">
-                  <span className="ep-m-red-nombre">{info?.label ?? r.key}</span>
-                  <div className="ep-m-reorder-btns">
-                    <button disabled={idx === 0} onClick={() => reordenarPillRed(r.key, idx - 1)}>▲</button>
-                    <button disabled={idx === redesOrden.length - 1} onClick={() => reordenarPillRed(r.key, idx + 1)}>▼</button>
-                  </div>
-                  <button className={`ep-m-switch ${r.activa ? 'on' : ''}`} onClick={() => toggleRedActiva(r.key)}>
-                    <span className="ep-m-switch-knob" />
-                  </button>
-                </div>
-              )
-            })}
+            <AutoIframe srcDoc={wrapPreview(bandaHeader.html, true)} title="header" className="ep-m-preview-frame" />
+            <p className="ep-header-hint">
+              La banda mide siempre 70px de alto: el logo se ajusta al espacio y el color lo define el segmento.
+            </p>
+            <SelectoresHeader bandaHeader={bandaHeader} onCambiar={props.cambiarHeader} />
           </div>
           <div className="ep-m-sheet-footer">
             <span className="ep-m-guardado"><Check size={12} strokeWidth={2.6} /> Guardado automáticamente</span>
@@ -4495,6 +4335,20 @@ function EditorMobile(props) {
                     </div>
                   </div>
 
+                  {importarResultado.resultado.headerPendiente && (
+                    <div className="ep-importar-header-elegir">
+                      <span className="ep-importar-avisos-titulo">Header de la pieza</span>
+                      <p className="ep-header-hint">
+                        No se pudo identificar con seguridad el header de la pieza original. Elegí por cuál reemplazarlo: el preview se actualiza al instante.
+                      </p>
+                      <SelectoresHeader
+                        resaltar
+                        bandaHeader={importarResultado.resultado.bandaHeader}
+                        onCambiar={banda => setImportarResultado(prev => prev ? { ...prev, resultado: { ...prev.resultado, bandaHeader: banda } } : prev)}
+                      />
+                    </div>
+                  )}
+
                   {importarResultado.avisos?.length > 0 && (
                     <>
                       <div className="ep-m-seccion-titulo">Avisos del análisis</div>
@@ -4526,12 +4380,12 @@ function EditorMobile(props) {
                   )}
 
                   {/* Preview del resultado — mismo srcDoc que desktop,
-                      con el redesOrden real que se aplicaría al confirmar. */}
+                      con el header elegido. */}
                   <div className="ep-m-import-preview-wrap">
                     <AutoIframe
                       title="Preview de la pieza importada"
                       className="ep-m-preview-frame"
-                      srcDoc={`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado, redesOrden: importarResultado.resultado.redesOrden ?? [] }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`}
+                      srcDoc={`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${marcarEstructurasObsoletasParaPreview(marcarBloquesNoReconocidosParaPreview(generarExport({ ...importarResultado.resultado }), (importarResultado.avisos ?? []).filter(a => a.tipo === 'atributo-roto').map(a => a.canvasIdx)))}</body></html>`}
                     />
                   </div>
                 </>

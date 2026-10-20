@@ -7,12 +7,12 @@ import { BLOQUES_HEADER, BLOQUES_CONTENIDO } from '@/lib/editor/bloques.js'
 // El test más valioso del editor: exportar una pieza con TODO el
 // estado posible y verificar que importarDesdeHtml reconstruye ese
 // mismo estado. Cubre de una pasada los marcadores, el tinte/destinte
-// de color por tema, redes activas/inactivas, legales en los dos
+// de color por tema, header (marca y segmento), legales en los dos
 // modos, firma, indicadores con sigla multi-palabra (bug real) e
 // imágenes principal/footer.
 
 function estadoBase({ legalesSeparados = false, tema = 'mall' } = {}) {
-  const header = BLOQUES_HEADER.find(b => b.slug === 'EB_Banda_Negra_Header')
+  const header = BLOQUES_HEADER.find(b => b.slug === 'EB_Base')
   const bloqueTexto = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
   const bloqueBullet = BLOQUES_CONTENIDO.find(b => b.slug === 'Bullet_Bull_Rojo')
 
@@ -22,12 +22,6 @@ function estadoBase({ legalesSeparados = false, tema = 'mall' } = {}) {
 
   return {
     bandaHeader: header,
-    redesOrden: [
-      { key: 'linkedin', activa: true },
-      { key: 'twitter', activa: false },
-      { key: 'facebook', activa: true },
-      { key: 'instagram', activa: true },
-    ],
     tema,
     canvas: [
       { ...bloqueTexto, instanceId: `${bloqueTexto.id}-t`, htmlEditado },
@@ -55,7 +49,8 @@ describe('roundtrip export → import (marcadores)', () => {
 
   it('no genera avisos y reconstruye header y tema', () => {
     expect(avisos).toEqual([])
-    expect(resultado.bandaHeader.slug).toBe('EB_Banda_Negra_Header')
+    expect(resultado.bandaHeader.slug).toBe('EB_Base')
+    expect(resultado.headerPendiente).toBeNull()
     expect(resultado.tema).toBe('mall')
   })
 
@@ -72,13 +67,9 @@ describe('roundtrip export → import (marcadores)', () => {
     expect(resultado.canvas[0].htmlEditado).not.toContain('#ffffff')
   })
 
-  it('reconstruye el estado real de las redes, incluida la desactivada (bug real)', () => {
-    const twitter = resultado.redesOrden.find(r => r.key === 'twitter')
-    expect(twitter).toBeDefined()
-    expect(twitter.activa).toBe(false)
-    expect(resultado.redesOrden.filter(r => r.activa)).toHaveLength(3)
-    // Y la primera activa respeta el orden elegido por el usuario
-    expect(resultado.redesOrden.filter(r => r.activa)[0].key).toBe('linkedin')
+  it('reconstruye marca y segmento del header generado', () => {
+    expect(resultado.bandaHeader.marcaId).toBe('Base')
+    expect(resultado.bandaHeader.segmentoId).toBe('EB')
   })
 
   it('reconstruye imagen principal y footer con todos sus campos', () => {
@@ -125,7 +116,7 @@ describe('roundtrip — variantes', () => {
   it('estado mínimo (sin imágenes, legales, firma ni indicadores) también hace roundtrip limpio', () => {
     const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
     const html = generarExport({
-      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
       imgPrincipal: { activo: false, src: '', alt: '', title: '', link: '' },
       imgFooter: { activo: false, src: '', alt: '', link: '' },
       canvas: [{ ...bloque, instanceId: 'x' }],
@@ -166,7 +157,7 @@ describe('generarExport — comillas dobles en atributos de imagen', () => {
   it('escapa comillas dobles en alt/title/link de Imagen principal y footer', () => {
     const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
     const html = generarExport({
-      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
       imgPrincipal: { activo: true, src: 'https://x.com/a.png', alt: 'Promo "Hot Sale" 50%', title: 'Título "con comillas"', link: 'https://x.com?a="1"' },
       imgFooter: { activo: true, src: 'https://x.com/f.png', alt: 'Footer "x"', title: '', link: '' },
       canvas: [{ ...bloque, instanceId: 'x' }],
@@ -190,7 +181,7 @@ describe('generarExport — alto real de Imagen principal (no forzado a 425)', (
   it('exporta el alto medido en vez de 425 fijo, y lo reimporta sin perderlo', () => {
     const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
     const html = generarExport({
-      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
       imgPrincipal: { activo: true, src: 'https://x.com/vertical.png', alt: '', title: '', link: '', alto: 900 },
       imgFooter: { activo: false, src: '' },
       canvas: [{ ...bloque, instanceId: 'x' }],
@@ -206,7 +197,7 @@ describe('generarExport — alto real de Imagen principal (no forzado a 425)', (
   it('sin alto especificado, sigue exportando 425 (compatibilidad hacia atrás)', () => {
     const bloque = BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base')
     const html = generarExport({
-      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
       imgPrincipal: { activo: true, src: 'https://x.com/a.png', alt: '', title: '', link: '' }, // sin alto
       imgFooter: { activo: false, src: '' },
       canvas: [{ ...bloque, instanceId: 'x' }],

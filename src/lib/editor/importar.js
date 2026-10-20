@@ -3,9 +3,10 @@
 // piezas externas de la plataforma). Contraparte de exportar.js.
 
 import { FIRMA_INSTITUCIONAL_DEFAULT, LEGAL_FIJO_HTML, TEMAS, TEMA_DEFAULT } from './constantes.js'
-import { BLOQUES, BLOQUES_CONTENIDO, BLOQUES_HEADER } from './bloques.js'
+import { BLOQUES, BLOQUES_CONTENIDO, buscarMalba } from './bloques.js'
+import { ROJO_ACENTO, avisoMigracionRojo, migrarColoresSegmentoModuloDoble, migrarRojoAnterior } from './colores.js'
+import { detectarHeaderEnHtml, detectarHeaderPorSlug, reconciliarHeader, resolverHeaderImportado } from './headersCompat.js'
 import { formaDeTags, normalizarNegritas, similitudDeForma } from './htmlUtils.js'
-import { detectarRedesSociales } from './redesSociales.js'
 import { revertirColorTexto } from './exportar.js'
 import { DetectarAtributosConDosPuntos } from '@/lib/revision/generales.js'
 
@@ -171,6 +172,13 @@ function extraerSegmentosDeZona(zonaHtml) {
 export function importarDesdeHtml(html) {
   const avisos = []
 
+  // Rediseño 2026: el rojo de acento anterior se pasa al nuevo antes de
+  // analizar nada, así la pieza importada queda con los colores actuales.
+  const migracionRojo = migrarRojoAnterior(html)
+  html = migracionRojo.html
+  const avisoRojo = avisoMigracionRojo(migracionRojo.cantidad)
+  if (avisoRojo) avisos.push(avisoRojo)
+
   // ── Tema ───────────────────────────────────────────────────────────
   // Se detecta ANTES que los bloques de contenido, a propósito: el
   // colorTexto de este tema es necesario para revertir el color que
@@ -286,39 +294,27 @@ export function importarDesdeHtml(html) {
 
   // ── Header ─────────────────────────────────────────────────────────
   // Único marcador sin idx — solo hay una banda de header por pieza.
+  // El slug puede ser de un header actual (CG_Empresas), de uno del
+  // diseño anterior (CG_Banda_Roja_Header_Empresas → se reemplaza por su
+  // equivalente nuevo, con aviso) o de Malba (se conserva). Si el
+  // marcador falta (HTML editado a mano) se intenta reconocer el header
+  // por sus logos y color, igual que en una pieza externa. Si no se
+  // puede, headerPendiente le pide al usuario que elija antes de
+  // importar.
   const headerMatch = html.match(/<!--HEADER:([^-]+)-->/)
   const headerSlug = headerMatch ? headerMatch[1] : null
-  let bandaHeader = headerSlug ? BLOQUES_HEADER.find(b => b.slug === headerSlug) ?? null : null
-  if (headerSlug && !bandaHeader) avisos.push({ texto: `El header "${headerSlug}" no coincide con ningún header actual — se mantuvo el header por defecto.`, tipo: 'general', canvasIdx: null })
-  if (!bandaHeader) bandaHeader = BLOQUES_HEADER[0] ?? null
-
-  // redesOrden: mismo criterio que importarHeuristico — generarExport
-  // ya escribe el HTML real de la banda CON las redes ya filtradas por
-  // redesOrden (ver reordenarRedesSociales(bandaHeader?.html, redesOrden)
-  // justo después del marcador <!--HEADER:slug-->), así que detectar
-  // las redes sobre ESE html real (no sobre bandaHeader.html, el
-  // template completo) reconstruye el estado real de la pieza
-  // exportada — si el usuario había desactivado alguna red al armarla,
-  // la importación debe respetar eso, no volver a activarlas todas.
-  // La zona del header se recorta EXACTA entre <!--HEADER:slug--> y su
-  // cierre <!--/HEADER--> (generarExport siempre escribe ambos). Bug
-  // real encontrado por el test de roundtrip al armar la suite: antes
-  // se usaba una ventana FIJA de 3000 caracteres desde el marcador de
-  // apertura — la 4ta celda de redes arranca alrededor del offset
-  // ~2913 en los headers reales (CG y EB por igual, no un caso raro),
-  // así que su <td>...</td> quedaba cortado por la mitad, el regex de
-  // detectarRedesSociales no podía completar ese match, y la última
-  // red desaparecía de redesOrden EN SILENCIO al reimportar cualquier
-  // pieza — la misma clase de pérdida-sin-rastro que ya se había
-  // arreglado con data-red, reintroducida por otra vía. El fallback de
-  // 3000 se conserva solo para HTML editado a mano al que le falte el
-  // marcador de cierre.
-  const idxHeaderMarker = headerMatch ? headerMatch.index + headerMatch[0].length : 0
-  const finHeaderMarker = html.indexOf('<!--/HEADER-->', idxHeaderMarker)
-  const htmlZonaHeader = finHeaderMarker !== -1
-    ? html.slice(idxHeaderMarker, finHeaderMarker)
-    : html.slice(idxHeaderMarker, idxHeaderMarker + 3000)
-  const redesOrdenDetectado = detectarRedesSociales(htmlZonaHeader, true)
+  const idxPrimerBloque = html.indexOf('<!--BLOQUE')
+  const htmlHeader = idxPrimerBloque === -1 ? html : html.slice(0, idxPrimerBloque)
+  const deteccionHtml = detectarHeaderEnHtml(htmlHeader)
+  // Con marcador y logo que no coinciden (logo cambiado a mano) manda el logo.
+  const conciliado = headerSlug ? reconciliarHeader(detectarHeaderPorSlug(headerSlug), deteccionHtml) : null
+  const headerResuelto = conciliado
+    ? resolverHeaderImportado(conciliado.deteccion, buscarMalba)
+    : resolverHeaderImportado(deteccionHtml, buscarMalba)
+  if (conciliado?.aviso) headerResuelto.avisos.unshift({ texto: conciliado.aviso, tipo: 'general', canvasIdx: null })
+  const bandaHeader = headerResuelto.bandaHeader
+  const headerPendiente = headerResuelto.headerPendiente
+  avisos.push(...headerResuelto.avisos)
 
   // ── Imagen principal / footer ───────────────────────────────────────
   // Marcadores únicos que solo aparecen si la pieza los tenía activos
@@ -442,7 +438,7 @@ export function importarDesdeHtml(html) {
   }
 
   return {
-    resultado: { bandaHeader, redesOrden: redesOrdenDetectado, tema, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores },
+    resultado: { bandaHeader, headerPendiente, tema, canvas, imgPrincipal, imgFooter, legalesAdicionales, legalesSeparados, firmaInstitucional, indicadores },
     avisos,
   }
 }
@@ -1219,7 +1215,7 @@ export function normalizarImagenLibre(html) {
     const claseAttr = clase ? ` class="${clase}"` : ''
 
     const titleAttr = title ? ` title="${title}"` : ''
-    const styleBase = `display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: #c4161c; max-width: ${anchoReal}px;`
+    const styleBase = `display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: ${ROJO_ACENTO}; max-width: ${anchoReal}px;`
 
     return `<img src="${src}" alt="${alt}"${titleAttr}${claseAttr} style="${styleBase}" width="${anchoReal}" />`
   })
@@ -1780,7 +1776,7 @@ function clasificarFilaHeuristica(filaHtml, idx, avisos) {
         const imgsEditables = [...filaHtml.matchAll(/<img([^>]*)>/gi)]
           .map(m => m[1])
           .filter(attrs => !/puntos-128-blanco|MediaLineaPunteada/i.test(attrs))
-        const bgcolorSegmento = filaHtml.match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? null
+        const bgcolorSegmento = migrarColoresSegmentoModuloDoble(filaHtml).match(/bgcolor="(#(?!fff(?:fff)?)[^"]+)"/i)?.[1] ?? null
         let editableIdx = 0
         let htmlBase = match.html.replace(/<img([^>]*)>/gi, (m, attrs) => {
           if (/puntos-128-blanco|MediaLineaPunteada/i.test(attrs)) return m
@@ -1788,7 +1784,7 @@ function clasificarFilaHeuristica(filaHtml, idx, avisos) {
           return `<img${imgsEditables[editableIdx++]}>`
         })
         if (bgcolorSegmento) {
-          htmlBase = htmlBase.replace(/bgcolor="#c4161c"/gi, `bgcolor="${bgcolorSegmento}"`)
+          htmlBase = htmlBase.replace(/bgcolor="#c(?:4161c|7000b)"/gi, `bgcolor="${bgcolorSegmento}"`)
         }
         htmlEditadoFinal = htmlBase
       } else {
@@ -1834,8 +1830,29 @@ function clasificarFilaHeuristica(filaHtml, idx, avisos) {
 }
 
 
+// Límites razonables del alto de la imagen principal de 600px de ancho.
+const ALTO_IMG_PRINCIPAL_MIN = 200
+const ALTO_IMG_PRINCIPAL_MAX = 700
+
+// Primera <img width="600"> con un alto razonable. Devuelve un objeto
+// con el mismo shape que un match de regex ([0] = tag, .index), o null.
+export function encontrarImgPrincipal(htmlAntesDeContenido) {
+  for (const m of htmlAntesDeContenido.matchAll(/<img\b[^>]*>/gi)) {
+    const ancho = parseInt(/\swidth="(\d+)"/i.exec(m[0])?.[1] ?? '', 10)
+    const alto = parseInt(/\sheight="(\d+)"/i.exec(m[0])?.[1] ?? '', 10)
+    if (ancho === 600 && alto >= ALTO_IMG_PRINCIPAL_MIN && alto <= ALTO_IMG_PRINCIPAL_MAX) return m
+  }
+  return null
+}
+
 export function importarHeuristico(html) {
   const avisos = []
+
+  // Rediseño 2026: ver importarDesdeHtml.
+  const migracionRojo = migrarRojoAnterior(html)
+  html = migracionRojo.html
+  const avisoRojo = avisoMigracionRojo(migracionRojo.cantidad)
+  if (avisoRojo) avisos.push(avisoRojo)
 
   // Bug real encontrado con una pieza real (China/Feria de Cantón):
   // un comentario condicional MSO (<!--[if (gte mso 9)|(IE)]>...
@@ -2054,15 +2071,15 @@ export function importarHeuristico(html) {
   // externas — los comentarios de diseñador que la envuelven varían
   // entre piezas (<!-- HEADER -->, <!-- INICIO HEADER IMAGEN -->,
   // otros vistos directamente sin comentario alguno), así que no son
-  // ancla confiable. El rasgo estructural que SÍ se repite, confirmado
-  // en varias piezas reales de distintas familias y épocas: es la
-  // primera <img> con width="600" height="425" (el tamaño fijo de la
-  // imagen de cabecera en todas las piezas vistas) que aparece ANTES
-  // del inicio de la tabla de contenido — acotar a "antes de la tabla
-  // de contenido" evita confundirla con una imagen de igual tamaño
-  // que por casualidad apareciera dentro de un bloque más adelante.
+  // ancla confiable. El rasgo estructural que SÍ se repite: es la
+  // primera <img> de ancho 600 que aparece ANTES del inicio de la tabla
+  // de contenido. El alto ya no es fijo (antes era siempre 425): el
+  // editor lo calcula por la proporción de cada imagen, así que se
+  // acepta cualquier alto razonable (ALTO_IMG_PRINCIPAL_MIN/MAX) y se
+  // conserva el real. Acotar a "antes de la tabla de contenido" evita
+  // confundirla con una imagen de igual ancho dentro de un bloque.
   const htmlAntesDeContenido = html.slice(0, tabla.inicioTag)
-  const imgPrincipalMatch = htmlAntesDeContenido.match(/<img\b[^>]*\bwidth="600"[^>]*\bheight="425"[^>]*>|<img\b[^>]*\bheight="425"[^>]*\bwidth="600"[^>]*>/)
+  const imgPrincipalMatch = encontrarImgPrincipal(htmlAntesDeContenido)
   let imgPrincipal = { activo: false, src: '', alt: '', title: '', link: '', alto: 425 }
   if (imgPrincipalMatch) {
     const tag = imgPrincipalMatch[0]
@@ -2079,14 +2096,8 @@ export function importarHeuristico(html) {
         alt: tag.match(/\salt="([^"]*)"/)?.[1] ?? '',
         title: tag.match(/\stitle="([^"]*)"/)?.[1] ?? '',
         link: linkMatch?.[1] ?? '',
-        // El regex de arriba SOLO matchea height="425" a propósito —
-        // es la convención fija de la plataforma externa que se está
-        // heurísticamente reconociendo acá, no tiene relación con el
-        // alto real medido que ahora calcula el editor propio (ver
-        // onImgPrincipalSrcBlur/alturaImgPrincipal en
-        // EditorPiezas.jsx/exportar.js). Por eso queda fijo en 425,
-        // igual que siempre.
-        alto: 425,
+        // Alto real de la imagen en la pieza (antes fijo en 425).
+        alto: parseInt(tag.match(/\sheight="(\d+)"/)?.[1] ?? '425', 10),
       }
     } else {
       avisos.push({ texto: 'Se detectó una imagen principal pero no se pudo leer su URL — revisala manualmente.', tipo: 'general', canvasIdx: null })
@@ -2255,176 +2266,23 @@ export function importarHeuristico(html) {
     }
   }
 
-  // Header: sin marcador <!--HEADER:slug--> en piezas externas. ANTES
-  // esto se resolvía con BLOQUES_HEADER[0] (el primero alfabético) sin
-  // ningún intento real de detección — bug real reportado: una pieza
-  // EB terminaba reemplazada por un header CG, cambiando el segmento
-  // de marca de la pieza sin que el aviso genérico lo dejara
-  // suficientemente claro. El color de banda NO alcanza para
-  // distinguir (CG_Banda_Roja_Header y CG_Banda_Roja_Header_Mall
-  // comparten el mismo #c4161c, EB y otros pueden compartir negro),
-  // pero cada header SÍ tiene un logo institucional propio y único
-  // que no se repite entre headers — los íconos de redes sociales
-  // (Tw/Fb/Ig/In) son genéricos y aparecen en casi todos, así que se
-  // descartan antes de comparar. El logo distintivo de cada header
-  // conocido se deriva de su propio HTML (no de una lista aparte que
-  // se pueda desincronizar si se agrega un header nuevo).
-  //
-  // Bug real encontrado al agregar CG_Banda_Roja_Header_Malba: el
-  // logo ICBC INSTITUCIONAL genérico (sin ninguna marca de socio o
-  // segmento — el isologo simple del banco, usado como remate del
-  // header en casi cualquier pieza) tiene varias variantes de archivo
-  // según el fondo (logo_ICBC_full_bco.png para CG_Banda_Roja_Header,
-  // logo_ICBC_full_b.png para CG_Banda_Roja_Header_Malba,
-  // logo_ICBC_b.png para EB_Banda_Negra_Header_Malba) — ninguna de
-  // estas variantes identifica un header puntual, igual que pasa con
-  // los íconos de redes. Una pieza real (notificación de límite de
-  // tarjeta, SIN nada de Malba) que solo trae el logo ICBC genérico
-  // matcheaba por error contra CG_Banda_Roja_Header_Malba porque esa
-  // pieza usa la MISMA variante de archivo (logo_ICBC_full_b.png) que
-  // el header Malba — un logo que en los hechos no tiene nada que ver
-  // con Malba, solo coincide la variante de color de fondo. Se
-  // excluye explícitamente cualquier variante del isologo genérico
-  // (anclado al nombre de archivo exacto, NO a "contiene ICBC" — eso
-  // sí seguiría capturando por error logos realmente distintivos como
-  // Logo_ICBC_Mall_240x60.png, que identifica al header Mall y debe
-  // seguir contando como distintivo).
-  const ESDistintivoGenerico = /logo-(Tw|Fb|Ig|In)_B_\d+x\d+\.png|logo[-_]ICBC(?:_full)?_b(?:co)?\.png$/i
-  function logosDistintivos(htmlHeader) {
-    return [...htmlHeader.matchAll(/<img\b[^>]*\ssrc="([^"]*)"/gi)]
-      .map(m => m[1])
-      .filter(src => !ESDistintivoGenerico.test(src))
-  }
-  // Extraer solo el nombre de archivo de una URL de imagen (la parte
-  // después del último "/"). Se usa para comparar logos distintivos
-  // entre el template y la pieza importada sin depender del dominio —
-  // piezas viejas pueden tener el logo en icommktrepo.s3.amazonaws.com
-  // en vez del CDN actual (d343t93odde9ul.cloudfront.net), y el nombre
-  // del archivo es suficientemente específico para identificar el logo.
-  function nombreArchivo(src) {
-    return src.split('/').pop()
-  }
-  // Bug real encontrado con una pieza real (evento MALBA): el mismo
-  // socio institucional puede tener banda de header en MÁS DE UN
-  // segmento (EB_Banda_Negra_Header_Malba con fondo negro,
-  // CG_Banda_Roja_Header_Malba con fondo rojo) — comparten el logo
-  // "firma_socio_malba_2.png" porque es el mismo logo de marca, pero
-  // pertenecen a segmentos distintos. El comentario de arriba ("el
-  // color NO alcanza para distinguir") seguía siendo válido para el
-  // caso que motivó el fix original (headers con logos YA distintos
-  // entre sí, donde el color por sí solo es ambiguo), pero no cubre
-  // este caso nuevo, inverso: dos headers con el MISMO logo
-  // distintivo, que sólo se diferencian por el color de fondo de la
-  // banda. Antes de este fix, el primer candidato que matcheara el
-  // logo compartido ganaba por orden de array (alfabético) — funcionó
-  // por casualidad mientras CG_Banda_Roja_Header_Malba no existía
-  // (era el único match) y seguía funcionando por casualidad de
-  // alfabeto al agregarlo (CG < EB alfabéticamente), pero es el mismo
-  // patrón frágil ya visto con otros bugs de esta sesión: no hay que
-  // confiar en que el orden del array vaya a seguir siendo favorable.
-  // Solución: cuando el logo distintivo de un candidato aparece
-  // también en OTRO candidato (logo compartido entre headers de
-  // distinto segmento), no alcanza con el logo solo — hay que
-  // confirmar además que el color de fondo de la banda coincida.
-  function colorDeFondoHeader(htmlHeader) {
-    const aperturaTabla = htmlHeader.match(/^<table\b[^>]*>/i)
-    if (!aperturaTabla) return null
-    const m = aperturaTabla[0].match(/(?:background-color|bgcolor)\s*[:=]\s*["']?\s*(#[0-9a-fA-F]{3,6})/i)
-    return m ? m[1].toLowerCase() : null
-  }
-  let bandaHeader = null
-  for (let i = 0; i < BLOQUES_HEADER.length; i++) {
-    const candidato = BLOQUES_HEADER[i]
-    const distintivosCandidato = logosDistintivos(candidato.html)
-    const nombresDistintivos = distintivosCandidato.map(nombreArchivo)
-    const logosEnPieza = [...htmlAntesDeContenido.matchAll(/<img\b[^>]*\ssrc="([^"]*)"/gi)].map(m => nombreArchivo(m[1]))
-    const logoEncontrado = nombresDistintivos.some(n => logosEnPieza.includes(n))
-    if (!logoEncontrado) continue
-    // ¿Algún OTRO candidato comparte alguno de estos mismos logos
-    // distintivos? Si no, el match por logo solo ya es inequívoco —
-    // mismo comportamiento que antes para todos los headers actuales
-    // que no comparten logo con ningún otro.
-    const logoCompartido = BLOQUES_HEADER.some((otro, j) => j !== i && logosDistintivos(otro.html).map(nombreArchivo).some(n => nombresDistintivos.includes(n)))
-    if (!logoCompartido) { bandaHeader = candidato; break }
-    // Logo compartido entre varios headers: desempatar por color de
-    // fondo real de la banda en el HTML importado, comparado contra
-    // el color de fondo propio de cada candidato que compartía el
-    // logo. Buscamos el color en TODO htmlAntesDeContenido (no solo
-    // en la apertura del primer tag) porque la banda de header puede
-    // venir envuelta en comentarios condicionales MSO antes del
-    // <table> real, igual criterio que ya se usa para el color de
-    // tema general.
-    const colorCandidato = colorDeFondoHeader(candidato.html)
-    if (colorCandidato && htmlAntesDeContenido.includes(`#${colorCandidato.slice(1)}`)) {
-      const coincideStyle = new RegExp(`background-color\\s*:\\s*${colorCandidato}`, 'i').test(htmlAntesDeContenido)
-      const coincideBgcolor = new RegExp(`bgcolor\\s*=\\s*["']${colorCandidato}["']`, 'i').test(htmlAntesDeContenido)
-      if (coincideStyle || coincideBgcolor) { bandaHeader = candidato; break }
-    }
-  }
-  if (bandaHeader) {
-    avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}".`, tipo: 'general', canvasIdx: null })
-  } else {
-    // Bug real encontrado al agregar el EB básico real (hasta ahora,
-    // el archivo EB_Banda_Negra_Header.html guardado era en realidad
-    // el de EB Exclusive — mal nombrado desde el origen, el usuario lo
-    // corrigió): un header "básico puro" (solo redes + el isologo
-    // genérico ICBC, sin ningún logo de marca propio) nunca puede
-    // matchear por logo — el genérico está excluido a propósito (ver
-    // ESDistintivoGenerico). Hasta ahora esto no era un problema
-    // porque el ÚNICO header así era CG_Banda_Roja_Header, que
-    // resultaba ser, por casualidad de orden alfabético, el propio
-    // default global (BLOQUES_HEADER[0]) — funcionaba bien sin que el
-    // código lo garantizara a propósito. Con un segundo header básico
-    // puro (EB, fondo negro) ese mismo camino feliz ya no alcanza: una
-    // pieza EB básica real terminaría cayendo al default CG (rojo),
-    // cambiando el segmento de marca — el mismo tipo de bug ya visto
-    // con Malba, pero por ausencia total de logo en vez de logo
-    // compartido. Antes de caer al default global sin distinguir
-    // nada, se intenta un segundo desempate: entre los headers que NO
-    // tienen NINGÚN logo no-genérico (los "básicos puros" — hoy son
-    // exactamente dos: CG y EB), ¿el color de fondo de la pieza
-    // coincide con alguno de ellos? Si coincide con exactamente uno,
-    // se usa ese — sigue siendo más confiable que el default ciego,
-    // aunque no haya ningún logo de marca que lo confirme. Si no
-    // coincide con ninguno (pieza realmente irreconocible) o coincide
-    // con más de uno (no debería pasar mientras cada básico puro tenga
-    // un color de fondo distinto, pero por si acaso), se cae al
-    // default de siempre.
-    const basicosPuros = BLOQUES_HEADER.filter(b => logosDistintivos(b.html).length === 0)
-    const basicosPorColor = basicosPuros.filter(b => {
-      const color = colorDeFondoHeader(b.html)
-      if (!color || !htmlAntesDeContenido.includes(`#${color.slice(1)}`)) return false
-      const coincideStyle = new RegExp(`background-color\\s*:\\s*${color}`, 'i').test(htmlAntesDeContenido)
-      const coincideBgcolor = new RegExp(`bgcolor\\s*=\\s*["']${color}["']`, 'i').test(htmlAntesDeContenido)
-      return coincideStyle || coincideBgcolor
-    })
-    if (basicosPorColor.length === 1) {
-      bandaHeader = basicosPorColor[0]
-      avisos.push({ texto: `Header detectado: "${bandaHeader.nombre}" (por color de fondo, sin logo de marca propio para confirmar) — revisalo si no es el esperado.`, tipo: 'general', canvasIdx: null })
-    } else {
-      bandaHeader = BLOQUES_HEADER[0] ?? null
-      avisos.push({ texto: 'El header de la pieza original no se pudo identificar automáticamente — se dejó uno por defecto, revisalo y volvé a seleccionarlo si corresponde (puede no coincidir con el segmento real de la pieza).', tipo: 'general', canvasIdx: null })
-    }
-  }
-
-  // redesOrden: bug real reportado — el header elegido es el TEMPLATE
-  // conocido más parecido, pero el template puede traer más (o
-  // distintas) redes sociales que las que la pieza real tenía. Si se
-  // deja redesOrden en null, el editor lo rellena automáticamente
-  // detectando las redes DEL TEMPLATE (ver el useEffect que llama
-  // detectarRedesSociales(bandaHeader.html) — eso es correcto para una
-  // pieza nueva armada desde cero, pero está mal para una importación,
-  // donde hay que respetar lo que la pieza ORIGINAL realmente tenía
-  // (ej. una pieza sin ningún ícono de red social no debe terminar con
-  // las 4 redes del template agregadas de la nada). Por eso acá se
-  // detectan las redes reales sobre htmlAntesDeContenido (la pieza
-  // importada), no sobre bandaHeader.html (el template) — si la pieza
-  // no tenía ninguna, redesOrden queda en un array vacío (no null), así
-  // el useEffect de relleno automático no se dispara para sobreescribirlo.
-  const redesDeLaPiezaOriginal = detectarRedesSociales(htmlAntesDeContenido)
-  const redesOrdenDetectado = redesDeLaPiezaOriginal.map(key => ({ key, activa: true }))
-  if (bandaHeader && redesDeLaPiezaOriginal.length !== detectarRedesSociales(bandaHeader.html).length) {
-    avisos.push({ texto: 'La cantidad de redes sociales de la pieza original no coincide exactamente con las del header detectado — revisá el panel de redes del header.', tipo: 'general', canvasIdx: null })
+  // Header: sin marcador <!--HEADER:slug--> en piezas externas. Se
+  // reconoce por el nombre de archivo de sus logos y por el color de
+  // fondo de la banda (ver detectarHeaderEnHtml): el logo da la marca
+  // y el color el segmento. Reconoce tanto los headers del diseño
+  // nuevo (Logo_Header_<Marca>_Blanco[_Coin_Rojo].png) como los del
+  // diseño anterior, que se reemplazan por su equivalente nuevo, y los
+  // de Malba, que se conservan. Si no se puede identificar, se carga un
+  // header por defecto y headerPendiente le pide al usuario que elija
+  // por cuál reemplazarlo antes de importar. Las redes sociales del
+  // header viejo no se importan: el header nuevo no las tiene.
+  const deteccionHeader = detectarHeaderEnHtml(htmlAntesDeContenido)
+  const headerResuelto = resolverHeaderImportado(deteccionHeader, buscarMalba)
+  const bandaHeader = headerResuelto.bandaHeader
+  const headerPendiente = headerResuelto.headerPendiente
+  avisos.push(...headerResuelto.avisos)
+  if (deteccionHeader.tipo === 'nuevo' && !headerPendiente) {
+    avisos.push({ texto: `Header detectado: "${bandaHeader.nombreCompleto}".`, tipo: 'general', canvasIdx: null })
   }
 
   const confianza = (proporcionReconocida >= 0.85 && tabla.viaShow) ? 'alta' : (proporcionReconocida >= 0.5 ? 'media' : 'baja')
@@ -2445,7 +2303,7 @@ export function importarHeuristico(html) {
   return {
     resultado: {
       bandaHeader,
-      redesOrden: redesOrdenDetectado,
+      headerPendiente,
       tema,
       canvas: canvasConColorRevertido,
       imgPrincipal,

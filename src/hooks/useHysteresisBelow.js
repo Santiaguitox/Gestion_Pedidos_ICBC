@@ -21,8 +21,8 @@ import { useRef } from 'react'
 //
 // Nota de implementación: el estado vive en un ref y se actualiza
 // DURANTE el render (no en un useEffect) — mismo patrón que ya usa
-// este proyecto para estado derivado de otro valor (ver el comentario
-// sobre redesOrden en EditorPiezas.jsx): evita una pasada de render
+// este proyecto para estado derivado de otro valor (ajuste de estado
+// durante el render, ver por ejemplo EditorPiezas.jsx): evita una pasada de render
 // extra en la que se vería el valor viejo antes de re-renderizar con
 // el nuevo.
 export function useHysteresisBelow(value, enterBelow, exitAbove) {

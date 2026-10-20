@@ -129,7 +129,7 @@ import { generarExport } from '@/lib/editor/exportar.js'
 const TAG_ROTO = `<td style="padding-left:=" " 20px;" " font-family:=" " Arial;=" " font-size:=" " 17px;" align="left">Texto de la fila rota</td>`
 const base = {
   bandaHeader: null, imgPrincipal: { activo: false, src: '' }, imgFooter: { activo: false, src: '' },
-  legalesAdicionales: [], legalesSeparados: false, firmaInstitucional: null, indicadores: [], redesOrden: [],
+  legalesAdicionales: [], legalesSeparados: false, firmaInstitucional: null, indicadores: [],
 }
 
 describe('round trip export → importarDesdeHtml con un tag roto sin arreglar', () => {

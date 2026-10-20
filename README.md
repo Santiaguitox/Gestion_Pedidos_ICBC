@@ -109,10 +109,11 @@ App interna para gestionar pedidos de email marketing del cliente ICBC. Permite 
 
 **Auditoría de Piezas** — escanea una lista de piezas (pegadas como texto simple `Nombre | URL` o pegando una tabla completa de Excel/Sheets) buscando coincidencias de texto visible, links o imágenes contra reglas definidas por el usuario (ej. "¿en cuáles de estas 40 piezas todavía aparece este link viejo?"). Devuelve piezas con coincidencia, sin coincidencia y con error, exportable como TXT.
 
-**Editor de Piezas** — editor visual de emails por bloques drag-and-drop. La UI vive en `EditorPiezas.jsx`; toda la lógica pura de HTML (export, import, campos, redes, catálogo de bloques) vive en `src/lib/editor/` como funciones testeables sin React — ver "Arquitectura del Editor de Piezas" más abajo. Permite armar una pieza arrastrando bloques de contenido (texto, imágenes, módulos) desde una biblioteca lateral a un canvas central, con las siguientes capacidades:
+**Editor de Piezas** — editor visual de emails por bloques drag-and-drop. La UI vive en `EditorPiezas.jsx`; toda la lógica pura de HTML (export, import, campos, headers, catálogo de bloques) vive en `src/lib/editor/` como funciones testeables sin React — ver "Arquitectura del Editor de Piezas" más abajo. Permite armar una pieza arrastrando bloques de contenido (texto, imágenes, módulos) desde una biblioteca lateral a un canvas central, con las siguientes capacidades:
 
 - **Templates visuales** (ICBC / Avisos / Mall): cambian fondo, color de texto y borde de la pieza sin tocar el contenido de cada bloque. El color del borde sigue al header elegido (CG_* rojo, EB_* negro, PAY_* marrón), no al tema.
-- **Header seleccionable**: 8 variantes (CG, CG Mall, CG Comex, CG Malba, EB, EB Malba, EB Inversiones, Pay Sueldos), seleccionable por click o drag. Las redes sociales del header se pueden reordenar por drag-and-drop y activar/desactivar individualmente.
+- **Header = marca + segmento** (rediseño de marca 2026): la banda es siempre un logo (la marca o submarca de la comunicación) sobre el color de un segmento (CG `#c7000b`, EB `#0d131a`, Pay `#635843`), de **70px de alto fijos** — los espaciadores de arriba y abajo se calculan para que logo + espaciadores sumen 70. Se elige con los selectores de marca y segmento del panel de edición; la biblioteca lista solo tres tarjetas (CG, EB, Pay) de la marca elegida. Ya no hay redes sociales en el header. Se **genera** desde un catálogo (`src/lib/editor/headers.js`), no hay un .html por combinación: ver "Sumar una marca al header" más abajo. Malba no tuvo rediseño y conserva sus dos headers estáticos (`Header/*_Malba.html`) con los colores nuevos.
+- **Colores de acento (rediseño 2026):** el rojo de acento es `#c7000b` (antes `#c4161c`) y el negro del segmento EB del Módulo Doble es `#0d131a` (antes `#000000`). Viven en `src/lib/editor/colores.js`. Las piezas viejas que se importan, los borradores y las piezas guardadas se migran solos al nuevo rojo (con un aviso en el resumen de importación). Las imágenes (íconos, botones, banners) no se recolorean por código: hay que reexportarlas.
 - **Imagen principal e imagen de footer** opcionales.
 - **Legales adicionales**: se pueden agregar varios bloques de texto legal sobre el legal fijo; opción "separar en secciones" (recomendada para Mall con legales largos).
 - **Firma institucional** (FCI — ICBC Investments / Sociedad Gerente-Depositaria): sección fija de 2 filas × 2 columnas (izq/der) con 4 campos editables, toggle on/off.
@@ -161,11 +162,12 @@ Página **pública, sin login**, pensada para que cualquiera de icomm con el lin
 
 | Módulo | Qué contiene |
 |--------|--------------|
-| `constantes.js` | `TEMAS`, `LEGAL_FIJO_HTML`, `FIRMA_INSTITUCIONAL_DEFAULT`, `colorPorPrefijoHeader`, data de `REDES_SOCIALES` (los íconos React quedan en el JSX como `REDES_ICONOS`) |
-| `bloques.js` | Catálogo de bloques cargado con `import.meta.glob` sobre los templates reales. Único módulo que depende de Vite — aislado a propósito |
+| `constantes.js` | `TEMAS`, `LEGAL_FIJO_HTML`, `FIRMA_INSTITUCIONAL_DEFAULT`, `colorPorPrefijoHeader` (el color sale de `SEGMENTOS`) |
+| `bloques.js` | Catálogo de bloques cargado con `import.meta.glob` sobre los templates reales, más los headers generados y las opciones del selector de header. Único módulo que depende de Vite — aislado a propósito |
 | `htmlUtils.js` | Utilidades genéricas: `extraerTdsConBalance`, `formaDeTags`/`similitudDeForma`, `quitarWrapperSiEnvuelveTodo`, `normalizarNegritas`, `limpiarHtml*`, `validarUrl` |
 | `campos.js` | `detectarCampos` / `actualizarCampoEnHtml` (contrato posicionOrden vs posicionContenido documentado ahí) |
-| `redesSociales.js` | `detectarRedesSociales` / `reordenarRedesSociales` |
+| `headers.js` | Catálogo de `MARCAS` y `SEGMENTOS` y generador de la banda de header (`generarHtmlBanda`, `crearBandaHeader`, `validarCatalogo`). Sin imports |
+| `headersCompat.js` | Reconocimiento de headers del diseño anterior y de Malba al importar (`detectarHeaderEnHtml`, `detectarHeaderPorSlug`, `resolverHeaderImportado`) |
 | `exportar.js` | `generarExport` + helpers de estilo (`construirCanvasStyles`, `aplicarColorTexto`/`revertirColorTexto`, `wrapPreview`) |
 | `importar.js` | `importarDesdeHtml` (marcadores) + `importarHeuristico` (piezas externas) y todos sus clasificadores |
 | `thumbs.js` | Miniaturas SVG de la biblioteca |
@@ -183,9 +185,9 @@ npm run test:watch
 
 La suite (Vitest, `src/**/__tests__/*.test.js`, entorno node — sin DOM) cubre la lógica pura más frágil del proyecto, usando los **templates HTML reales** de `src/data/Templates` como fixtures:
 
-- **Roundtrip completo** `generarExport → importarDesdeHtml` con todo el estado posible: tema Mall (tinte/destinte de color), redes activas/inactivas y reordenadas, legales en modo corrido y separado, firma institucional, indicadores con sigla multi-palabra, imágenes principal/footer, y los caminos de fail-soft (slug desconocido → código personalizado con aviso).
+- **Roundtrip completo** `generarExport → importarDesdeHtml` con todo el estado posible: tema Mall (tinte/destinte de color), header (marca y segmento), legales en modo corrido y separado, firma institucional, indicadores con sigla multi-palabra, imágenes principal/footer, y los caminos de fail-soft (slug desconocido → código personalizado con aviso).
 - **Campos**: detección texto/imagen/link, exclusión de links sociales y de `<a>` dentro de texto editable, y el fix de vaciar-y-reescribir por `posicionOrden`.
-- **Redes sociales**: detección por dominio y por `data-red`, reordenamiento estable, red desactivada que sigue siendo detectable.
+- **Headers** (`headers.test.js`, `headersCompat.test.js`): catálogo válido, bandas de exactamente 70px (medido sobre el HTML generado), estructura idéntica a la banda de referencia del rediseño, y reconocimiento de los 14 headers anteriores (fixtures reales en `__tests__/fixtures/headers-anteriores/`) tanto por marcador como por logo y color.
 - **htmlUtils**: balance real de `<td>` anidados, wrapper que envuelve todo vs. parcial, vector de forma de tags.
 - **Revisión** (`lib/revision/generales.js`): `DetectarContenidoDuplicado` (incluyendo el descarte del `<style>` VML de la plataforma) y `DetectarInlineEnvolviendoOutlook`.
 - **Notificaciones** (`lib/notificaciones.js`): agrupamiento por `grupo_key` (colapso de no leídas, ruteo de deep-links).
@@ -197,6 +199,14 @@ La suite (Vitest, `src/**/__tests__/*.test.js`, entorno node — sin DOM) cubre 
 La config vive en `vitest.config.js` (separada de `vite.config.js` para no cargar los plugins de React/Tailwind al testear). Al agregar lógica nueva a `lib/editor`, `lib/revision` o cualquier módulo puro de `lib/` (notificaciones, comentarios, fechas…), sumá el caso ahí — estas funciones se rompen en silencio al ajustar una regex, y la suite es lo único que lo hace visible.
 
 ---
+
+### Sumar una marca al header
+
+1. Subir a CloudFront (`.../minisites/ICBC/2026/Headers/`) las dos imágenes: `Logo_Header_<Marca>_Blanco.png` (sobre CG y Pay) y `Logo_Header_<Marca>_Blanco_Coin_Rojo.png` (sobre EB). Alto y ancho del archivo **pares**; se exportan al doble de lo que se muestra (28px de alto).
+2. Agregar **una línea** a `MARCAS` en `src/lib/editor/headers.js` con el id y el tamaño **real del archivo**: `{ id: 'Nueva', ancho: 380, alto: 56 }`. Opcionales: `nombre`, `alt`, `escala` (1 si el archivo viene a tamaño real), `mostrar: { ancho, alto }` (si el archivo no es el doble exacto del tamaño mostrado, como Base a 126x44), `segmentos` (si la marca no existe en todos los segmentos: Exclusive solo en `EB`).
+3. `npm test`: `validarCatalogo` falla si una medida es impar, si el logo no entra en los 70px de la banda o si el id está repetido.
+
+El selector, el generador y el importador (que reconoce la marca por el nombre del archivo del logo) la toman del catálogo sin tocar nada más. Un segmento nuevo es una línea en `SEGMENTOS` (id, nombre, color en minúsculas y sufijo de la variante de logo).
 
 ## Marcadores del Editor de Piezas
 
@@ -217,7 +227,7 @@ Todo el manipuleo de HTML en el editor (lectura y escritura) se hace **sobre el 
 | Zona | Marcador | Único o repetible | Notas |
 |------|----------|:---:|-------|
 | Bloque de contenido (cada ítem del canvas) | `<!--BLOQUE slug="X" idx="N"--> ... <!--/BLOQUE-->` | Repetible | `slug` = el mismo slug que usa `BLOQUES` (nombre del archivo `.html` sin extensión, en `Header/Contenido/Botones`). `idx` = posición del bloque en el array `canvas` (no un contador por slug) — necesario porque un mismo bloque puede repetirse varias veces en una pieza. |
-| Banda de header | `<!--HEADER:slug--> ... <!--/HEADER-->` | Único | Sin `idx` — solo hay una banda de header por pieza. |
+| Banda de header | `<!--HEADER:slug--> ... <!--/HEADER-->` | Único | Sin `idx` — solo hay una banda de header por pieza. `slug` = `<SEGMENTO>_<Marca>` (ej. `CG_Empresas`, `EB_Mall`, `PAY_Sueldos`) o el de un header Malba. Un slug del diseño anterior (`CG_Banda_Roja_Header_Empresas`) se mapea a su equivalente nuevo con aviso. |
 | Imagen principal | `<!--IMG_PRINCIPAL--> ... <!--/IMG_PRINCIPAL-->` | Único | Solo aparece si `imgPrincipal.activo && imgPrincipal.src`. |
 | Imagen de footer | `<!--IMG_FOOTER--> ... <!--/IMG_FOOTER-->` | Único | Solo aparece si `imgFooter.activo && imgFooter.src`. |
 | Firma institucional | `<!--FIRMA_INSTITUCIONAL--> ... <!--/FIRMA_INSTITUCIONAL-->` | Único | Envuelve las 2 filas de firma (ICBC Investments / Sociedad Gerente-Depositaria). Cada celda lleva un span con atributo `data-firma-fila1-izq`, `data-firma-fila1-der`, `data-firma-fila2-izq` o `data-firma-fila2-der` según posición. Si la heurística detecta la sección sin marcadores (2 `<td class="Texto_Legales">` izq/der sin colspan, patrón exclusivo de esta sección), la fila 2 queda vacía si no viene en el HTML real — nunca se inventa contenido. |
@@ -367,7 +377,7 @@ src/
 │   └── Templates/
 │       ├── index.js                 # Solo exporta el template marcado `deprecado: true`, para Revisión de emails
 │       └── ICBC/
-│           ├── Header/              # Bandas de header — cargadas por import.meta.glob, no requieren tocar código
+│           ├── Header/              # Solo los 2 headers Malba (sin rediseño). El resto de los headers se genera desde lib/editor/headers.js
 │           ├── Contenido/           # Bloques de contenido — idem
 │           ├── Botones/             # Bloques de botones/CTA — idem
 │           └── Modulos_Obsoletos.html

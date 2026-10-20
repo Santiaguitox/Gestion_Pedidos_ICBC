@@ -8,7 +8,7 @@ import { BLOQUES_HEADER, BLOQUES_CONTENIDO } from '@/lib/editor/bloques.js'
 // contra el mismo tipo de HTML que la herramienta analiza en serio.
 function piezaSana() {
   return generarExport({
-    bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+    bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
     imgPrincipal: { activo: false, src: '', alt: '', title: '', link: '' },
     imgFooter: { activo: false, src: '', alt: '', link: '' },
     canvas: [{ ...BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base'), instanceId: 'x' }],
@@ -106,7 +106,7 @@ describe('DetectarFragmentoHtmlCrudoEnTexto', () => {
 
   it('una pieza sana (el propio export del editor) no dispara nada', () => {
     const html = generarExport({
-      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Banda_Roja_Header'),
+      bandaHeader: BLOQUES_HEADER.find(b => b.slug === 'CG_Base'),
       imgPrincipal: { activo: false, src: '', alt: '', title: '', link: '' },
       imgFooter: { activo: false, src: '', alt: '', link: '' },
       canvas: [{ ...BLOQUES_CONTENIDO.find(b => b.slug === 'Bloque_Texto_Base'), instanceId: 'x' }],

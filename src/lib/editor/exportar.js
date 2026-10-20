@@ -4,8 +4,8 @@
 // Editor de Piezas".
 
 import { LEGAL_FIJO_HTML, TEMAS, TEMA_DEFAULT, colorPorPrefijoHeader } from './constantes.js'
+import { ROJO_ACENTO } from './colores.js'
 import { limpiarHtmlExport, quitarWrapperSiEnvuelveTodo } from './htmlUtils.js'
-import { reordenarRedesSociales } from './redesSociales.js'
 
 // Sanea un valor antes de interpolarlo DENTRO de un atributo HTML con
 // comillas dobles — mismo criterio que linkSeguro en
@@ -112,13 +112,13 @@ export function wrapPreview(html, esHeader = false) {
 // formato con atributos con comillas (en vez de "slug:idx") evita
 // cualquier ambigüedad de dónde corta un split si el slug llegara a
 // tener caracteres raros.
-export function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales = [], legalesSeparados = false, firmaInstitucional = null, indicadores, tema = TEMA_DEFAULT, redesOrden = null }) {
+export function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, legalesAdicionales = [], legalesSeparados = false, firmaInstitucional = null, indicadores, tema = TEMA_DEFAULT }) {
   const { bgContenido, colorTexto, conBorde } = TEMAS[tema] || TEMAS[TEMA_DEFAULT]
   // El color del borde (y el fondo de esa misma tabla cuando el tema
   // no lleva borde, ej. Avisos) sigue al HEADER elegido, no al tema:
-  // CG_* -> rojo, EB_* -> negro, PAY_* -> marrón Payroll. Antes
-  // quedaba fijo en el rojo de marca sin importar qué header se
-  // hubiera elegido.
+  // CG -> rojo, EB -> negro, PAY -> marrón Payroll (el color de cada
+  // segmento sale de SEGMENTOS, ver headers.js). Antes quedaba fijo en
+  // el rojo de marca sin importar qué header se hubiera elegido.
   const colorMarca = colorPorPrefijoHeader(bandaHeader?.slug)
   const contenidoRows = canvas.map((b, idx) => {
     const slug = b.slug || b.id || 'bloque'
@@ -160,7 +160,7 @@ export function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, le
   // el comportamiento para esas piezas viejas no cambia.
   const alturaImgPrincipal = imgPrincipal.alto || 425
   const imgPrincipalContenido = imgPrincipal.activo && imgPrincipal.src
-    ? `<img src="${escaparAtributo(imgPrincipal.src)}" alt="${escaparAtributo(imgPrincipal.alt)}"${imgPrincipal.title ? ` title="${escaparAtributo(imgPrincipal.title)}"` : ''} class="img-max" style="width: 600px; height: ${alturaImgPrincipal}px; display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: #c4161c;" width="600" height="${alturaImgPrincipal}" />`
+    ? `<img src="${escaparAtributo(imgPrincipal.src)}" alt="${escaparAtributo(imgPrincipal.alt)}"${imgPrincipal.title ? ` title="${escaparAtributo(imgPrincipal.title)}"` : ''} class="img-max" style="width: 600px; height: ${alturaImgPrincipal}px; display: block; font-family: Arial,Helvetica,Open Sans,sans-serif; font-size: 22px; color: ${ROJO_ACENTO};" width="600" height="${alturaImgPrincipal}" />`
     : null
   const imgPrincipalHtml = imgPrincipalContenido
     ? `<!--IMG_PRINCIPAL-->\n<tr>\n<td style="font-size: 0; padding: 0; margin: 0;" valign="top" align="center">${imgPrincipal.link ? `<a href="${escaparAtributo(imgPrincipal.link)}" target="_blank" style="border-style: none !important;">${imgPrincipalContenido}</a>` : imgPrincipalContenido}</td>\n</tr>\n<!--/IMG_PRINCIPAL-->`
@@ -276,7 +276,7 @@ export function generarExport({ bandaHeader, imgPrincipal, imgFooter, canvas, le
 <tbody>
 <tr>
 <td width="100%" valign="top" bgcolor="${colorMarca}" align="center"><!--[if (gte mso 9)|(IE)]><table align='center' border='0' cellspacing='0' cellpadding='0' width='600'><tr><td align='center' valign='top' width='600'><![endif]-->
-${reordenarRedesSociales(bandaHeader?.html || '', redesOrden)}
+${bandaHeader?.html || ''}
 <!--/HEADER--><!--[if (gte mso 9)|(IE)]></td></tr></table><![endif]--></td>
 </tr>
 ${imgPrincipalHtml}
@@ -338,7 +338,7 @@ export function legalHtmlExport(html) {
 // el último paso antes de generar el HTML final, cambiar de tema
 // (ICBC/Avisos/Mall) en cualquier momento refleja el color correcto
 // de inmediato, sin tocar el contenido real editado por el usuario.
-// Nunca toca #c4161c (el rojo de marca/acento) — ese es intencional
+// Nunca toca el rojo de marca/acento (ROJO_ACENTO) — ese es intencional
 // en los 3 temas, no es "texto base".
 export function aplicarColorTexto(html, colorTexto) {
   if (colorTexto === '#333333') return html // tema ICBC, color original, nada que cambiar

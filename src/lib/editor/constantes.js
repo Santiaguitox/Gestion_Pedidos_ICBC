@@ -1,6 +1,9 @@
 // Constantes compartidas del Editor de Piezas — temas visuales,
-// legal fijo, firma institucional, colores por prefijo de header y
-// data de redes sociales. Sin dependencias (hoja del grafo de libs).
+// legal fijo, firma institucional y colores por prefijo de header.
+// Solo depende de headers.js, que a su vez no importa nada (hojas del
+// grafo de libs).
+
+import { SEGMENTOS } from './headers.js'
 
 // ─── Temas de template — ICBC (fondo blanco), Avisos (fondo beige,
 // comunicaciones especiales tipo regulaciones bancarias), Mall (fondo
@@ -54,35 +57,16 @@ export const FIRMA_INSTITUCIONAL_DEFAULT = {
 }
 
 
-// El color "de marca" de una banda de Header depende del PREFIJO del
-// nombre de archivo, no de un valor fijo — confirmado por la
-// convención real: CG_* (Comercial Generalista) es rojo de marca,
-// EB_* (Exclusive Banking) es negro, PAY_* (Payroll/Sueldos) es el
-// marrón institucional de esa línea (#635843). Si en el futuro se
-// suma un prefijo nuevo, cae al rojo de marca por default en vez de
-// romper o quedar sin color. Se usa tanto para el thumb de la
-// biblioteca (generarThumbSVG) como para el borde de la pieza en el
-// export (generarExport, ver conBorde) — una sola fuente de verdad,
-// para que cambiar el color de un prefijo no requiera tocar dos
-// lugares por separado y arriesgar que se desincronicen.
+// El color "de marca" de una banda de Header es el de su SEGMENTO, que
+// va como prefijo del slug (CG_Empresas, EB_Mall, PAY_Sueldos; los
+// headers Malba anteriores siguen la misma convención: CG_..., EB_...).
+// La fuente única de los colores es SEGMENTOS (headers.js) — se usa
+// tanto para el thumb de la biblioteca (generarThumbSVG) como para el
+// borde de la pieza en el export (generarExport, ver conBorde), así que
+// cambiar el color de un segmento no requiere tocar dos lugares y
+// arriesgar que se desincronicen. Un prefijo desconocido cae al
+// segmento por defecto (CG) en vez de romper o quedar sin color.
 export function colorPorPrefijoHeader(slug) {
-  const slugUpper = (slug || '').toUpperCase()
-  if (slugUpper.startsWith('EB_')) return '#000000'
-  if (slugUpper.startsWith('PAY_')) return '#635843'
-  return '#c4161c' // CG_* y cualquier otro prefijo no reconocido
+  const prefijo = (slug || '').split('_')[0].toUpperCase()
+  return (SEGMENTOS.find(s => s.id === prefijo) ?? SEGMENTOS[0]).color
 }
-
-
-// Data de cada red social del header — key (para los marcadores
-// data-red que escribe reordenarRedesSociales), dominio (para la
-// detección sobre HTML crudo de template) y label (UI). Los
-// COMPONENTES de ícono de cada red viven en EditorPiezas.jsx
-// (REDES_ICONOS) — son la única parte de esto que necesita React,
-// por eso la data se separa acá y el ícono se resuelve por key del
-// lado del componente.
-export const REDES_SOCIALES = [
-  { key: 'twitter',   dominio: 'twitter.com',   label: 'Twitter' },
-  { key: 'facebook',  dominio: 'facebook.com',  label: 'Facebook' },
-  { key: 'instagram', dominio: 'instagram.com', label: 'Instagram' },
-  { key: 'linkedin',  dominio: 'linkedin.com',  label: 'LinkedIn' },
-]

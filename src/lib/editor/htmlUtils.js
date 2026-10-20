@@ -15,7 +15,8 @@ export function limpiarHtmlEditor(html) {
     .replace(/<span[^>]*>\s*<\/span>/gi, '')
     // Normalizar colores RGB a hex
     .replace(/rgb\(51,\s*51,\s*51\)/gi, '#333333')
-    .replace(/rgb\(196,\s*22,\s*28\)/gi, '#c4161c')
+    .replace(/rgb\(196,\s*22,\s*28\)/gi, '#c7000b')
+    .replace(/rgb\(199,\s*0,\s*11\)/gi, '#c7000b')
     .replace(/rgb\(255,\s*255,\s*255\)/gi, '#ffffff')
     // Sacar comillas de tipografías
     .replace(/["']Open Sans["']/g, 'Open Sans')
@@ -43,7 +44,8 @@ export function limpiarHtmlExport(html) {
   return html
     .replace(/["']Open Sans["']/g, 'Open Sans')
     .replace(/rgb\(51,\s*51,\s*51\)/gi, '#333333')
-    .replace(/rgb\(196,\s*22,\s*28\)/gi, '#c4161c')
+    .replace(/rgb\(196,\s*22,\s*28\)/gi, '#c7000b')
+    .replace(/rgb\(199,\s*0,\s*11\)/gi, '#c7000b')
     .replace(/rgb\(255,\s*255,\s*255\)/gi, '#ffffff')
 }
 
