@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url'
 
 const RAIZ = fileURLToPath(new URL('../../../../', import.meta.url))
 const CARPETAS = ['src/lib/externo', 'src/components/externo', 'api/externo']
-const ARCHIVOS = ['src/pages/Analisis.jsx', 'scripts/externo-proxy-local.mjs']
-const PERMITIDOS = [/^\.\.?\//, /^\.\.\/\.\.\/assets\/Icomm_Logo\.png$/, /^\.\.\/styles\/Externo\.css$/]
+const ARCHIVOS = ['src/pages/Analisis.jsx', 'src/pages/Customer.jsx', 'src/pages/EstructurasTabla.jsx', 'scripts/externo-proxy-local.mjs']
+const PERMITIDOS = [/^\.\.?\//, /^\.\.\/\.\.\/assets\/Icomm_Logo\.png$/, /^\.\.\/styles\/Externo[A-Za-z]*\.css$/]
 
 function listar(dir) {
   const completo = path.join(RAIZ, dir)
@@ -29,8 +29,8 @@ describe('aislamiento de lo externo', () => {
       expect(origen, `${archivo} importa ${origen}`).not.toMatch(/^@\/|supabase|context|revision/i)
       if (origen.startsWith('.')) {
         const destino = path.normalize(path.join(path.dirname(archivo), origen))
-        const ok = /(^|\/)externo(\/|$)|externo[^/]*$/.test(destino) || /Analisis\.jsx$/.test(destino)
-          || destino === 'src/assets/Icomm_Logo.png' || destino === 'src/styles/Externo.css'
+        const ok = /(^|\/)externo(\/|$)|externo[^/]*$/.test(destino) || /(Analisis|Customer|EstructurasTabla)\.jsx$/.test(destino)
+          || destino === 'src/assets/Icomm_Logo.png' || /^src\/styles\/Externo[A-Za-z]*\.css$/.test(destino)
         expect(ok, `${archivo} importa ${origen} (${destino})`).toBe(true)
       }
     }

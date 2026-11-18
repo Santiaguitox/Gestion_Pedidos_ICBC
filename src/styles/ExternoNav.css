@@ -1,0 +1,167 @@
+/* =========================================================
+   Navegación compartida de las páginas públicas (/customer, /analisis,
+   /estructuras-tabla…) · TeamWorkHub
+   Prefijo ex-nav-. Usa los tokens de .ex-pantalla (ver Externo.css).
+   ========================================================= */
+
+/* Marca como link a la landing */
+.ex-marca--enlace {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radio-md);
+}
+
+.ex-marca--enlace:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 4px;
+}
+
+.ex-nav {
+  position: relative;
+  border-bottom: 1px solid var(--borde);
+}
+
+.ex-nav-lista {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  /* La línea activa sobresale 1px: se le da lugar adentro para que no aparezca scroll vertical */
+  overflow-y: hidden;
+  padding-bottom: 1px;
+  margin-bottom: -1px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--borde-fuerte) transparent;
+}
+
+.ex-nav-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: var(--radio-md) var(--radio-md) 0 0;
+  color: var(--texto-2);
+  font-family: var(--fuente-titulo);
+  font-weight: 500;
+  font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s, background .15s;
+}
+
+.ex-nav-item::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.ex-nav-item:hover {
+  color: var(--texto);
+  background: var(--hover);
+}
+
+.ex-nav-item:hover::after {
+  background: var(--borde-fuerte);
+}
+
+.ex-nav-item--activo,
+.ex-nav-item--activo:hover {
+  color: var(--acento-texto);
+  font-weight: 600;
+  background: var(--acento-fondo);
+}
+
+.ex-nav-item--activo::after,
+.ex-nav-item--activo:hover::after {
+  background: var(--acento);
+}
+
+/* Versión angosta: menú desplegable */
+.ex-nav-movil {
+  display: none;
+}
+
+.ex-nav-disparador {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-md);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: var(--fuente-titulo);
+  font-weight: 600;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ex-nav-disparador:hover {
+  border-color: var(--borde-fuerte);
+}
+
+.ex-nav-disparador[aria-expanded="true"] {
+  border-color: var(--acento);
+}
+
+.ex-nav-actual {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-nav-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-lg);
+  background: var(--elevado);
+  box-shadow: var(--sombra-md);
+}
+
+.ex-nav-item--panel {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radio-md);
+}
+
+.ex-nav-item--panel::after {
+  display: none;
+}
+
+.ex-nav-item__check {
+  margin-left: auto;
+}
+
+@container ex-pantalla (max-width: 720px) {
+  .ex-nav {
+    border-bottom: 0;
+  }
+
+  .ex-nav-lista {
+    display: none;
+  }
+
+  .ex-nav-movil {
+    display: block;
+  }
+}

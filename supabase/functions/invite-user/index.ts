@@ -52,8 +52,17 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // Actualizar el perfil con nombre y rol
-    await supabaseAdmin.from('profiles').update({ full_name, role }).eq('id', data.user.id)
+    // Actualizar el perfil con nombre y rol. activo: true es lo que convierte
+    // la cuenta en miembro: handle_new_user() crea todo perfil como inactivo
+    // (my_role() devuelve NULL → sin acceso a nada) salvo que venga de una
+    // invitación, y este update cubre el caso en que invited_at todavía no
+    // estuviera seteado al momento del insert.
+    const { error: errorPerfil } = await supabaseAdmin
+      .from('profiles')
+      .update({ full_name, role, activo: true })
+      .eq('id', data.user.id)
+
+    if (errorPerfil) throw errorPerfil
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

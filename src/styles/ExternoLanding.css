@@ -1,0 +1,230 @@
+/* =========================================================
+   Landing de herramientas externas (/customer) · TeamWorkHub
+   Prefijo ex-landing-. Usa los tokens de .ex-pantalla (ver Externo.css).
+   ========================================================= */
+
+.ex-landing {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.ex-landing-cab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  padding-top: 16px;
+}
+
+.ex-landing-eyebrow {
+  color: var(--acento-texto);
+  font-family: var(--fuente-titulo);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ex-landing-titulo {
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 1.1;
+  letter-spacing: -.025em;
+}
+
+.ex-landing-subtitulo {
+  color: var(--texto-2);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.ex-landing-grilla {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.ex-landing-grilla > li {
+  display: flex;
+}
+
+/* ---------- Tarjeta ---------- */
+.ex-landing-tarjeta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 28px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-xl);
+  background: var(--superficie);
+  box-shadow: var(--sombra-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .35s ease, box-shadow .35s ease, transform .35s ease;
+}
+
+/* El isotipo de la marca, grande y apenas visible, asomando por la esquina */
+.ex-landing-tarjeta .ex-landing-iso {
+  --lado: 230px;
+  position: absolute;
+  z-index: -1;
+  top: -64px;
+  right: -64px;
+  opacity: .1;
+  pointer-events: none;
+  transition: transform .7s cubic-bezier(.2, .7, .2, 1), opacity .4s ease;
+}
+
+.ex-landing-tarjeta:hover,
+.ex-landing-tarjeta:focus-visible {
+  border-color: var(--acento);
+  box-shadow: var(--sombra-md), 0 18px 36px -20px color-mix(in srgb, var(--acento) 55%, transparent);
+  transform: translateY(-2px);
+}
+
+.ex-landing-tarjeta:hover .ex-landing-iso,
+.ex-landing-tarjeta:focus-visible .ex-landing-iso {
+  opacity: .17;
+  transform: translate(-10px, 10px);
+}
+
+.ex-landing-tarjeta:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 3px;
+  border-radius: var(--radio-xl);
+}
+
+.ex-landing-tarjeta__cab {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ex-landing-tarjeta__icono {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radio-lg);
+  background: var(--acento-fondo);
+  color: var(--acento-texto);
+}
+
+.ex-landing-etiqueta {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--acento-fondo);
+  color: var(--acento-texto);
+  font-family: var(--fuente-titulo);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+
+.ex-pantalla .ex-landing-tarjeta__titulo {
+  margin-top: 8px;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -.015em;
+}
+
+.ex-landing-tarjeta__desc {
+  flex: 1;
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.ex-landing-tarjeta__pie {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  font-family: var(--fuente-titulo);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.ex-landing-tarjeta__flecha {
+  color: var(--acento-texto);
+  transition: transform .3s ease;
+}
+
+.ex-landing-tarjeta:hover .ex-landing-tarjeta__flecha,
+.ex-landing-tarjeta:focus-visible .ex-landing-tarjeta__flecha {
+  transform: translateX(3px);
+}
+
+/* ---------- Herramienta que todavía no está lista ---------- */
+.ex-landing-tarjeta--proxima,
+.ex-landing-tarjeta--proxima:hover {
+  border: 1.5px dashed var(--borde-fuerte);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.ex-landing-tarjeta--proxima .ex-landing-iso,
+.ex-landing-tarjeta--proxima:hover .ex-landing-iso {
+  opacity: .06;
+  transform: none;
+}
+
+.ex-landing-tarjeta--proxima .ex-landing-tarjeta__icono,
+.ex-landing-tarjeta--proxima .ex-landing-etiqueta {
+  background: var(--hover);
+  color: var(--texto-2);
+}
+
+.ex-landing-tarjeta--proxima .ex-landing-tarjeta__pie {
+  color: var(--texto-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-landing-tarjeta,
+  .ex-landing-iso,
+  .ex-landing-tarjeta__flecha {
+    transition: none;
+  }
+
+  .ex-landing-tarjeta:hover,
+  .ex-landing-tarjeta:focus-visible,
+  .ex-landing-tarjeta:hover .ex-landing-iso,
+  .ex-landing-tarjeta:focus-visible .ex-landing-iso,
+  .ex-landing-tarjeta:hover .ex-landing-tarjeta__flecha {
+    transform: none;
+  }
+}
+
+@container ex-pantalla (max-width: 1100px) {
+  .ex-landing-grilla {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container ex-pantalla (max-width: 720px) {
+  .ex-landing-grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ex-landing-titulo {
+    font-size: 30px;
+  }
+
+  .ex-landing-subtitulo {
+    font-size: 16px;
+  }
+}

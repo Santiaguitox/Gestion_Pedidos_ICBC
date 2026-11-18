@@ -43,6 +43,9 @@ const Papelera = lazy(() => import('@/pages/Papelera'))
 const Configuracion = lazy(() => import('@/pages/Configuracion'))
 // Página pública (sin login) de análisis de piezas — ver src/pages/Analisis.jsx
 const Analisis = lazy(() => import('@/pages/Analisis'))
+// Landing pública de herramientas externas (/customer) y la herramienta de estructuras tipo tabla
+const Customer = lazy(() => import('@/pages/Customer'))
+const EstructurasTabla = lazy(() => import('@/pages/EstructurasTabla'))
 
 
 export default function App() {
@@ -63,6 +66,8 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/analisis" element={<Suspense fallback={null}><Analisis /></Suspense>} />
+              <Route path="/customer" element={<Suspense fallback={null}><Customer /></Suspense>} />
+              <Route path="/estructuras-tabla" element={<Suspense fallback={null}><EstructurasTabla /></Suspense>} />
               {/* ⚠️ TEMPORAL — borrar junto con PreviewCarga.jsx una vez
                   aprobado el splash de arranque (ver index.html). */}
               <Route path="/PreviewDeCarga" element={<PreviewCarga />} />

@@ -46,12 +46,18 @@ export async function requireUser(req: Request, allowedRoles?: string[]) {
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('id, role, full_name, email, area_equipo')
+    .select('id, role, full_name, email, area_equipo, activo')
     .eq('id', userData.user.id)
     .single()
 
   if (profileError || !profile) {
     throw new AuthError('No se encontró el perfil del usuario', 403)
+  }
+
+  // Cuenta sin invitación (alta por registro público): nunca opera, sea
+  // cual sea el rol que figure en su perfil.
+  if (!profile.activo) {
+    throw new AuthError('La cuenta no está activa', 403)
   }
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {

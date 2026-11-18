@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import '../styles/Externo.css'
+import '../styles/ExternoNav.css'
 import AccesoDesdeApp from '../components/externo/AccesoDesdeApp.jsx'
 import Encabezado from '../components/externo/Encabezado.jsx'
 import FormularioUrl from '../components/externo/FormularioUrl.jsx'
@@ -27,7 +28,7 @@ import { ejecutarAnalisis, esDesarrollo, mensajeDeError } from '../lib/externo/e
 import { minificarHtml, ordenarHtml } from '../lib/externo/ordenar.js'
 import { validarUrl } from '../lib/externo/url.js'
 
-const TITULO = 'Análisis de piezas · TeamWorkHub'
+const TITULO = 'Análisis HTML · TeamWorkHub'
 const FUENTES = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Poppins:wght@600&display=swap'
 const PROGRESO_INICIAL = { texto: '', porcentaje: 0, estados: {} }
 
