@@ -57,7 +57,7 @@ function FilaRegla({ regla, onChange, onEliminar, puedeEliminar }) {
           type="text"
           className="ap-regla-valor"
           placeholder={
-            regla.tipo === 'texto' ? 'Ej: ICBC Access Banking' :
+            regla.tipo === 'texto' ? 'Ej: nombre de un producto viejo' :
             regla.tipo === 'link' ? 'Ej: /app-icbc-old' :
             'Ej: icono-viejo.png'
           }

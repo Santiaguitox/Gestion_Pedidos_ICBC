@@ -1,8 +1,14 @@
 import { REVISION_CONFIG } from '@/lib/revision/config'
 import { templates } from '@/data/Templates/index'
 import { CompararConTemplates } from '@/lib/revision/templates'
+import { ValidarBandaHeader } from '@/lib/revision/bandaHeader'
 import { ValidarDominioImagenes, ValidarClasesDefinidas, ValidarLegal, ValidarLinks, ValidarAltImagenes, ValidarEstructuraHTML, ValidarPesoHTML } from '@/lib/revision/generales'
 import { ValidarDimensionesImagenes, ValidarPesoImagenes } from '@/lib/revision/imagenes'
+import { ValidarAltCoincideImagen, combinarAltConIA } from '@/lib/revision/altIA'
+import { verificarAltsConIA } from '@/lib/revision/altIAClient'
+import { ValidarOrtografiaYRedaccion } from '@/lib/revision/ortografia'
+import { revisarOrtografiaConIA } from '@/lib/revision/ortografiaClient'
+import { buscarLinksObsoletos, combinarLinksConObsoletos } from '@/lib/revision/terminosObsoletos'
 
 // El dominio/subdominio de icommarketing.com puede variar entre quien
 // carga el link (icbc-info.icommarketing.com vs
@@ -100,16 +106,25 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     Array.from({ length: Math.min(CONCURRENCIA_IMAGENES, srcList.length) }, worker)
   )
 
-  const [dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates] = await Promise.all([
+  // Verificación del alt contra la imagen con IA (Edge Function). Se anida
+  // dentro de "Alt de imágenes" y, si la IA no está disponible, no mueve el
+  // resultado de la prueba (ver altIA.js).
+  onProgreso?.('Verificando alts y ortografía con IA...', 92)
+
+  const [dominioImagenes, clasesCSS, legal, links, altBasico, altIA, ortografia, dimensiones, pesoImagenes, estructuraHTML, resumenTemplates] = await Promise.all([
     Promise.resolve(ValidarDominioImagenes(doc)),
     Promise.resolve(ValidarClasesDefinidas(doc)),
     Promise.resolve(ValidarLegal(doc)),
     Promise.resolve(ValidarLinks(doc)),
     Promise.resolve(ValidarAltImagenes(doc)),
+    ValidarAltCoincideImagen(doc, verificarAltsConIA),
+    // Tarjeta aparte (11), fuera del "X de 10 pruebas": ver ortografia.js.
+    ValidarOrtografiaYRedaccion(doc, revisarOrtografiaConIA),
     ValidarDimensionesImagenes(doc, cacheDatos),
     ValidarPesoImagenes(doc, cacheDatos),
     Promise.resolve(ValidarEstructuraHTML(doc, htmlAAnalizar)),
-    Promise.resolve(CompararConTemplates(doc, templates)),
+    // Estructuras obsoletas: plantillas viejas + banda de header que no mide 70px.
+    Promise.resolve([...CompararConTemplates(doc, templates), ...bandaHeaderSegura(doc)]),
   ])
 
   onProgreso?.('', 100)
@@ -118,8 +133,22 @@ export async function correrRevisionCompleta({ modo, url, html, onProgreso }) {
     htmlAnalizado: htmlAAnalizar,
     resultados: {
       pesoHTML: ValidarPesoHTML(htmlAAnalizar), pesoImagenes, estructuraHTML,
-      dominioImagenes, clasesCSS, legal, links, altImagenes, dimensiones, resumenTemplates,
+      dominioImagenes, clasesCSS, legal,
+      // Links a canales dados de baja (accessbanking.com.ar): detalle menor
+      // dentro de Links, sin IA y sin mover si la prueba pasa o falla.
+      links: combinarLinksConObsoletos(links, buscarLinksObsoletos(doc)),
+      altImagenes: combinarAltConIA(altBasico, altIA),
+      dimensiones, resumenTemplates, ortografia,
     },
+  }
+}
+
+// Una falla inesperada al leer la banda no debe tirar toda la revisión.
+function bandaHeaderSegura(doc) {
+  try {
+    return ValidarBandaHeader(doc)
+  } catch {
+    return []
   }
 }
 

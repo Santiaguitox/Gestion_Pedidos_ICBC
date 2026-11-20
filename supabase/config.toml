@@ -443,3 +443,13 @@ entrypoint = "./functions/delete-user/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/enviar-push/index.ts"
+
+[functions.verificar-alt-imagenes]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/verificar-alt-imagenes/index.ts"
+
+[functions.revisar-ortografia]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/revisar-ortografia/index.ts"

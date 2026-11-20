@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useNotificaciones } from '@/context/useNotificaciones'
@@ -9,6 +9,15 @@ import { es } from 'date-fns/locale'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import { descargarPiezaIndividual, descargarTodasLasPiezas } from '@/lib/descargarPiezas'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+
+// Espera mínima entre dos revisiones MANUALES de la misma pieza (botón de
+// refresh de la tarjeta). Cada revisión vuelve a pedir el HTML y todas las
+// imágenes al proxy, así que varios clics seguidos lo cargan sin aportar
+// nada. Se mide contra revision_at (ya guardado en la pieza), por lo que
+// vale aunque se recargue la página o se abra desde otro equipo. No aplica
+// a la revisión automática al cargar/editar el link ni a la pantalla de
+// Revisión de emails (esa se usa a propósito para ver resultados en vivo).
+const ESPERA_REVISION_MS = 60_000
 
 function CopyAllBtn({ entregables }) {
   const { showError } = useNotificaciones()
@@ -39,6 +48,22 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
   const [editando, setEditando] = useState(false)
   const [error, setError] = useState('')
   const bloqueado = ent.aprobado && !isSuperAdmin
+
+  // Segundos que faltan para poder volver a revisar la pieza a mano. El
+  // reloj solo corre mientras hay una espera activa.
+  const [ahora, setAhora] = useState(() => Date.now())
+  const ultimaRevisionMs = ent.revision_at ? new Date(ent.revision_at).getTime() : null
+  const restanteMs = ultimaRevisionMs == null || Number.isNaN(ultimaRevisionMs)
+    ? 0
+    // Tope en ESPERA_REVISION_MS por si el reloj de otro equipo está adelantado.
+    : Math.min(ESPERA_REVISION_MS, ultimaRevisionMs + ESPERA_REVISION_MS - ahora)
+  const esperando = restanteMs > 0
+  const segundosRestantes = Math.ceil(restanteMs / 1000)
+  useEffect(() => {
+    if (!esperando) return
+    const id = setInterval(() => setAhora(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [esperando])
 
   async function guardarCambios() {
     setSaving(true)
@@ -222,9 +247,18 @@ function EntregableItem({ ent, canWrite, isSuperAdmin, onUpdate, onEliminar, otr
                   BaseDatosSection.jsx: solo aparece después de que ya
                   hubo un resultado, nunca mientras nunca se corrió. */}
               <button
-                onClick={() => dispararRevision(ent.id, ent.link_online)}
+                onClick={() => {
+                  // Doble chequeo: el botón ya está deshabilitado, pero el
+                  // reloj puede haber quedado atrasado hasta el próximo tick.
+                  if (Date.now() - (ultimaRevisionMs ?? 0) < ESPERA_REVISION_MS && ultimaRevisionMs != null) {
+                    setAhora(Date.now())
+                    return
+                  }
+                  dispararRevision(ent.id, ent.link_online)
+                }}
+                disabled={esperando}
                 className="entregable-reverificar-btn"
-                title="Volver a revisar"
+                title={esperando ? `Revisada hace instantes. Podés volver a revisarla en ${segundosRestantes} s` : 'Volver a revisar'}
               >
                 <RefreshCw size={13} />
               </button>

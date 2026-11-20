@@ -12,7 +12,7 @@ export function ValidarDominioImagenes(doc) {
       ok: false,
       tipo: 'Dominio de imágenes',
       detalle: `${imagenesErroneas.length} de ${todasLasImagenes.length} imágenes usan un dominio no aprobado`,
-      checks: imagenesErroneas.map(src => ({ ok: false, detalle: src.split('/').pop() })),
+      checks: imagenesErroneas.map(src => ({ ok: false, detalle: src.split('/').pop(), ref: { tipo: 'img', src } })),
     }
   }
 
@@ -171,11 +171,12 @@ export function ValidarLinks(doc) {
 
 
     linksRevisados++
+    const ref = { tipo: 'link', href, texto }
 
     // 1. href vacío — aplica a todos
     if (!href) {
       const label = soloImagen ? 'Link de imagen' : `Link "${texto}"`
-      problemas.push({ detalle: `${label} tiene el href vacío` })
+      problemas.push({ detalle: `${label} tiene el href vacío`, ref })
       return
     }
 
@@ -185,7 +186,7 @@ export function ValidarLinks(doc) {
     // Verificar target="_blank" en todos los links
     if (link.getAttribute('target') !== '_blank') {
       const label = soloImagen ? 'Link de imagen' : `Link "${texto}"`
-      problemas.push({ detalle: `${label} no tiene target="_blank"`, advertencia: true })
+      problemas.push({ detalle: `${label} no tiene target="_blank"`, advertencia: true, ref })
     }
 
     // 2. Validaciones para links con texto
@@ -200,32 +201,32 @@ export function ValidarLinks(doc) {
 
     if (textoPareceTelefono) {
       if (!esTel && !esWhatsapp) {
-        problemas.push({ detalle: `Link "${texto}" parece un teléfono pero el href no usa tel: ni whatsapp (href: ${href})` })
+        problemas.push({ detalle: `Link "${texto}" parece un teléfono pero el href no usa tel: ni whatsapp (href: ${href})`, ref })
         return
       }
       const numeroTexto = texto.replace(/\D/g, '')
       const numeroHref = href.replace(/\D/g, '')
       if (!numeroHref.endsWith(numeroTexto) && !numeroTexto.endsWith(numeroHref)) {
-        problemas.push({ detalle: `Teléfono "${texto}" no concuerda con el href "${href}"` })
+        problemas.push({ detalle: `Teléfono "${texto}" no concuerda con el href "${href}"`, ref })
       }
     } else if (textoPareceEmail) {
       if (!esMailto) {
-        problemas.push({ detalle: `Link "${texto}" parece un email pero el href no usa mailto: (href: ${href})` })
+        problemas.push({ detalle: `Link "${texto}" parece un email pero el href no usa mailto: (href: ${href})`, ref })
         return
       }
       const mailHref = href.replace('mailto:', '').split('?')[0].trim()
       if (mailHref.toLowerCase() !== texto.toLowerCase()) {
-        problemas.push({ detalle: `Email "${texto}" no concuerda con el href "${mailHref}"` })
+        problemas.push({ detalle: `Email "${texto}" no concuerda con el href "${mailHref}"`, ref })
       }
     } else if (textoPareceWeb) {
       if (!esWeb) {
-        problemas.push({ detalle: `Link "${texto}" parece una URL pero no usa https:// (href: ${href})` })
+        problemas.push({ detalle: `Link "${texto}" parece una URL pero no usa https:// (href: ${href})`, ref })
         return
       }
       const urlTexto = decodeURIComponent(texto.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase())
       const urlHref = decodeURIComponent(href.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase())
       if (!urlHref.startsWith(urlTexto) && !urlTexto.startsWith(urlHref)) {
-        problemas.push({ detalle: `URL "${texto}" no concuerda con el href "${href}"` })
+        problemas.push({ detalle: `URL "${texto}" no concuerda con el href "${href}"`, ref })
       }
     }
   })
@@ -249,12 +250,12 @@ export function ValidarLinks(doc) {
 
     const matchEmail = texto.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)
     if (matchEmail) {
-      problemas.push({ detalle: `Posible email sin link: "${matchEmail[0]}"`, advertencia: true })
+      problemas.push({ detalle: `Posible email sin link: "${matchEmail[0]}"`, advertencia: true, ref: { tipo: 'texto', fragmento: matchEmail[0] } })
     }
 
     const matchWeb = texto.match(/(?:https?:\/\/|www\.)[^\s]+/)
     if (matchWeb) {
-      problemas.push({ detalle: `Posible URL sin link: "${matchWeb[0]}"`, advertencia: true })
+      problemas.push({ detalle: `Posible URL sin link: "${matchWeb[0]}"`, advertencia: true, ref: { tipo: 'texto', fragmento: matchWeb[0] } })
     }
   }
 
@@ -267,8 +268,8 @@ export function ValidarLinks(doc) {
     detalle: `${linksRevisados} links revisados`,
     correctos: linksRevisados - errores.length,
     totalRevisados: linksRevisados,
-    checks: errores.map(p => ({ ok: false, detalle: p.detalle })),
-    advertencias: advertencias.map(p => ({ detalle: p.detalle })),
+    checks: errores.map(p => ({ ok: false, detalle: p.detalle, ref: p.ref })),
+    advertencias: advertencias.map(p => ({ detalle: p.detalle, ref: p.ref })),
   }
 }
 
@@ -283,15 +284,15 @@ export function ValidarAltImagenes(doc) {
     const nombre = src.split('/').pop() || 'imagen sin src'
     
     if (!img.hasAttribute('alt')) {
-      sinAlt.push(nombre)
+      sinAlt.push({ nombre, src })
     } else if (img.getAttribute('alt').trim() === '') {
-      altVacio.push(nombre)
+      altVacio.push({ nombre, src })
     }
   })
 
   const checks = []
-  sinAlt.forEach(nombre => checks.push({ ok: false, detalle: `Sin atributo alt: ${nombre}` }))
-  altVacio.forEach(nombre => checks.push({ ok: false, detalle: `Alt vacío: ${nombre}` }))
+  sinAlt.forEach(({ nombre, src }) => checks.push({ ok: false, detalle: `Sin atributo alt: ${nombre}`, ref: { tipo: 'img', src } }))
+  altVacio.forEach(({ nombre, src }) => checks.push({ ok: false, detalle: `Alt vacío: ${nombre}`, ref: { tipo: 'img', src } }))
 
   if (checks.length > 0) {
     return {

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { correrRevisionCompleta, resumirResultados, identificadorPieza } from '@/lib/revision/ejecutarRevision'
 import ResultadoPanel from '@/components/revision/ResultadoPanel'
+import { irAElemento } from '@/lib/revision/localizarEnPreview'
 import { Search, Trash2, RotateCcw, ExternalLink } from 'lucide-react'
 import '@/styles/RevisionEmail.css'
 
@@ -67,6 +68,16 @@ export default function RevisionEmail() {
       // srcDoc local — si falla, el iframe simplemente no se
       // auto-ajusta esa vez (no es crítico, el contenido sigue siendo
       // visible con el alto que ya tenía).
+    }
+  }
+
+  // Click en un hallazgo: lleva al elemento correspondiente del preview.
+  function handleIrAElemento(ref) {
+    try {
+      const doc = iframeRef.current?.contentDocument
+      if (doc) irAElemento(doc, ref)
+    } catch {
+      // Sin acceso al documento del iframe: simplemente no pasa nada.
     }
   }
 
@@ -160,8 +171,14 @@ export default function RevisionEmail() {
     const okN = todos.filter(b => b.ok).length
     const warnN = todos.filter(b => !b.ok && b.advertencia).length
     const errN = todos.filter(b => !b.ok && !b.advertencia).length
+    const iaAlt = resultados.altImagenes?.ia
     const detalleMenorN = (resultados.links?.advertencias?.length ?? 0)
       + (resultados.dimensiones?.advertencias?.length ?? 0)
+      + (iaAlt && !iaAlt.omitido ? (iaAlt.advertencias?.length ?? 0) : 0)
+      // Tarjeta "Ortografía y redacción": sus hallazgos y términos
+      // desactualizados son detalles menores (no entra en las 10 pruebas).
+      + (resultados.ortografia?.hallazgos?.length ?? 0)
+      + (resultados.ortografia?.obsoletos?.length ?? 0)
     return { okN, warnN, errN, detalleMenorN, score: okN + warnN, total: todos.length }
   }
   const score = resultados ? calcularScore(resultados) : null
@@ -309,7 +326,7 @@ export default function RevisionEmail() {
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{progreso || 'Analizando…'}</span>
               </div>
             ) : (
-              resultados && <ResultadoPanel resultados={resultados} />
+              resultados && <ResultadoPanel resultados={resultados} onIr={handleIrAElemento} />
             )}
           </div>
 

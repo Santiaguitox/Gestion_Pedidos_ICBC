@@ -33,62 +33,84 @@ function SubcheckList({ checks }) {
 // Links, "Requiere atención" en Alt de imágenes, imágenes pesadas
 // ordenadas en Peso de imágenes) — el color sigue la severidad real de
 // cada caso, no siempre es ámbar.
-function ItemsList({ label, items, color = 'var(--yellow-text)' }) {
+function ItemsList({ label, items, color = 'var(--yellow-text)', onIr }) {
   if (!items?.length) return null
   return (
     <div className="re-items-block">
       <div className="re-items-label" style={{ color }}>{label}</div>
       <div className="re-items-list">
-        {items.map((it, i) => (
-          <div key={i} className="re-item-row">
-            <span className="re-item-dot" style={{ background: color }} />
-            {typeof it === 'string' ? it : it.detalle}
-          </div>
-        ))}
+        {items.map((it, i) => {
+          const ref = typeof it === 'string' ? null : it.ref
+          const clickeable = Boolean(ref && onIr)
+          return (
+            <div
+              key={i}
+              className={`re-item-row${clickeable ? ' re-item-clickeable' : ''}`}
+              {...(clickeable && {
+                role: 'button',
+                tabIndex: 0,
+                title: 'Ver en la pieza',
+                onClick: () => onIr(ref),
+                onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onIr(ref) } },
+              })}
+            >
+              <span className="re-item-dot" style={{ background: color }} />
+              {typeof it === 'string' ? it : it.detalle}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-export default function ResultadoPanel({ resultados }) {
+// onIr(ref): opcional. Si viene, los ítems con `ref` se pueden clickear para
+// ubicarlos en la pieza renderizada (ver lib/revision/localizarEnPreview).
+export default function ResultadoPanel({ resultados, onIr }) {
   return (
     <div className="re-cards">
 
       <ResultadoCard resultado={{ ...resultados.estructuraHTML, numero: '01' }} delay={0}>
         <SubcheckList checks={resultados.estructuraHTML?.checks?.filter(c => c.ok)} />
-        <ItemsList label="Requiere atención" items={resultados.estructuraHTML?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.estructuraHTML?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.clasesCSS, numero: '02' }} delay={80} />
 
       <ResultadoCard resultado={{ ...resultados.legal, numero: '03' }} delay={160}>
         <SubcheckList checks={resultados.legal?.checks?.filter(c => c.ok)} />
-        <ItemsList label="Requiere atención" items={resultados.legal?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.legal?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.links, numero: '04' }} delay={240}>
-        <ItemsList label="Requiere atención" items={resultados.links?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
-        <ItemsList label="Detalle menor" items={resultados.links?.advertencias} color="var(--yellow-text)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.links?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Detalle menor" items={resultados.links?.advertencias} color="var(--yellow-text)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.dominioImagenes, numero: '05' }} delay={320}>
-        <ItemsList label="Requiere atención" items={resultados.dominioImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.dominioImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.altImagenes, numero: '06' }} delay={400}>
-        <ItemsList label="Requiere atención" items={resultados.altImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.altImagenes?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        {/* Verificación con IA (el alt corresponde a lo que muestra la
+            imagen): vive DENTRO de esta tarjeta, no es una prueba aparte.
+            Ver combinarAltConIA en lib/revision/altIA. */}
+        <ItemsList onIr={onIr} label="El alt no coincide con la imagen" items={resultados.altImagenes?.ia?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Detalle menor" items={resultados.altImagenes?.ia && !resultados.altImagenes.ia.omitido ? resultados.altImagenes.ia.advertencias : []} color="var(--yellow-text)" />
+        <ItemsList onIr={onIr} label="Verificación con IA" items={resultados.altImagenes?.ia?.omitido ? [resultados.altImagenes.ia.detalle] : []} color="var(--yellow-text)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.dimensiones, numero: '07' }} delay={480}>
-        <ItemsList label="Requiere atención" items={resultados.dimensiones?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Requiere atención" items={resultados.dimensiones?.checks?.filter(c => !c.ok)} color="var(--accent-primary)" />
         {/* Separadores estructurales estirados: mismo patrón que Links —
             no fallan la prueba, se listan en amarillo por si vale la
             pena mirarlos. Ver lib/imagenesEstructurales. */}
-        <ItemsList label="Detalle menor" items={resultados.dimensiones?.advertencias} color="var(--yellow-text)" />
+        <ItemsList onIr={onIr} label="Detalle menor" items={resultados.dimensiones?.advertencias} color="var(--yellow-text)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.pesoImagenes, numero: '08' }} delay={560}>
-        <ItemsList label="Ordenadas por peso" items={resultados.pesoImagenes?.checks} color="var(--accent-primary)" />
+        <ItemsList onIr={onIr} label="Ordenadas por peso" items={resultados.pesoImagenes?.checks} color="var(--accent-primary)" />
       </ResultadoCard>
 
       <ResultadoCard resultado={{ ...resultados.pesoHTML, numero: '09' }} delay={640} />
@@ -111,10 +133,23 @@ export default function ResultadoPanel({ resultados }) {
                   </div>
                   {templates.map((t, i) => (
                     <div key={i} className="re-obsoleta-detail-box">
-                      <div className="re-obsoleta-tpl-name">Plantilla: <code>{t.nombre}</code></div>
-                      {t.errores.map((e, j) => (
-                        <div key={j} className="re-obsoleta-tpl-detail"><strong>{e.tipo}:</strong> {e.detalle}</div>
-                      ))}
+                      <div className="re-obsoleta-tpl-name">{t.banda ? t.nombre : <>Plantilla: <code>{t.nombre}</code></>}</div>
+                      {t.errores.map((e, j) => {
+                        const clickeable = Boolean(e.ref && onIr)
+                        return (
+                          <div
+                            key={j}
+                            className={`re-obsoleta-tpl-detail${clickeable ? ' re-item-clickeable' : ''}`}
+                            {...(clickeable && {
+                              role: 'button',
+                              tabIndex: 0,
+                              title: 'Ver en la pieza',
+                              onClick: () => onIr(e.ref),
+                              onKeyDown: ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onIr(e.ref) } },
+                            })}
+                          ><strong>{e.tipo}:</strong> {e.detalle}</div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
@@ -133,6 +168,13 @@ export default function ResultadoPanel({ resultados }) {
         )
       })()}
 
+      {/* Ortografía y redacción: tarjeta aparte, siempre amarilla (nunca
+          error) y fuera del "X de 10 pruebas". Ver lib/revision/ortografia. */}
+      <ResultadoCard resultado={resultados.ortografia ? { ...resultados.ortografia, numero: '11' } : null} delay={800}>
+        <ItemsList onIr={onIr} label="Posibles errores de ortografía y redacción" items={resultados.ortografia?.hallazgos} color="var(--yellow-text)" />
+        <ItemsList onIr={onIr} label="Términos desactualizados" items={resultados.ortografia?.obsoletos} color="var(--yellow-text)" />
+        <ItemsList onIr={onIr} label="Aviso" items={resultados.ortografia?.avisos} color="var(--yellow-text)" />
+      </ResultadoCard>
 
     </div>
   )

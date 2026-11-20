@@ -102,3 +102,61 @@ describe('ValidarDimensionesImagenes — formato real vs extensión', () => {
     expect(r.advertencias).toEqual([])
   })
 })
+
+describe('ValidarDimensionesImagenes — medidas reales impares', () => {
+  const U = 'https://cdn.test/'
+  const cacheDe = (nombre, width, height) => ({ [`${U}${nombre}`]: { width, height, formato: 'png', peso: 100 } })
+  const conMedidas = (nombre, w, h) => img({ src: `${U}${nombre}`, width: String(w), height: String(h) })
+
+  it('avisa cuando el ancho real es impar', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conMedidas('a.png', 300, 100)), cacheDe('a.png', 601, 200))
+    expect(r.ok).toBe(true)
+    expect(r.advertencias).toHaveLength(1)
+    expect(r.advertencias[0].detalle).toBe('a.png: mide 601x200, el ancho es impar (conviene par)')
+  })
+
+  it('avisa cuando el alto real es impar y cuando son los dos', async () => {
+    const alto = await ValidarDimensionesImagenes(docCon(conMedidas('b.png', 300, 100)), cacheDe('b.png', 600, 201))
+    expect(alto.advertencias[0].detalle).toContain('el alto es impar')
+    const ambos = await ValidarDimensionesImagenes(docCon(conMedidas('c.png', 300, 100)), cacheDe('c.png', 601, 201))
+    expect(ambos.advertencias[0].detalle).toContain('el ancho y el alto son impares')
+  })
+
+  it('no avisa con medidas reales pares, aunque la declarada sea impar (1200x850 declarado 600x425)', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conMedidas('d.png', 600, 425)), cacheDe('d.png', 1200, 850))
+    expect(r.advertencias).toEqual([])
+    expect(r.detalle).toContain('proporciones correctas')
+  })
+
+  it('avisa también si no tiene width/height declarados', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(img({ src: `${U}e.png` })), cacheDe('e.png', 301, 100))
+    expect(r.advertencias).toHaveLength(1)
+  })
+
+  it('no avisa por separadores ni líneas punteadas', async () => {
+    const doc = docCon(conMedidas('Img_Separador265x100.png', 265, 100), conMedidas('MediaLineaPunteada.png', 265, 100))
+    const cache = { ...cacheDe('Img_Separador265x100.png', 265, 101), ...cacheDe('MediaLineaPunteada.png', 265, 101) }
+    const r = await ValidarDimensionesImagenes(doc, cache)
+    expect(r.advertencias).toEqual([])
+  })
+
+  it('una imagen repetida avisa una sola vez', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conMedidas('f.png', 300, 100), conMedidas('f.png', 300, 100)), cacheDe('f.png', 601, 200))
+    expect(r.advertencias).toHaveLength(1)
+  })
+
+  it('sin datos reales o con error de medición no avisa', async () => {
+    const sin = await ValidarDimensionesImagenes(docCon(conMedidas('g.png', 300, 100)), {})
+    expect(sin.advertencias).toEqual([])
+    const conError = await ValidarDimensionesImagenes(docCon(conMedidas('h.png', 300, 100)), { [`${U}h.png`]: { error: true } })
+    expect(conError.advertencias).toEqual([])
+  })
+
+  it('no cambia si la prueba pasa; el error de proporción sigue siendo error y el texto cuenta los detalles menores', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conMedidas('i.png', 600, 300)), cacheDe('i.png', 1201, 400))
+    expect(r.ok).toBe(false)
+    expect(r.checks).toHaveLength(1)
+    expect(r.advertencias).toHaveLength(1)
+    expect(r.detalle).toBe('1 problema encontrado (+1 detalle menor)')
+  })
+})

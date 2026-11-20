@@ -469,6 +469,8 @@ src/
 | `reset-user-password` | Fuerza el reset de contraseña de otro usuario — solo `super_admin` |
 | `escribir-sheet` | Escribe una fila en Google Sheets (hoja pedidos o diseño) — soporta repeticiones de día/horario al registrar |
 | `enviar-push` | Envía las notificaciones Web Push (VAPID) a las suscripciones del usuario — invocada por el trigger `notif_despachar_push`, con colapso por `grupo_key` |
+| `verificar-alt-imagenes` | Verifica con IA (Claude Haiku 5.5) que el `alt` de cada imagen corresponda a lo que muestra: si la imagen tiene texto, el alt debe reproducirlo; si no, debe describirla. Solo revisión interna. Exige login y rol distinto de `viewer`, acepta únicamente imágenes del CDN aprobado, cachea por (imagen, alt) y tiene tope diario de imágenes. Los PNG de hasta 300 KB con más de 5 % de transparencia (logos blancos sobre transparente) se pintan sobre un fondo antes de enviarlos, para que el modelo vea lo mismo que ve la persona (`png.ts`). Los GIF animados (más de un cuadro) no se mandan a la IA, que solo vería el primer cuadro: quedan como detalle menor "GIF animado" para revisar a ojo y no gastan cupo (`gif.ts`). Si la IA no está disponible, la revisión sigue sin ese chequeo |
+| `revisar-ortografia` | Revisa con IA (Claude Haiku 5.5) errores objetivos de escritura del texto visible, los `alt` y los `title` de la pieza: ortografía, tildes, conjugación, concordancia, palabras repetidas y signos ¿¡. No juzga estilo. Usa el glosario `src/lib/revision/terminosPermitidos.js` (siglas, marcas, productos que no se marcan) y descarta hallazgos que no aparezcan textuales en el texto. Si la IA devuelve un JSON roto, se reintenta una vez. Saca las marcas de nota al pie como `(1)` de los alt y title, y los `<sup>` de nota del cuerpo. Solo revisión interna. Exige login y rol distinto de `viewer`, cachea por contenido y tiene tope diario de revisiones. Si la IA no está disponible, la revisión sigue sin ese chequeo |
 
 ---
 
@@ -493,6 +495,24 @@ Crear un archivo `.env` en la raíz con:
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-key>
 ```
+
+Los secretos del servidor **no** van en el `.env` (todo lo que empieza con `VITE_` termina dentro del código que baja el navegador): viven como secretos de Supabase (Edge Functions → Secrets, o `supabase secrets set`). Para la verificación de alts con IA:
+
+| Secreto | Obligatorio | Descripción |
+|---------|-------------|-------------|
+| `ANTHROPIC_API_KEY` | Sí | API key de la Claude Console. Sin ella la verificación se omite y la revisión sigue normal |
+| `ALT_IA_MODELO` | No | Modelo a usar. Por defecto `claude-haiku-5-5` |
+| `ALT_IA_TOPE_DIARIO` | No | Máximo de imágenes analizadas por día. Por defecto `300` |
+| `ORTOGRAFIA_IA_MODELO` | No | Modelo para la revisión de ortografía. Por defecto `claude-haiku-5-5` |
+| `ORTOGRAFIA_IA_TOPE_DIARIO` | No | Máximo de revisiones de ortografía por día (una por pieza). Por defecto `150` |
+| `IA_SALIDA_ESTRUCTURADA` | No | `verificar-alt-imagenes` pide a la API salida estructurada (JSON con forma fija). Poné `false` para apagarla sin tocar el código si la API rechazara el esquema. Por defecto, activa |
+| `IA_ORTOGRAFIA_FORMATO` | No | Salida estructurada para `revisar-ortografia`. APAGADA por defecto: con piezas reales el modelo revisaba peor con ella. Poné `true` solo para comparar |
+
+**Registro temporal de respuestas de IA.** `revisar-ortografia` guarda en `ia_respuestas_log` (migración `20261120150000_ia_respuestas_log.sql`) lo que se envió a la IA, su respuesta cruda, el `stop_reason`, los tokens, cuántos hallazgos devolvió la IA y cuántos quedaron tras los filtros. Solo registra consultas reales (no las que salen del caché) y borra solo lo de más de 7 días cada vez que guarda uno. La tabla no es accesible desde la app (RLS sin políticas); se mira desde el editor de Supabase. La vista `ia_metricas_diarias` resume por día: revisiones, fallas, respuestas vacías de la IA, hallazgos descartados por los filtros y tokens. Consulta útil: `select created_at, estado, hallazgos_ia, hallazgos_finales, left(respuesta, 300) from ia_respuestas_log order by created_at desc limit 20;`. Los interruptores `IA_SALIDA_ESTRUCTURADA` e `IA_ORTOGRAFIA_FORMATO` forman parte de la clave del caché, por eso cambiarlos y volver a revisar la misma pieza hace una consulta nueva. Si una respuesta viene con el JSON roto, el reintento queda registrado como una fila más. Migración `20261120170000_ia_log_sin_cebo.sql`: aplicarla antes de desplegar `revisar-ortografia`.
+
+Tras cargarlos hay que desplegar las funciones (`supabase functions deploy verificar-alt-imagenes` y `supabase functions deploy revisar-ortografia`) y aplicar las migraciones `20261118150000_alt_imagenes_ia.sql` y `20261118170000_ortografia_ia.sql`. `revisar-ortografia` usa el mismo `ANTHROPIC_API_KEY`. El tope duro de gasto está en la Claude Console (límite mensual de la organización).
+
+La tarjeta **11 · Ortografía y redacción** de la revisión interna es siempre amarilla (nunca error) y no entra en el "X de 10 pruebas". También avisa, sin IA, cuando el texto menciona "ICBC Access Banking" / "Access Banking" (y el link a `accessbanking.com.ar` aparece como detalle menor en Links). Los canales dados de baja se mantienen en `src/lib/revision/terminosObsoletos.js`. Para que la ortografía cuente como prueba, sumar `'ortografia'` a `BLOQUES_RESUMEN` en `ejecutarRevision.js` y a `claves` en `calcularScore` de `RevisionEmail.jsx`.
 
 ---
 
@@ -520,3 +540,12 @@ El proyecto se deploya automáticamente en Vercel al hacer push a `main`. Las va
 ## Tema
 
 La app soporta modo oscuro y claro. El tema se guarda en `localStorage` y se aplica via `data-theme` en el `<html>`. Las variables CSS están definidas en `global.css` bajo `[data-theme="dark"]` y `[data-theme="light"]`. Las secciones con CSS propio (4 herramientas de revisión/auditoría + Editor de Piezas + Estadísticas) tienen su hoja aislada, con sus propias variables semánticas mapeadas a las del tema general (no usan `global.css` directamente, para evitar colisiones de nombres de clase).
+
+### Revisión interna: click en un hallazgo
+
+Los hallazgos de imágenes, links y ortografía/redacción traen un `ref` (`img`, `link`, `texto` o `atributo`). Al hacer click en el listado de resultados, `src/lib/revision/localizarEnPreview.js` busca el elemento en el iframe del preview, hace scroll y lo resalta unos segundos. Los hallazgos sin `ref` (estructura, CSS, legales) no son clickeables.
+
+
+### Banda de header de 70px
+
+`src/lib/revision/bandaHeader.js` lee la banda de header de la pieza (tabla de 3 filas: espaciador, logo, espaciador) y suma sus alturas declaradas. Si no da `ALTO_BANDA` (70, definido en `lib/editor/headers.js`) o no se puede identificar la banda, suma una entrada a la tarjeta 10 (Estructuras obsoletas), que queda roja. Los headers viejos con una banda interna anidada se miden completos.

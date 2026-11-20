@@ -29,6 +29,8 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
   // Dedupe del aviso de extensión: el mismo src puede aparecer en
   // varios <img> de la pieza y con avisar una vez alcanza.
   const srcConMismatch = new Set()
+  // Mismo criterio para el aviso de medidas impares.
+  const srcConImpar = new Set()
   const TOLERANCIA = 0.02
 
   for (let idx = 0; idx < imagenes.length; idx++) {
@@ -43,10 +45,10 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
     const altoStyle = extraerMedidaStyle(style, 'height')
 
     if (anchoAtrib !== null && anchoStyle !== null && anchoAtrib !== anchoStyle) {
-      problemas.push({ nombre, detalle: `Ancho inconsistente — atributo: ${anchoAtrib}px, style: ${anchoStyle}px` })
+      problemas.push({ nombre, src, detalle: `Ancho inconsistente — atributo: ${anchoAtrib}px, style: ${anchoStyle}px` })
     }
     if (altoAtrib !== null && altoStyle !== null && altoAtrib !== altoStyle) {
-      problemas.push({ nombre, detalle: `Alto inconsistente — atributo: ${altoAtrib}px, style: ${altoStyle}px` })
+      problemas.push({ nombre, src, detalle: `Alto inconsistente — atributo: ${altoAtrib}px, style: ${altoStyle}px` })
     }
 
     const anchoDec = anchoAtrib ?? anchoStyle
@@ -67,8 +69,27 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
       if (formatoSegunExt && formatoSegunExt !== real.formato && !srcConMismatch.has(src)) {
         srcConMismatch.add(src)
         advertencias.push({
-          detalle: `${nombre}: la extensión dice .${ext} pero el archivo es ${real.formato.toUpperCase()} — se ve bien igual, pero revisar el peso (un PNG fotográfico pesa más que su JPEG equivalente)`
+          detalle: `${nombre}: la extensión dice .${ext} pero el archivo es ${real.formato.toUpperCase()} — se ve bien igual, pero revisar el peso (un PNG fotográfico pesa más que su JPEG equivalente)`,
+          ref: { tipo: 'img', src },
         })
+      }
+    }
+
+    // Medidas REALES del archivo impares: las imágenes se piden al doble de
+    // tamaño para que no pierdan resolución al escalarse, y con un lado
+    // impar el 50 % cae en medio píxel y el navegador tiene que redondear.
+    // Se avisa siempre (sea 1x o 2x) como detalle menor. Las medidas
+    // declaradas no se miran: un 425 impar declarado para un archivo de 850
+    // está bien. Separadores y líneas punteadas quedan afuera (ver
+    // lib/imagenesEstructurales).
+    if (real && !real.error && real.width && real.height && src
+        && !esImagenEstructural(nombre) && !esImagenEstructural(src) && !srcConImpar.has(src)) {
+      const anchoImpar = real.width % 2 !== 0
+      const altoImpar = real.height % 2 !== 0
+      if (anchoImpar || altoImpar) {
+        srcConImpar.add(src)
+        const cual = anchoImpar && altoImpar ? 'el ancho y el alto son impares' : anchoImpar ? 'el ancho es impar' : 'el alto es impar'
+        advertencias.push({ detalle: `${nombre}: mide ${real.width}x${real.height}, ${cual} (conviene par)`, ref: { tipo: 'img', src } })
       }
     }
 
@@ -88,11 +109,13 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
           // no una decisión de layout.
           if (esImagenEstructural(nombre) || esImagenEstructural(src)) {
             advertencias.push({
-              detalle: `${nombre}: separador estructural estirado — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec} (esperado en separadores)`
+              detalle: `${nombre}: separador estructural estirado — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec} (esperado en separadores)`,
+              ref: { tipo: 'img', src },
             })
           } else {
             problemas.push({
               nombre,
+              src,
               detalle: `Proporción incorrecta — imagen real: ${real.width}x${real.height}, declarado: ${anchoDec}x${altoDec}`
             })
           }
@@ -105,14 +128,15 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
   // advertencias viajan aparte y la UI las lista como "Detalle menor"
   // en amarillo (ResultadoPanel) — no bajan el score.
   if (problemas.length > 0 || advertencias.length > 0) {
+    const detallesMenores = `${advertencias.length} detalle${advertencias.length > 1 ? 's' : ''} menor${advertencias.length > 1 ? 'es' : ''}`
     const detalle = problemas.length > 0
-      ? `${problemas.length} problema${problemas.length > 1 ? 's' : ''} encontrado${problemas.length > 1 ? 's' : ''}${advertencias.length > 0 ? ` (+${advertencias.length} detalle${advertencias.length > 1 ? 's' : ''} menor${advertencias.length > 1 ? 'es' : ''} en separadores)` : ''}`
-      : `Proporciones correctas — ${advertencias.length} separador${advertencias.length > 1 ? 'es' : ''} estructural${advertencias.length > 1 ? 'es' : ''} estirado${advertencias.length > 1 ? 's' : ''} a revisar si hace falta`
+      ? `${problemas.length} problema${problemas.length > 1 ? 's' : ''} encontrado${problemas.length > 1 ? 's' : ''}${advertencias.length > 0 ? ` (+${detallesMenores})` : ''}`
+      : `Proporciones correctas — ${detallesMenores} a revisar si hace falta`
     return {
       ok: problemas.length === 0,
       tipo: 'Dimensiones de imágenes',
       detalle,
-      checks: problemas.map(p => ({ ok: false, detalle: `${p.nombre}: ${p.detalle}` })),
+      checks: problemas.map(p => ({ ok: false, detalle: `${p.nombre}: ${p.detalle}`, ref: { tipo: 'img', src: p.src } })),
       advertencias,
     }
   }
@@ -147,6 +171,7 @@ export async function ValidarPesoImagenes(doc, cacheDatos) {
       pesoTotal += datos.peso
       detalleImagenes.push({
         nombre: src.split('/').pop(),
+        src,
         peso: datos.peso,
         pesoMb: (datos.peso / (1024 * 1024)).toFixed(2),
         heavy: datos.peso > LIMITE_POR_IMAGEN,
@@ -167,6 +192,7 @@ export async function ValidarPesoImagenes(doc, cacheDatos) {
         checks.push({
           ok: false,
           detalle: `#${i + 1} ${img.nombre} — ${img.pesoMb}mb${img.heavy ? ' ⚠ supera 1.5mb' : ''}`,
+          ref: { tipo: 'img', src: img.src },
         })
       })
     }

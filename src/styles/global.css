@@ -3343,9 +3343,13 @@ select:focus {
   flex-shrink: 0;
   transition: all 150ms;
 }
-.entregable-reverificar-btn:hover {
+.entregable-reverificar-btn:hover:not(:disabled) {
   color: var(--text-secondary);
   background: var(--bg-hover);
+}
+.entregable-reverificar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .entregable-revision-resumen {
