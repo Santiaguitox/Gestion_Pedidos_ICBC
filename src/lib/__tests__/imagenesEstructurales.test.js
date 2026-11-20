@@ -13,6 +13,7 @@ describe('esImagenEstructural', () => {
     'ImgSeparadorH_Rojo10px.jpg',
     'ImgSeparadorH_Rojo5px.jpg',
     'Img_Separador_265x2.png',
+    'Separador_Blanco_Modulos_Alto_128.png',
   ]
 
   it.each(separadores)('%s es estructural', (nombre) => {

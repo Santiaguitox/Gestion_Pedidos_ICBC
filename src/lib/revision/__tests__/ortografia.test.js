@@ -155,6 +155,16 @@ describe('ValidarOrtografiaYRedaccion', () => {
     expect(r.hallazgos).toHaveLength(1)
   })
 
+  it('descarta motivos tipo "Revisar, sin error detectado" y "no se detectó"', async () => {
+    const r = await ValidarOrtografiaYRedaccion(doc(), async () => ok([
+      h({ fragmento: 'háganos llegar', sugerencia: 'hágannos llegar', motivo: 'Revisar, sin error detectado.' }),
+      h({ fragmento: 'x', sugerencia: 'y', motivo: 'No se detectó un error real.' }),
+      h({ fragmento: 'z', sugerencia: 'w', motivo: 'No se encontró falla.' }),
+      h(),
+    ]))
+    expect(r.hallazgos).toHaveLength(1)
+  })
+
   it('cada hallazgo trae un ref para ubicarlo en la pieza', async () => {
     const r = await ValidarOrtografiaYRedaccion(doc(), async () => ok([
       h({ lugar: 'alt', fragmento: 'logo banco', sugerencia: 'logotipo del banco', motivo: 'x' }),

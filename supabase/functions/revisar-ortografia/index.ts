@@ -54,7 +54,7 @@ const ESPERA_REINTENTO_MS = 800
 
 const MODELO = Deno.env.get('ORTOGRAFIA_IA_MODELO') || 'claude-haiku-5-5'
 // Subir este valor cada vez que se cambie SISTEMA: invalida la caché vieja.
-const VERSION_PROMPT = 'o12'
+const VERSION_PROMPT = 'o13'
 const ETIQUETA_CACHE = `${MODELO}|${VERSION_PROMPT}`
 // Misma razón que en verificar-alt-imagenes: Haiku 5.5 piensa por defecto y
 // esos tokens cuentan contra max_tokens. Acá no hace falta razonar.
@@ -211,7 +211,7 @@ function validarHallazgos(texto: string, textos: Texto[], glosario: Set<string>)
     // motivo que dice que está bien ("revisado sin hallazgos"), el modelo
     // quiso decir que no hay error: se descarta.
     if (!fragmento || !sugerencia || fragmento === sugerencia) continue
-    if (/sin (hallazgos|errores)|est[aá] (bien|correcto)|correcto\b|no corresponde|no (es|hay|hubo) (un )?(error|falta)|no se (debe|debería|debe[ií]a) (reportar|marcar)|no se reporta/i.test(recortar(h?.motivo, 120))) continue
+    if (/sin (hallazgos?|error(es)?)|no se (detect|encontr)[oó]|est[aá] (bien|correcto)|correcto\b|no corresponde|no (es|hay|hubo) (un )?(error|falta)|no se (debe|debería|debe[ií]a) (reportar|marcar)|no se reporta/i.test(recortar(h?.motivo, 120))) continue
     // Campo extra que a veces agrega la IA para marcar que se descarta.
     if (h?.nota) continue
     // La IA a veces "corrige" diciendo que no hay nada que corregir.

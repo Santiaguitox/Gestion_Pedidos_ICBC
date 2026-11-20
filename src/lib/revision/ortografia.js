@@ -54,7 +54,7 @@ function plural(n, singular, pluralTexto) {
 // Devuelve el bloque de la tarjeta, o null si la pieza no tiene texto.
 // Nunca lanza: una falla de la IA se traduce en aviso dentro del bloque.
 // Motivos con los que la IA admite que no hay error (se descartan igual que en el servidor).
-const MOTIVO_DESCARTE = /sin (hallazgos|errores)|est[aá] (bien|correcto)|correcto\b|no corresponde|no (es|hay|hubo) (un )?(error|falta)|no se (debe|debería|debe[ií]a) (reportar|marcar)|no se reporta|(revisi[oó]n|correcci[oó]n|cambio) innecesari[ao]|no aplica/i
+const MOTIVO_DESCARTE = /sin (hallazgos?|error(es)?)|no se (detect|encontr)[oó]|est[aá] (bien|correcto)|correcto\b|no corresponde|no (es|hay|hubo) (un )?(error|falta)|no se (debe|debería|debe[ií]a) (reportar|marcar)|no se reporta|(revisi[oó]n|correcci[oó]n|cambio) innecesari[ao]|no aplica/i
 const SUGERENCIA_DESCARTE = /^\s*(sin (error|cambios?)|no requiere|no hay (error|cambios?))/i
 
 export async function ValidarOrtografiaYRedaccion(doc, revisar) {

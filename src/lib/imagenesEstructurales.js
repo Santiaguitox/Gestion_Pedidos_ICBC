@@ -22,9 +22,10 @@
 //   Img_Separador_265x2.png, ImgSeparadorH_Rojo10px.jpg,
 //   ImgSeparadorH_Rojo5px.jpg — y MediaLineaPunteada* (la divisoria del
 //   Módulo Doble Con Imagen Punteada, visible solo en mobile).
-// Un separador nuevo que respete la convención de nombres
-// ("...separador..." en el archivo) entra solo, sin tocar código.
-export const PATRON_IMAGEN_ESTRUCTURAL = /img[_-]?separador|lineapunteada/i
+// Basta con que el archivo tenga "separador" en el nombre (con o sin el
+// prefijo Img_): Separador_Blanco_Modulos_Alto_128.png entra igual. Un
+// separador nuevo que respete esa convención entra solo, sin tocar código.
+export const PATRON_IMAGEN_ESTRUCTURAL = /separador|lineapunteada/i
 
 // Acepta tanto una URL completa como un nombre de archivo suelto.
 export function esImagenEstructural(srcONombre) {

@@ -549,3 +549,5 @@ Los hallazgos de imágenes, links y ortografía/redacción traen un `ref` (`img`
 ### Banda de header de 70px
 
 `src/lib/revision/bandaHeader.js` lee la banda de header de la pieza (tabla de 3 filas: espaciador, logo, espaciador) y suma sus alturas declaradas. Si no da `ALTO_BANDA` (70, definido en `lib/editor/headers.js`) o no se puede identificar la banda, suma una entrada a la tarjeta 10 (Estructuras obsoletas), que queda roja. Los headers viejos con una banda interna anidada se miden completos.
+
+Cada hallazgo con `ref` tiene además un botón de copiar. `src/lib/revision/textoParaBuscar.js` arma el texto para pegar en el Ctrl+F del HTML: prueba el fragmento tal cual, con entidades (`&aacute;`, `&nbsp;`, `&amp;`…) y por tramos, y copia lo primero que realmente aparece en el HTML analizado.

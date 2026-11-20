@@ -326,7 +326,7 @@ export default function RevisionEmail() {
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{progreso || 'Analizando…'}</span>
               </div>
             ) : (
-              resultados && <ResultadoPanel resultados={resultados} onIr={handleIrAElemento} />
+              resultados && <ResultadoPanel resultados={resultados} onIr={handleIrAElemento} html={htmlAnalizado} />
             )}
           </div>
 
