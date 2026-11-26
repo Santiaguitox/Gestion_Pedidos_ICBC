@@ -160,3 +160,65 @@ describe('ValidarDimensionesImagenes — medidas reales impares', () => {
     expect(r.detalle).toBe('1 problema encontrado (+1 detalle menor)')
   })
 })
+
+describe('ValidarDimensionesImagenes — alto/ancho leídos del style', () => {
+  const U = 'https://cdn.test/a.png'
+  const conStyle = (style, extra = {}) => img({ src: U, width: '80', height: '80', style, ...extra })
+
+  it('line-height no se confunde con height (caso contacto-100x100.png)', async () => {
+    const style = 'border: 0px; height: auto; line-height: 15px; outline: none; display: block; font-size: 15px;'
+    const r = await ValidarDimensionesImagenes(docCon(conStyle(style)), {})
+    expect(r.ok).toBe(true)
+    expect(r.checks).toEqual([])
+  })
+
+  it('max-height / min-height / max-width / min-width tampoco', async () => {
+    const style = 'max-height: 15px; min-height: 20px; max-width: 5px; min-width: 7px;'
+    const r = await ValidarDimensionesImagenes(docCon(conStyle(style)), {})
+    expect(r.ok).toBe(true)
+  })
+
+  it('un height real en el style sigue comparándose (primero, después de ; y con espacios)', async () => {
+    for (const style of ['height: 40px;', 'display:block;height:40px', 'display: block; height : 40px !important;']) {
+      const r = await ValidarDimensionesImagenes(docCon(conStyle(style)), {})
+      expect(r.ok).toBe(false)
+      expect(r.checks[0].detalle).toContain('Alto inconsistente — atributo: 80px, style: 40px')
+    }
+  })
+
+  it('un width real en el style sigue comparándose', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conStyle('width: 60px; max-width: 5px;')), {})
+    expect(r.checks[0].detalle).toContain('Ancho inconsistente — atributo: 80px, style: 60px')
+  })
+})
+
+describe('ValidarDimensionesImagenes — URL con doble barra', () => {
+  const conUrl = (src) => img({ src, width: '100', height: '100' })
+
+  it('avisa como detalle menor y trae ref a la imagen', async () => {
+    const src = 'https://d343t93odde9ul.cloudfront.net//minisites/ICBC/botones-2026/ICBC_BaseBotones2026-VERBENEFICIOS-v2.png'
+    const r = await ValidarDimensionesImagenes(docCon(conUrl(src)), {})
+    expect(r.ok).toBe(true)
+    expect(r.advertencias).toHaveLength(1)
+    expect(r.advertencias[0].detalle).toContain('ICBC_BaseBotones2026-VERBENEFICIOS-v2.png: la URL tiene una doble barra (//)')
+    expect(r.advertencias[0].ref).toEqual({ tipo: 'img', src })
+  })
+
+  it('también en el medio de la ruta', async () => {
+    const r = await ValidarDimensionesImagenes(docCon(conUrl('https://cdn.test/minisites//ICBC/a.png')), {})
+    expect(r.advertencias).toHaveLength(1)
+  })
+
+  it('no avisa con URL normal, con // solo en el query ni con URL relativa al protocolo', async () => {
+    for (const src of ['https://cdn.test/minisites/a.png', 'https://cdn.test/a.png?u=https://x.com//y', '//cdn.test/a.png', 'http://cdn.test/a.png']) {
+      const r = await ValidarDimensionesImagenes(docCon(conUrl(src)), {})
+      expect(r.advertencias).toEqual([])
+    }
+  })
+
+  it('una misma URL repetida avisa una sola vez', async () => {
+    const src = 'https://cdn.test//a.png'
+    const r = await ValidarDimensionesImagenes(docCon(conUrl(src), conUrl(src)), {})
+    expect(r.advertencias).toHaveLength(1)
+  })
+})

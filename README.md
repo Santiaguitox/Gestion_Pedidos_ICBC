@@ -551,3 +551,8 @@ Los hallazgos de imágenes, links y ortografía/redacción traen un `ref` (`img`
 `src/lib/revision/bandaHeader.js` lee la banda de header de la pieza (tabla de 3 filas: espaciador, logo, espaciador) y suma sus alturas declaradas. Si no da `ALTO_BANDA` (70, definido en `lib/editor/headers.js`) o no se puede identificar la banda, suma una entrada a la tarjeta 10 (Estructuras obsoletas), que queda roja. Los headers viejos con una banda interna anidada se miden completos.
 
 Cada hallazgo con `ref` tiene además un botón de copiar. `src/lib/revision/textoParaBuscar.js` arma el texto para pegar en el Ctrl+F del HTML: prueba el fragmento tal cual, con entidades (`&aacute;`, `&nbsp;`, `&amp;`…) y por tramos, y copia lo primero que realmente aparece en el HTML analizado.
+
+### Revisión de imágenes: medidas del style y URLs con doble barra
+
+- El alto/ancho del `style` solo se lee si la propiedad es exactamente `height`/`width` (no `line-height`, `max-height`, `min-width`, etc.), así no se generan falsos "Alto inconsistente".
+- Si la URL de una imagen tiene `//` en la ruta (`https://host//carpeta/img.png`) se avisa como detalle menor: hoy suele verse bien, pero algunos proxies/clientes de mail pueden romperla.

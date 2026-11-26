@@ -13,11 +13,18 @@ function extensionDe(nombre) {
   return punto === -1 ? null : limpio.slice(punto + 1).toLowerCase()
 }
 
+// Esquema + host + ruta que contiene `//` (antes de ? o #). Una URL relativa al
+// protocolo (//cdn.com/x.png) no matchea: no tiene esquema.
+const DOBLE_BARRA_EN_RUTA = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]+[^?#]*\/\//i
+
 const FORMATO_DE_EXTENSION = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif' }
 
+// La propiedad va al principio del style o después de un `;`: sin eso,
+// `height` también matchearía line-height / max-height (y `width` a
+// max-width / min-width) y se leería una medida que el style no declara.
 function extraerMedidaStyle(style, propiedad) {
   if (!style) return null
-  const regex = new RegExp(`${propiedad}\\s*:\\s*([\\d.]+)px`, 'i')
+  const regex = new RegExp(`(?:^|;)\\s*${propiedad}\\s*:\\s*([\\d.]+)px`, 'i')
   const match = style.match(regex)
   return match ? parseInt(match[1]) : null
 }
@@ -31,6 +38,8 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
   const srcConMismatch = new Set()
   // Mismo criterio para el aviso de medidas impares.
   const srcConImpar = new Set()
+  // Y para la URL con doble barra.
+  const srcConDobleBarra = new Set()
   const TOLERANCIA = 0.02
 
   for (let idx = 0; idx < imagenes.length; idx++) {
@@ -38,6 +47,15 @@ export async function ValidarDimensionesImagenes(doc, cacheDatos) {
     const src = img.getAttribute('src') || ''
     const nombre = src.split('/').pop() || 'imagen sin src'
     const style = img.getAttribute('style') || ''
+
+    // Doble barra en la ruta (https://host//carpeta/img.png): el servidor
+    // la puede tolerar, pero CloudFront/S3 la tratan como otra clave, el
+    // proxy de imágenes de algunos clientes de mail puede romperla y se
+    // cachea dos veces. Detalle menor (solo en la ruta, no en el query).
+    if (DOBLE_BARRA_EN_RUTA.test(src) && !srcConDobleBarra.has(src)) {
+      srcConDobleBarra.add(src)
+      advertencias.push({ detalle: `${nombre}: la URL tiene una doble barra (//) en la ruta, conviene dejar una sola`, ref: { tipo: 'img', src } })
+    }
 
     const anchoAtrib = parsearMedida(img.getAttribute('width'))
     const altoAtrib = parsearMedida(img.getAttribute('height'))

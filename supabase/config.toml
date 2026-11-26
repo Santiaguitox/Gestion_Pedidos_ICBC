@@ -453,3 +453,8 @@ entrypoint = "./functions/verificar-alt-imagenes/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/revisar-ortografia/index.ts"
+
+[functions.interpretar-pedido]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/interpretar-pedido/index.ts"

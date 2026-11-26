@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, forwardRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { GripVertical, Trash2, Eye, Download, X, Code, Lock, Image, FileText, Layout, ChevronDown, Check, Type, Underline, RotateCcw, Plus, Loader2, Copy, ClipboardCheck, AlertCircle, Link2, Pencil, Info, Save, FolderOpen, User } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import ImportarDesdePedido from '@/components/editor/ImportarDesdePedido'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useAuth } from '@/context/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -1424,7 +1425,10 @@ export default function EditorPiezas() {
   const isMobile = useHysteresisBelow(contentWidth, EDITOR_DESKTOP_MIN_WIDTH, EDITOR_MOBILE_EXIT_WIDTH)
 
   const { showSuccess, showError } = useNotificaciones()
-  const { user } = useAuth()
+  const { user, role } = useAuth()
+  // "Desde pedido" está en prueba: solo super_admin. Para abrirla a más
+  // roles, sumarlos acá y en ROLES_PERMITIDOS de la Edge Function.
+  const puedeImportarDesdePedido = role === 'super_admin'
   const [busqueda, setBusqueda] = useState('')
   // Pestaña activa del selector CG/EB/Pay dentro de "Header" en la
   // biblioteca — no es parte del borrador persistido, es solo un
@@ -2552,7 +2556,11 @@ export default function EditorPiezas() {
   // futura dejara algo afuera, no queremos arrastrar datos viejos).
   function confirmarImportacion() {
     if (!importarResultado?.resultado) return
-    const r = importarResultado.resultado
+    aplicarResultadoImportado(importarResultado.resultado)
+  }
+
+  // Compartido por "Importar pieza" (HTML / URL) y "Desde pedido".
+  function aplicarResultadoImportado(r) {
     // Si el import vino por deep-link desde una pieza de un pedido, se
     // usa el nombre real con el que está cargada ahí — coherencia entre
     // el pedido y el editor. Si no (import manual por HTML/URL), el
@@ -3229,7 +3237,7 @@ export default function EditorPiezas() {
                 <span className="ep-preview-subtitulo">
                   {importarCargando
                     ? 'Procesando la estructura de la pieza…'
-                    : !importarResultado ? 'Pegá el HTML o ingresá el link de la pieza' : 'Revisá el resultado antes de cargarlo'}
+                    : !importarResultado ? (puedeImportarDesdePedido && importarModo === 'pedido' ? 'Pegá el pedido del cliente y la pieza de referencia' : 'Pegá el HTML o ingresá el link de la pieza') : 'Revisá el resultado antes de cargarlo'}
                 </span>
               </div>
               {/* Switch Desktop/Mobile — mismo patrón que el modal de
@@ -3255,9 +3263,14 @@ export default function EditorPiezas() {
                 <div className="ep-importar-tabs">
                   <button className={importarModo === 'html' ? 'active' : ''} onClick={() => { setImportarModo('html'); setImportarError('') }}>HTML</button>
                   <button className={importarModo === 'url' ? 'active' : ''} onClick={() => { setImportarModo('url'); setImportarError('') }}>URL</button>
+                  {puedeImportarDesdePedido && (
+                    <button className={importarModo === 'pedido' ? 'active' : ''} onClick={() => { setImportarModo('pedido'); setImportarError('') }}>Desde pedido</button>
+                  )}
                 </div>
 
-                {importarModo === 'html' ? (
+                {puedeImportarDesdePedido && importarModo === 'pedido' ? (
+                  <ImportarDesdePedido onAplicar={aplicarResultadoImportado} onCancelar={cerrarModalImportar} />
+                ) : importarModo === 'html' ? (
                   <textarea
                     className="ep-importar-input"
                     autoComplete="off"
@@ -3276,12 +3289,14 @@ export default function EditorPiezas() {
                   />
                 )}
 
-                {importarError && <div className="ep-importar-error">{importarError}</div>}
+                {!(puedeImportarDesdePedido && importarModo === 'pedido') && importarError && <div className="ep-importar-error">{importarError}</div>}
 
-                <div className="ep-importar-footer">
-                  <button className="ep-btn ep-btn-ghost" onClick={cerrarModalImportar}>Cancelar</button>
-                  <button className="ep-btn ep-btn-primary" onClick={analizarImportacion}>Analizar</button>
-                </div>
+                {!(puedeImportarDesdePedido && importarModo === 'pedido') && (
+                  <div className="ep-importar-footer">
+                    <button className="ep-btn ep-btn-ghost" onClick={cerrarModalImportar}>Cancelar</button>
+                    <button className="ep-btn ep-btn-primary" onClick={analizarImportacion}>Analizar</button>
+                  </div>
+                )}
               </div>
             )}
 

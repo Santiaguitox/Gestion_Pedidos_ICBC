@@ -2936,3 +2936,72 @@ input[autocomplete="off"] { }
   transition: color 150ms, background 150ms;
 }
 .ep-mispiezas-item-del:hover { color: var(--icbc-red); background: rgba(208,17,27,0.08); }
+
+/* ─── Importar → "Desde pedido" ──────────────────────────────────────── */
+.ep-pedido-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.ep-pedido-ref { resize: none; }
+.ep-pedido-cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  padding: 3rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.ep-pedido-spin { animation: ep-pedido-giro 1s linear infinite; }
+@keyframes ep-pedido-giro { to { transform: rotate(360deg); } }
+
+.ep-pedido-resultado { overflow-y: auto; }
+.ep-pedido-bloque {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ep-pedido-bloque ul { margin: 0; padding-left: 1.125rem; font-size: 0.8125rem; color: var(--text-primary); }
+.ep-pedido-bloque li + li { margin-top: 0.25rem; }
+.ep-pedido-bloque-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ep-pedido-bloque-bloqueante { background: #D0111B12; border-color: #D0111B40; }
+.ep-pedido-bloque-bloqueante .ep-pedido-bloque-titulo { color: var(--icbc-red); }
+.ep-pedido-bloque-duda { background: #F9731614; border-color: #F9731640; }
+
+.ep-pedido-cambio { border-top: 1px solid var(--border); padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.ep-pedido-cambio-cab { display: flex; align-items: center; gap: 0.5rem; }
+.ep-pedido-chip {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.ep-pedido-cambio-bloque { font-size: 0.6875rem; color: var(--text-muted); }
+.ep-pedido-antes,
+.ep-pedido-despues {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  word-break: break-word;
+}
+.ep-pedido-antes { background: #DC262612; color: var(--text-secondary); text-decoration: line-through; }
+.ep-pedido-despues { background: #16A34A14; color: var(--text-primary); }
+.ep-pedido-confirmar { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8125rem; color: var(--text-primary); cursor: pointer; }
+.ep-pedido-confirmar input { margin-top: 2px; }
+.ep-pedido-resultado ~ .ep-importar-footer .ep-btn:disabled { opacity: 0.5; cursor: not-allowed; }
